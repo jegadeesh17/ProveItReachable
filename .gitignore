@@ -1,0 +1,19 @@
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Review tooling output
+.ui-review/
+.impeccable/review/
+
+# User's personal files (contain a personal email / private planning notes)
+Gmail - *.pdf
+hackathon_plan_evaluation_report.md
+reachable_hackathon_expert_review.md
