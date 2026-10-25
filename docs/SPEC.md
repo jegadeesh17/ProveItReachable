@@ -119,8 +119,8 @@ Format: Given / When / Then. Each criterion is tagged with its milestone and jou
 
 ### 3.6 Safety and configuration (J1, whole project)
 
-- **AC-29 [M1, J1] No execution outside Sandbox.** Given any scan, when the repo is analyzed, then no code from the analyzed repo is imported, executed or installed outside a Token Factory Sandbox or the approved local Docker fallback (non-root, no network, no host mounts, no Docker socket, CPU/memory/process limits, hard timeout). A test with a fixture repo containing a canary side effect at import time confirms the canary never fires on the host.
-- **AC-30 [M1, J1] Analysis in Sandbox.** Given a scan, when the static analysis step runs, then it runs inside a Sandbox (or the approved fallback).
+- **AC-29 [M1, J1] No execution outside Sandbox.** Given any scan, when the repo is analyzed, then no code from the analyzed repo is imported, executed or installed outside a Token Factory Sandbox. A test with a fixture repo containing a canary side effect at import time confirms the canary never fires on the host.
+- **AC-30 [M1, J1] Analysis in Sandbox.** Given a scan, when the static analysis step runs, then it runs inside a Sandbox.
 - **AC-31 [M1, whole] Secrets from environment.** Given required credentials are missing, when the app starts or a scan begins, then it fails with an error that names the missing variable and does not print any secret value; no secret appears in logs, reports or traces.
 
 ### 3.7 JSON report (J4)
@@ -181,7 +181,17 @@ Format: Given / When / Then. Each criterion is tagged with its milestone and jou
 - **AC-67 [M2, J6] Proof not reached.** Given a fixture where the stub is not reached, when proof runs, then the report shows "not proven" with the reason and the verdict is not upgraded.
 - **AC-68 [M2, J6] Proof timeout.** Given the Sandbox exceeds the proof timeout, when proof runs, then the step is reported as `uncertain` / "not proven" with reason "sandbox timeout" and the scan completes.
 - **AC-69 [M2, J6] No exploit payloads.** Given any proof run, when inputs are inspected, then only recording stubs and the repo's own entry function are used; no exploit payload or crafted malicious input is generated, stored or sent.
-- **AC-70 [M2, J6] Proof only in Sandbox.** Given a proof run, when it executes, then all repo code runs only in the Sandbox or the approved fallback (see AC-29).
+- **AC-70 [M2, J6] Proof only in Sandbox.** Given a proof run, when it executes, then all repo code runs only in the Sandbox (see AC-29).
+
+### 3.14 Production operations (NFR-11 to NFR-13)
+
+- **AC-71 [M1, whole] CI workflow.** Given the repo, when the YAML files in `.github/workflows/` are parsed, then one workflow triggers on both `push` and `pull_request` and has steps that run `ruff check` and the fast pytest suite, and it needs no paid-service secret to pass.
+- **AC-72 [M1, whole] CI badge.** Given `README.md`, when it is inspected, then it contains a GitHub Actions status badge whose URL points to the workflow from AC-71.
+- **AC-73 [M1, whole] JSON log lines.** Given the service starts and runs a scan with all external calls stubbed, when the captured log output is split into lines, then every line parses as a JSON object.
+- **AC-74 [M1, J1] Scan log fields and trace correlation.** Given a scan with all external calls stubbed and a fake LangSmith client, when its log lines are inspected, then every line written during the scan carries that scan's `scan_id`, every line that ends a stage carries `stage`, `duration_ms` (non-negative integer) and `outcome`, and the scan's trace metadata carries the same `scan_id`.
+- **AC-75 [M1, whole] Logs stay redacted.** Given every secret environment variable is set to a known sentinel value and a stubbed scan in which one external call fails, when all log output is captured, then no sentinel value appears in any line (see AC-31).
+- **AC-76 [M2, whole] Budget fractions in health.** Given fake spend pools `nebius` and `tavily` with known budgets and recorded spend, when `GET /api/health` is called, then the response reports for each pool a remaining fraction equal to (budget - spent) / budget clamped to 0-1, and the response contains no secret sentinel value.
+- **AC-77 [M2, whole] Keepalive spend alert.** Given the keepalive monitor check and a stubbed health response, when any pool's remaining fraction is below 0.25, then the check exits non-zero and names the pool; when every pool is at or above 0.25 and the health check passes, then it exits zero.
 
 ## 4. Regression criteria
 
@@ -190,7 +200,7 @@ Not applicable: new project, no existing behavior.
 ## 5. Non-functional requirements
 
 - **NFR-01 [M2] Availability.** The hosted demo is publicly accessible, without login, and free for judges until 2026-12-15. A health check on the public URL passes at submission and is monitored until that date.
-- **NFR-02 [M1] Execution safety.** Analyzed repo code is never executed outside a Token Factory Sandbox or the approved locked-down local Docker fallback (see AC-29).
+- **NFR-02 [M1] Execution safety.** Analyzed repo code is never executed outside a Token Factory Sandbox (see AC-29).
 - **NFR-03 [M1] Secrets.** Secrets are read only from environment variables, never committed, logged, printed or included in reports or traces (see AC-31).
 - **NFR-04 [M1] Inference provider.** Inference goes only through Nebius Token Factory with a Nemotron model (see AC-16).
 - **NFR-05 [M1] Typed schemas.** The report, finding, evidence and API request/response shapes are typed and validated; invalid data is rejected, not coerced.
@@ -199,12 +209,17 @@ Not applicable: new project, no existing behavior.
 - **NFR-08 [M2] Delivery artifacts.** The repo has an MIT `LICENSE` and a setup README, and `docs/PLATFORM_FEEDBACK.md` exists as a running log.
 - **NFR-09 [M2] Cost durability.** Live scans stay within credits through 2026-12-15 via cached replays, rate limit and spend cap (AC-47, AC-50, AC-51).
 - **NFR-10 [M2] Usability under judging.** A judge can reach a full report from a cached demo in under 3 minutes with no instructions beyond the screen (AC-49).
+- **NFR-11 [M1] Continuous integration.** A GitHub Actions workflow runs ruff and the fast test suite on every push and pull request, and the README shows its status badge (see AC-71, AC-72).
+- **NFR-12 [M1] Structured logs.** Every log line the service writes is a JSON object; lines written during a scan carry `scan_id`, plus `stage`, `duration_ms` and `outcome` where they apply, correlate with that scan's LangSmith trace, and keep secrets redacted (see AC-73, AC-74, AC-75).
+- **NFR-13 [M2] Spend alerts.** `GET /api/health` reports the remaining budget fraction (0-1) per spend pool (`nebius`, `tavily`) and never secrets, and the keepalive monitor (NFR-01) fails, so GitHub emails the owner, when any pool is below 0.25 (see AC-76, AC-77).
 
 ## 6. Out of scope
 
 Copied verbatim from the mental model's non-goals:
 
 Other languages, private repos, user accounts, auto-fix PRs, exploit generation, Toloka, a paid GPU deploy, a custom tracing UI.
+
+Declined production additions (user, 2026-10-25): an ops stats endpoint, Sentry, Prometheus/Grafana.
 
 ## 7. Open questions
 
@@ -225,4 +240,4 @@ Each has the assumption made so work can proceed. The architect decides unless n
 - **OQ-13 Eval fixture source.** Whether fixtures are local synthetic repos, pinned real GitHub repos, or both. Assumption: local synthetic repos plus pinned real repos with fixed commit SHAs, with advisory data cached so eval is repeatable.
 - **OQ-14 CLI/API shape.** Command names, endpoints and whether scans are synchronous or job-based. Assumption: architect defines; the API must support the progress events used by AC-41.
 - **OQ-15 Proof entry function.** How the repo's entry function for proof is identified (user-provided, detected from the call path, or convention). Assumption: derived from the first step of the call path.
-- **OQ-16 Fallback trigger.** The conditions for using the local Docker fallback instead of the Token Factory Sandbox (for example Sandbox unavailable). Assumption: requires the architect's and security reviewer's approval before use.
+- **OQ-16 Fallback trigger.** The conditions for using the local Docker fallback instead of the Token Factory Sandbox (for example Sandbox unavailable). Resolved 2026-10-25: no fallback; the Sandbox spike passed (ADR-0021).

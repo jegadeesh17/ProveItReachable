@@ -43,8 +43,10 @@ Scanners say "this package is vulnerable". ProveItReachable says "your code reac
 
 ## Brand Commitments
 
-- Name: **ProveItReachable**. No logo or brand assets exist; the name set in type is the identity.
-- Voice: precise and evidence-led. Never overclaims; says what was and wasn't examined.
+- Name: **ProveItReachable**. No logo or brand assets exist; the name set in type, with a small drawn call-path glyph, is the identity. Third-party names (Nebius Token Factory, Nemotron, Tavily) appear as plain text only, never as imitated logos.
+- Look: a calm developer-tool product in the spirit of Linear, Vercel or Socket.dev (no copied branding). Clean, simple, restrained colour, generous whitespace. One sans with a mono for data.
+- Voice: precise and evidence-led, in plain developer words ("Scan repo", "Findings", "Call path"). Never overclaims; says what was and wasn't examined.
+- Visible by design: the agent pipeline (each stage names its tool) and Tavily's contribution on each finding's sources, so a cold evaluator sees how the result was made.
 
 ## Evidence on Hand
 
@@ -55,9 +57,11 @@ Scanners say "this package is vulnerable". ProveItReachable says "your code reac
 
 1. **Evidence first.** Show the call path and the sources before any explanation or score.
 2. **Honest uncertainty.** `uncertain` is a first-class, visible answer, not a failure state to hide.
-3. **Noise reduction is the value.** The headline is how many alerts actually matter.
+3. **Noise reduction is the value.** The headline is how many alerts actually matter ("N advisories to M likely reachable").
 4. **Zero-friction proof of value.** A cold visitor reaches a full report in one click and under 20 seconds.
-5. **Claims match measurements.** No number appears unless the eval or the scan produced it.
+5. **Show the work.** The pipeline and the tool behind each stage are visible while it runs and in the finished report.
+6. **Claims match measurements.** No number appears unless the eval or the scan produced it, and it is labelled with its origin.
+7. **Product, not document.** Clean and quiet: restrained colour reserved for verdicts, plain words, nothing decorative.
 
 ## Accessibility & Inclusion
 

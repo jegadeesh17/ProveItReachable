@@ -66,7 +66,7 @@ export function formatDateTime(iso) {
   return Number.isNaN(d.getTime()) ? "unknown date" : `${dateFmt.format(d)}, ${timeFmt.format(d)} UTC`;
 }
 
-function secondsBetween(a, b) {
+export function secondsBetween(a, b) {
   if (!a || !b) return null;
   const s = (new Date(b) - new Date(a)) / 1000;
   return Number.isFinite(s) && s >= 0 ? s : null;
@@ -138,17 +138,6 @@ const EDGE_LABEL = {
 
 /* ------------------------------------------------------------------ banners */
 
-const ERROR_TITLE = {
-  invalid_url: "That is not a repository address",
-  repo_not_found: "Repository not found",
-  repo_too_large: "Repository is too large",
-  not_python_project: "Not a Python project",
-  rate_limited: "Live scans are rate limited",
-  live_scans_paused: "Live scans are paused",
-  server_busy: "The scanner is busy",
-  github_unavailable: "GitHub did not respond",
-  internal_error: "Something went wrong",
-};
 const ERROR_HINT = {
   invalid_url: "Check the address and try again, or run a demo, which needs no address.",
   repo_not_found: "Check the spelling. Private repositories cannot be scanned. A demo works without an address.",
@@ -182,14 +171,16 @@ export function banner(error, options = {}) {
     el(
       "div",
       { class: "notice__body" },
-      el("p", { class: "notice__title", text: options.title || ERROR_TITLE[code] || "Could not start the assay" }),
-      el("p", { class: "notice__msg", text: error.message }),
+      // The API message already names the problem, so it leads on its own; a title is only for client-side notices.
+      options.title && el("p", { class: "notice__title", text: options.title }),
+      el("p", { class: options.title ? "notice__msg" : "notice__lead", text: error.message }),
       facts.length > 0 &&
         el("dl", { class: "notice__facts" }, facts.map(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })])),
       hint && el("p", { class: "notice__hint", text: hint }),
     ),
   );
 }
+
 
 /* --------------------------------------------------------------- demo list */
 
@@ -200,9 +191,13 @@ export function renderDemoSkeleton(list) {
     list.append(
       el(
         "li",
-        { class: "demo-row", "aria-hidden": "true" },
-        el("div", {}, el("span", { class: "skel skel--title" }), el("span", { class: "skel skel--line" })),
-        el("span", { class: "skel skel--btn" }),
+        { "aria-hidden": "true" },
+        el(
+          "div",
+          { class: "demo demo--skel" },
+          el("div", {}, el("span", { class: "skel skel--title" }), el("span", { class: "skel skel--line" })),
+          el("span", { class: "skel skel--btn" }),
+        ),
       ),
     );
   }
@@ -214,10 +209,26 @@ export function renderDemoError(list, message, onRetry) {
   list.append(
     el(
       "li",
-      { class: "demo-row" },
+      {},
       banner({ code: "", message }, { title: "The demo list did not load" }),
       el("button", { class: "btn", type: "button", text: "Try again", on: { click: onRetry } }),
     ),
+  );
+}
+
+/** One teaser chip per non-zero verdict, from the demo's recorded `by_verdict` counts. */
+function demoResult(by) {
+  if (!by) return null;
+  const parts = [
+    ["likely reachable", "mark-reach"],
+    ["uncertain", "mark-uncertain"],
+    ["no reachable path detected", "mark-none"],
+  ].filter(([verdict]) => by[verdict] > 0);
+  if (parts.length === 0) return el("span", { class: "demo__result" }, el("span", { text: "Clean: no findings" }));
+  return el(
+    "span",
+    { class: "demo__result" },
+    parts.map(([verdict, mark]) => el("span", {}, icon(mark, "icon icon--sm"), `${by[verdict]} ${verdict}`)),
   );
 }
 
@@ -228,21 +239,25 @@ export function renderDemos(list, demos, onRun) {
     list.append(
       el(
         "li",
-        { class: "demo-row" },
+        {},
         el(
-          "div",
-          {},
-          el("p", { class: "demo-name" }, el("span", { text: demo.title }), el("span", { class: "tag", text: "Placeholder repo" })),
-          el("p", { class: "demo-desc", text: demo.description }),
+          "button",
+          {
+            class: "demo",
+            type: "button",
+            "aria-label": `Run demo: ${demo.title}`,
+            dataset: { demo: demo.slug },
+            on: { click: () => onRun(demo) },
+          },
+          el(
+            "span",
+            { class: "demo__main" },
+            el("span", { class: "demo__name" }, el("span", { text: demo.title }), el("span", { class: "tag", text: "placeholder" })),
+            el("span", { class: "demo__desc", text: demo.description }),
+            demoResult(demo.by_verdict),
+          ),
+          el("span", { class: "demo__go" }, "Run demo", icon("icon-go", "icon icon--sm")),
         ),
-        el("button", {
-          class: "btn btn--primary",
-          type: "button",
-          text: "Run assay",
-          "aria-label": `Run assay on ${demo.title}`,
-          dataset: { demo: demo.slug },
-          on: { click: () => onRun(demo) },
-        }),
       ),
     );
   }
@@ -252,38 +267,40 @@ export function setDemosDisabled(list, disabled) {
   for (const button of list.querySelectorAll("button[data-demo]")) button.disabled = disabled;
 }
 
-/* ------------------------------------------------------------- process track */
+/* ------------------------------------------------------------ progress feed */
 
+/** [key, row label, short label, the tool behind the stage]. The tool is shown beside every stage. */
 export const STAGES = [
-  ["resolve", "Resolve dependencies"],
-  ["osv", "Query OSV"],
-  ["research", "Research advisories"],
-  ["analysis", "Analyze code"],
-  ["reasoning", "Reason over evidence"],
-  ["report", "Write verdicts"],
+  ["resolve", "Resolve dependencies", "Resolve", "Lockfile · uv"],
+  ["osv", "Find known advisories", "Advisories", "OSV"],
+  ["research", "Research the vulnerable function", "Research", "Tavily"],
+  ["analysis", "Index your code", "Analysis", "Static analysis · Sandbox"],
+  ["reasoning", "Reason over the evidence", "Reasoning", "Nemotron"],
+  ["report", "Rank and write verdicts", "Verdicts", "Verdict rules"],
 ];
-const STAMP_ICON = { running: "stamp-running", done: "stamp-done", failed: "stamp-failed", skipped: "stamp-skipped" };
+const NODE_ICON = { running: "stamp-running", done: "stamp-done", failed: "stamp-failed", skipped: "stamp-skipped" };
+const STATE_WORD = { pending: "Pending", running: "Running", done: "Done", failed: "Failed", skipped: "Skipped" };
 
-function fillStamp(stamp, state) {
-  clear(stamp);
-  if (STAMP_ICON[state]) stamp.append(icon(STAMP_ICON[state]));
-  stamp.append(state);
+function fillNode(node, state) {
+  clear(node);
+  if (NODE_ICON[state]) node.append(icon(NODE_ICON[state]));
+  node.append(el("span", { class: "sr-only", text: STATE_WORD[state] || state }));
 }
 
 export function buildTrack(track) {
   clear(track);
-  for (const [key, label] of STAGES) {
-    const stamp = el("span", { class: "stamp" });
-    fillStamp(stamp, "pending");
+  for (const [key, label, , tool] of STAGES) {
+    const node = el("span", { class: "stage__node" });
+    fillNode(node, "pending");
     track.append(
       el(
         "li",
         { class: "stage", dataset: { step: key, state: "pending" } },
-        el("div", { class: "stage__stamp" }, stamp),
+        node,
         el("p", { class: "stage__name", text: label }),
+        el("p", { class: "stage__tool" }, el("span", { class: "tool", text: tool })),
         el("p", { class: "stage__msg" }),
         el("p", { class: "stage__time" }),
-        el("span", { class: "stage__bar", "aria-hidden": "true" }),
       ),
     );
   }
@@ -294,13 +311,13 @@ export function stageLabel(step) {
   return found ? found[1] : step;
 }
 
-/** Move one stage to a state. `stamp` replays the stamp-in motion (CSS drops it for reduced motion). */
+/** Move one stage to a state. `stamp` replays the settle motion (CSS drops it for reduced motion). */
 export function setStage(track, step, state, message, seconds, stamp = false) {
   const li = track.querySelector(`[data-step="${step}"]`);
   if (!li) return;
   const changed = li.dataset.state !== state;
   li.dataset.state = state;
-  fillStamp(li.querySelector(".stamp"), state);
+  fillNode(li.querySelector(".stage__node"), state);
   li.querySelector(".stage__msg").textContent = message || "";
   li.querySelector(".stage__time").textContent = seconds === null || seconds === undefined ? "" : formatSeconds(seconds);
   if (stamp && changed && ["done", "failed", "skipped"].includes(state)) {
@@ -316,35 +333,49 @@ export function syncTrackFromReport(track, report) {
   }
 }
 
-/* ------------------------------------------------------------------ specimen */
+/** Counts read from the DOM, so the label and meter always agree with what the rows show. */
+export function trackProgress(track) {
+  const rows = [...track.querySelectorAll(".stage")];
+  const settled = rows.filter((li) => ["done", "failed", "skipped"].includes(li.dataset.state)).length;
+  const index = rows.findIndex((li) => li.dataset.state === "running");
+  return {
+    total: rows.length,
+    settled,
+    current: index >= 0 ? { index, label: stageLabel(rows[index].dataset.step) } : null,
+  };
+}
 
-function fieldRow(label, value, extra = {}) {
-  return el(
-    "div",
-    { class: `field-row${extra.lead ? " field-row--lead" : ""}` },
-    el("dt", { class: "label", text: label }),
-    el("dd", {}, value),
-  );
+/* ---------------------------------------------------------------- scan head */
+
+function metaItem(label, value) {
+  return el("div", { class: "meta__item" }, el("dt", { text: label }), el("dd", {}, value));
 }
 
 /**
- * @param {HTMLElement} dl
- * @param {{ name: string, source: string, commit?: string|null, branch?: string, resolvedBy?: string, issued?: string, model?: string, scanId?: string }} info
+ * The repository identity: owner/name as the page heading, then the facts the scan knows so far.
+ * @param {HTMLElement} container
+ * @param {{ name: string, source: string, commit?: string|null, branch?: string, resolvedBy?: string, model?: string }} info
  */
-export function renderSpecimen(dl, info) {
-  clear(dl);
-  dl.append(fieldRow("Specimen", el("h2", { id: "specimen-h", tabindex: "-1", text: info.name }), { lead: true }));
-  dl.append(fieldRow("Source", info.source));
-  dl.append(
-    fieldRow("Commit", info.commit ? el("span", { class: "mono", text: info.commit }) : el("span", { class: "pending-text", text: "Resolved when the scan starts" })),
+export function renderScanHead(container, info) {
+  clear(container);
+  const slash = info.name.indexOf("/");
+  const owner = slash > 0 ? info.name.slice(0, slash + 1) : "";
+  const repo = slash > 0 ? info.name.slice(slash + 1) : info.name;
+  container.append(
+    el("h1", { id: "scan-h", class: "scan-head__name", tabindex: "-1" }, owner && el("span", { class: "owner", text: owner }), repo),
   );
-  if (info.branch) dl.append(fieldRow("Branch", el("span", { class: "mono", text: info.branch })));
-  if (info.resolvedBy) dl.append(fieldRow("Versions", info.resolvedBy));
-  if (info.issued) dl.append(fieldRow("Issued", info.issued));
-  if (info.model) dl.append(fieldRow("Model", el("span", { class: "mono", text: info.model })));
+  const meta = el("dl", { class: "meta" });
+  meta.append(metaItem("Source", info.source));
+  meta.append(
+    metaItem("Commit", info.commit ? el("span", { class: "mono", text: info.commit }) : el("span", { class: "pending-text", text: "resolved when the scan starts" })),
+  );
+  if (info.branch) meta.append(metaItem("Branch", el("span", { class: "mono", text: info.branch })));
+  if (info.resolvedBy) meta.append(metaItem("Versions", info.resolvedBy));
+  if (info.model) meta.append(metaItem("Model", el("span", { class: "mono", text: info.model })));
+  container.append(meta);
 }
 
-/* ------------------------------------------------------------ assay summary */
+/* ------------------------------------------------------------------ summary */
 
 function countDown(node, from, to, ms) {
   const start = performance.now();
@@ -358,13 +389,63 @@ function countDown(node, from, to, ms) {
   requestAnimationFrame(tick);
 }
 
-function noteRef(text, href) {
-  return el("sup", {}, el("a", { href, text, "aria-label": `Note ${text}` }));
+const STRIP_MAX = 60;
+
+/** One mark per finding in rank order: the funnel as a row of shapes, never colour alone. */
+function advisoryStrip(report) {
+  const shown = report.findings.slice(0, STRIP_MAX);
+  const strip = el("div", { class: "strip", "aria-hidden": "true" });
+  shown.forEach((f, i) => {
+    const meta = VERDICTS[f.verdict] || VERDICTS["no reachable path detected"];
+    const item = el("span", { class: "strip__item" }, icon(meta.mark, "icon icon--strip"));
+    item.style.setProperty("--i", String(i));
+    strip.append(item);
+  });
+  if (report.findings.length > STRIP_MAX) strip.append(el("span", { class: "hint", text: `+${report.findings.length - STRIP_MAX} more` }));
+  return strip;
+}
+
+/** Glue the middle dot to the word before it, so a wrapped line never starts with "·". */
+const keepDot = (text) => text.replace(" · ", " · ");
+
+function pipelineStrip(report) {
+  const steps = report.steps || [];
+  const first = steps.find((s) => s.started_at);
+  const last = [...steps].reverse().find((s) => s.finished_at);
+  const total = first && last ? secondsBetween(first.started_at, last.finished_at) : null;
+  return el(
+    "div",
+    { class: "funnel__pipeline" },
+    el(
+      "div",
+      { class: "pipeline__head" },
+      el("h3", { class: "pipeline__title", text: "How this report was made" }),
+      total !== null && el("p", { class: "pipeline__total", text: `Recorded run time ${formatSeconds(total)}` }),
+    ),
+    el(
+      "ol",
+      { class: "pipe", "aria-label": "Pipeline steps" },
+      steps.map((step) => {
+        const stage = STAGES.find(([key]) => key === step.name);
+        const node = el("span", { class: "stage__node" });
+        fillNode(node, step.state);
+        const seconds = secondsBetween(step.started_at, step.finished_at);
+        return el(
+          "li",
+          { class: "pipe__item", dataset: { state: step.state } },
+          node,
+          el("p", { class: "pipe__name", text: stage ? stage[2] : step.name }),
+          el("p", { class: "pipe__tool", text: stage ? keepDot(stage[3]) : "" }),
+          seconds !== null && el("p", { class: "pipe__time", text: formatSeconds(seconds) }),
+        );
+      }),
+    ),
+  );
 }
 
 /**
- * The assay summary: two large numerals (advisories down to likely reachable), a reading, a tally.
- * Returns { node, exportSlot, animate(reduceMotion) }.
+ * The summary: "N advisories -> M likely reachable" as the headline, a reading, the three counts,
+ * one mark per finding, and the pipeline that produced it. Returns { node, animate(reduceMotion) }.
  */
 export function renderSummary(report, { isMock }) {
   const s = report.summary;
@@ -374,7 +455,6 @@ export function renderSummary(report, { isMock }) {
   const np = by["no reachable path detected"];
   const advisories = report.findings.filter((f) => f.kind === "advisory").length;
   const total = s.findings_total;
-  const exportSlot = el("div", { class: "head-actions" });
 
   let figure;
   let animate = () => {};
@@ -388,7 +468,7 @@ export function renderSummary(report, { isMock }) {
     figure = [
       el(
         "p",
-        { class: "assay__line", "aria-hidden": "true" },
+        { class: "funnel__line", "aria-hidden": "true" },
         fromEl,
         el("span", { text: noun }),
         icon("icon-arrow", "icon icon--arrow"),
@@ -403,12 +483,10 @@ export function renderSummary(report, { isMock }) {
     };
     const parts = [];
     parts.push(lr > 0 ? `${lr} ${plural(lr, "is", "are")} likely reachable and ${plural(lr, "needs", "need")} attention first.` : "None is likely reachable.");
-    if (un > 0) {
-      parts.push(`${un} ${plural(un, "is", "are")} uncertain: read the reason printed with ${plural(un, "it", "each")}.`);
-    }
-    reading = el("p", { class: "assay__reading" }, parts.join(" "));
+    if (un > 0) parts.push(`${un} ${plural(un, "is", "are")} uncertain: read the reason shown with ${plural(un, "it", "each")}.`);
+    reading = el("p", { class: "funnel__reading" }, parts.join(" "));
     if (np > 0) {
-      reading.append(` ${np} had no reachable path detected within the scope stated in note `, noteRef("2", "#fn-scope"), ".");
+      reading.append(` ${np} had no reachable path detected within the scope stated in `, el("a", { href: "#fn-scope", text: "the method notes" }), ".");
     }
     if (lr === 0 && un > 0) reading.append(" An uncertain result is not a pass.");
     if (s.dependencies_not_checked > 0) {
@@ -419,7 +497,7 @@ export function renderSummary(report, { isMock }) {
     tally = el(
       "table",
       { class: "tally" },
-      el("caption", { class: "label", text: "Verdicts" }),
+      el("caption", { text: "Verdicts" }),
       el(
         "tbody",
         {},
@@ -435,7 +513,7 @@ export function renderSummary(report, { isMock }) {
     figure = [
       el(
         "p",
-        { class: "assay__line", "aria-hidden": "true" },
+        { class: "funnel__line", "aria-hidden": "true" },
         el("span", { class: "num", text: "0" }),
         el("span", {
           text: isClean
@@ -446,7 +524,7 @@ export function renderSummary(report, { isMock }) {
       el("p", { class: "sr-only", text: isClean ? "Clean: no known advisories." : "Incomplete: no advisories among the dependencies that could be checked." }),
     ];
     reading = el("p", {
-      class: "assay__reading",
+      class: "funnel__reading",
       text: isClean
         ? `No known-vulnerable dependencies were found. All ${s.dependencies_checked} dependencies were checked against OSV at their exact versions.`
         : `Not a clean result. ${s.dependencies_checked} of ${s.dependencies_total} dependencies were checked and have no known advisories. ${s.dependencies_unresolved} could not be resolved to an exact version, so ${plural(s.dependencies_unresolved, "it was", "they were")} not examined: see the list below.`,
@@ -454,7 +532,7 @@ export function renderSummary(report, { isMock }) {
     tally = el(
       "table",
       { class: "tally" },
-      el("caption", { class: "label", text: "Dependencies" }),
+      el("caption", { text: "Dependencies" }),
       el(
         "tbody",
         {},
@@ -467,19 +545,20 @@ export function renderSummary(report, { isMock }) {
     );
   }
 
-  const heading = report.outcome === "clean" ? "Assay summary: clean" : report.outcome === "incomplete" ? "Assay summary: incomplete" : "Assay summary";
+  const heading = report.outcome === "clean" ? "Summary: clean" : report.outcome === "incomplete" ? "Summary: incomplete" : "Summary";
   const node = el(
     "section",
-    { class: `assay assay--${report.outcome}`, "aria-labelledby": "assay-h", dataset: { outcome: report.outcome } },
+    { class: `funnel funnel--${report.outcome}`, "aria-labelledby": "funnel-h", dataset: { outcome: report.outcome } },
+    el("div", { class: "funnel__top" }, el("h2", { id: "funnel-h", class: "funnel__title", text: heading }), isMock && el("span", { class: "tag", text: "Demo data" })),
     el(
       "div",
-      { class: "section-head" },
-      el("div", {}, el("h2", { id: "assay-h", class: "section-title", text: heading })),
-      el("div", { class: "head-actions" }, isMock && el("span", { class: "tag", text: "Demo data" }), exportSlot),
+      { class: "funnel__body" },
+      el("div", {}, figure, report.outcome === "findings" && report.findings.length > 0 && advisoryStrip(report), reading),
+      tally,
     ),
-    el("div", { class: "assay__body" }, el("div", {}, figure, reading), tally),
+    pipelineStrip(report),
   );
-  return { node, exportSlot, animate };
+  return { node, animate };
 }
 
 /* ------------------------------------------------------------------ results */
@@ -495,6 +574,19 @@ function cell(label, ...kids) {
 
 function dtRow(term, value) {
   return el("div", {}, el("dt", { text: term }), el("dd", {}, value));
+}
+
+/** Which tool produced a source link: Tavily research is credited visibly on every finding. */
+function sourceBadge(source) {
+  if (source === "tavily") return el("span", { class: "src src--tavily" }, icon("icon-search", "icon icon--sm"), "Tavily research");
+  if (source === "osv") return el("span", { class: "src", text: "OSV" });
+  return el("span", { class: "src", text: String(source) });
+}
+
+function sourceNote(links) {
+  const tavily = links.filter((l) => l.source === "tavily").length;
+  const text = `${links.length} ${plural(links.length, "source", "sources")}${tavily > 0 ? `, ${tavily} found by Tavily research` : ""}`;
+  return el("p", { class: "src-note", text });
 }
 
 function renderEvidence(f) {
@@ -576,6 +668,7 @@ function renderEvidence(f) {
         "div",
         { class: "ev-links" },
         el("h4", { class: "block-title", text: "Advisory sources" }),
+        f.advisory_links.length > 0 && sourceNote(f.advisory_links),
         el(
           "ul",
           { class: "links" },
@@ -583,8 +676,8 @@ function renderEvidence(f) {
             el(
               "li",
               {},
-              safeLink(link.url, link.title || link.url),
-              el("span", { class: "src" }, `${link.source === "osv" ? "OSV" : "Tavily"}`, link.title ? [" · ", el("code", { text: link.url })] : ""),
+              el("p", { class: "links__title" }, safeLink(link.url, link.title || link.url)),
+              el("p", { class: "links__meta" }, sourceBadge(link.source), link.title && el("code", { class: "links__url", text: link.url })),
             ),
           ),
         ),
@@ -629,7 +722,7 @@ function renderAssessment(f) {
   return box;
 }
 
-function renderFinding(f, index) {
+function renderFinding(f) {
   const meta = VERDICTS[f.verdict] || VERDICTS["no reachable path detected"];
   const id = `finding-${f.finding_id}`;
   const bodyId = `${id}-body`;
@@ -680,11 +773,11 @@ function setOpen(toggle, body, open) {
 export function renderResults(report) {
   const head = el(
     "div",
-    { class: "results__head cols" },
-    ...["Flag", "Package", "Advisory", "Where", "Confidence"].map((t) => el("span", { class: "label", text: t })),
+    { class: "results__head cols", "aria-hidden": "true" },
+    ...["Verdict", "Package", "Advisory", "Where", "Confidence"].map((t) => el("span", { text: t })),
     el("span"),
   );
-  const list = el("ol", { class: "results" }, report.findings.map((f, i) => renderFinding(f, i)));
+  const list = el("ol", { class: "results" }, report.findings.map((f) => renderFinding(f)));
   const node = el(
     "section",
     { class: "results-section", "aria-labelledby": "results-h" },
@@ -694,12 +787,11 @@ export function renderResults(report) {
       el(
         "div",
         {},
-        el("h2", { id: "results-h", class: "section-title", text: "Results" }),
-        el("p", { class: "section-sub", text: "Ranked: likely reachable first, then uncertain, then no reachable path detected; within each, higher confidence first. Open a row for the evidence." }),
+        el("h2", { id: "results-h", class: "block-h" }, "Findings", el("span", { class: "section-count", text: String(report.findings.length) })),
+        el("p", { class: "section-sub", text: "Likely reachable first, then uncertain, then no reachable path detected; higher confidence first within each. Open a finding for its evidence." }),
       ),
     ),
-    head,
-    list,
+    el("div", { class: "results-wrap" }, head, list),
   );
   // The top-ranked finding opens first, with its evidence beneath the row.
   const first = list.querySelector(".finding__toggle");
@@ -707,7 +799,7 @@ export function renderResults(report) {
   return node;
 }
 
-/* ------------------------------------------------- unresolved, method, signoff */
+/* ------------------------------------------------- unresolved, method, footer */
 
 export function renderNotExamined(report) {
   const rows = report.dependencies.filter((d) => !d.resolved || d.osv_status === "not_checked");
@@ -721,7 +813,7 @@ export function renderNotExamined(report) {
       el(
         "div",
         {},
-        el("h2", { id: "notexam-h", class: "section-title", text: "Unresolved and unchecked dependencies" }),
+        el("h2", { id: "notexam-h", class: "block-h", text: "Unresolved and unchecked dependencies" }),
         el("p", { class: "section-sub", text: "These were not checked against OSV, so they are not counted as clean. An unresolved dependency has no exact version, and a version is never guessed." }),
       ),
     ),
@@ -747,6 +839,24 @@ export function renderNotExamined(report) {
         ),
       ),
     ),
+  );
+}
+
+function pipelineLog(report) {
+  return el(
+    "ol",
+    { class: "log" },
+    report.steps.map((step) => {
+      const stage = STAGES.find(([key]) => key === step.name);
+      const seconds = secondsBetween(step.started_at, step.finished_at);
+      return el(
+        "li",
+        {},
+        el("p", {}, el("strong", { text: stage ? stage[1] : step.name }), " ", el("span", { class: "tool", text: stage ? stage[3] : "" }), " ", el("span", { class: "hint", text: STATE_WORD[step.state] || step.state })),
+        el("p", { class: "log__msg", text: step.message || "No message recorded." }),
+        el("p", { class: "hint", text: seconds === null ? "" : formatSeconds(seconds) }),
+      );
+    }),
   );
 }
 
@@ -784,8 +894,8 @@ export function renderMethod(report) {
 
   return el(
     "section",
-    { class: "method", "aria-labelledby": "method-h" },
-    el("div", { class: "section-head" }, el("h2", { id: "method-h", class: "section-title", text: "Method and limitations" })),
+    { class: "method panel", "aria-labelledby": "method-h" },
+    el("div", { class: "section-head" }, el("h2", { id: "method-h", class: "block-h", text: "Method and limitations" })),
     el(
       "ol",
       { class: "notes" },
@@ -806,30 +916,26 @@ export function renderMethod(report) {
         }),
       ),
     ),
-    el(
-      "details",
-      { class: "details" },
-      el("summary", {}, icon("icon-chevron", "icon icon--sm"), `All ${report.dependencies.length} dependencies`),
-      depsTable,
-    ),
+    el("details", { class: "details" }, el("summary", {}, icon("icon-chevron", "icon icon--sm"), "Pipeline log"), pipelineLog(report)),
+    el("details", { class: "details" }, el("summary", {}, icon("icon-chevron", "icon icon--sm"), `All ${report.dependencies.length} dependencies`), depsTable),
   );
 }
 
-export function renderSignoff(report) {
+export function renderReportFoot(report) {
   return el(
     "footer",
-    { class: "signoff" },
+    { class: "report-foot" },
     el(
       "div",
-      { class: "signoff__sig" },
-      el("div", {}, `ProveItReachable ${report.tool_version}`, el("span", { class: "label", text: "Issued by" })),
-      el("div", {}, formatDateTime(report.generated_at), el("span", { class: "label", text: "Issued on" })),
-      el("div", {}, report.model, el("span", { class: "label", text: "Reasoning model" })),
-      el("div", {}, report.scan_id, el("span", { class: "label", text: "Scan id" })),
+      { class: "report-foot__facts" },
+      el("p", {}, "Generated by ", el("span", { text: `ProveItReachable ${report.tool_version}` })),
+      el("p", {}, "On ", el("span", { text: formatDateTime(report.generated_at) })),
+      el("p", {}, "Model ", el("span", { class: "mono", text: report.model })),
+      el("p", {}, "Scan ", el("span", { class: "mono", text: report.scan_id })),
     ),
     el("p", {
-      class: "signoff__text",
-      text: "Automated analysis with no human review. Each verdict is bounded by the evidence printed beside it and by the limitations stated above; it is triage, not a security audit.",
+      class: "report-foot__text",
+      text: "Automated analysis with no human review. Each verdict is bounded by the evidence shown beside it and by the limitations stated above; it is triage, not a security audit.",
     }),
   );
 }

@@ -11,22 +11,23 @@ import {
   clear,
   el,
   formatDate,
-  formatDateTime,
   plural,
   renderDemoError,
   renderDemoSkeleton,
   renderDemos,
   renderMethod,
   renderNotExamined,
+  renderReportFoot,
   renderReportSkeleton,
   renderResults,
-  renderSignoff,
-  renderSpecimen,
+  renderScanHead,
   renderSummary,
+  secondsBetween,
   setDemosDisabled,
   setStage,
   stageLabel,
   syncTrackFromReport,
+  trackProgress,
 } from "./render.js";
 
 /** Exact text of the `invalid_url` API message (section 8); used only for an empty field, with no round trip. */
@@ -44,8 +45,6 @@ const dom = {
   announcer: $("announcer"),
   banner: $("banner"),
   order: $("order"),
-  orderBar: $("order-bar"),
-  orderStatus: $("order-status"),
   orderToggle: $("order-toggle"),
   demoList: $("demo-list"),
   form: $("scan-form"),
@@ -53,8 +52,12 @@ const dom = {
   submit: $("scan-submit"),
   liveNotice: $("live-notice"),
   limits: $("limits"),
-  specimen: $("specimen"),
-  specimenFields: $("specimen-fields"),
+  run: $("run"),
+  scanHead: $("scan-head"),
+  exportSlot: $("export-slot"),
+  runLabel: $("run-label"),
+  runClock: $("run-clock"),
+  runMeter: $("run-meter"),
   track: $("track"),
   busy: $("busy-box"),
   report: $("report"),
@@ -66,9 +69,11 @@ const state = {
   busy: false,
   runId: 0,
   stop: null, // cancels the subscription or the poll of the current run
+  clock: null, // interval id of the elapsed timer
   liveLock: null, // "paused" | "rate" | null: why the live form is switched off
   rateTimer: null,
   instant: Boolean(api.mock && api.mock.jump),
+  stageStart: {}, // step -> ISO time of its running event, for per-stage durations
   run: null,
 };
 
@@ -84,6 +89,10 @@ function announce(message) {
 
 function scrollToNode(node, block = "start") {
   node.scrollIntoView({ block, behavior: prefersReducedMotion() || state.instant ? "auto" : "smooth" });
+}
+
+function setPhase(phase) {
+  document.body.dataset.phase = phase;
 }
 
 function repoNameFromUrl(text) {
@@ -162,7 +171,7 @@ function setBusy(busy) {
   state.busy = busy;
   setDemosDisabled(dom.demoList, busy);
   applyLiveLock();
-  dom.submit.textContent = busy && state.run && state.run.kind === "scan" && !state.run.accepted ? "Starting…" : "Run live assay";
+  dom.submit.textContent = busy && state.run && state.run.kind === "scan" && !state.run.accepted ? "Starting…" : "Scan repo";
 }
 
 function handleStartError(error, kind) {
@@ -182,17 +191,48 @@ function handleStartError(error, kind) {
   }
 }
 
-/* -------------------------------------------------------------- order panel */
+/* -------------------------------------------------------------- scan drawer */
 
 function openOrder(open) {
   dom.order.dataset.collapsed = String(!open);
   dom.orderToggle.setAttribute("aria-expanded", String(open));
-  dom.orderToggle.textContent = open ? "Hide the order form" : "Order another assay";
+  dom.orderToggle.textContent = open ? "Hide scan form" : "New scan";
 }
 
-function showOrderBar(status) {
-  dom.orderBar.hidden = false;
-  dom.orderStatus.textContent = status;
+/* ------------------------------------------------------------ run progress */
+
+function formatClock(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function startClock() {
+  stopClock();
+  const t0 = performance.now();
+  const tick = () => {
+    dom.runClock.textContent = formatClock(Math.floor((performance.now() - t0) / 1000));
+  };
+  tick();
+  state.clock = window.setInterval(tick, 1000);
+}
+
+function stopClock() {
+  if (state.clock !== null) window.clearInterval(state.clock);
+  state.clock = null;
+}
+
+function refreshRunStatus() {
+  const { total, settled, current } = trackProgress(dom.track);
+  dom.runLabel.textContent = current
+    ? `Step ${current.index + 1} of ${total}: ${current.label}`
+    : settled === total
+      ? "All steps finished"
+      : settled > 0
+        ? `${settled} of ${total} steps finished`
+        : "Starting…";
+  dom.runMeter.style.setProperty("--progress", String(settled / total));
+  dom.runMeter.setAttribute("aria-valuenow", String(settled));
 }
 
 /* ------------------------------------------------------------------- runs */
@@ -224,25 +264,27 @@ async function begin(kind, payload) {
     runId,
     scanId: accepted.scan_id,
     name,
-    source: kind === "replay" ? `Recorded demo, recorded on ${formatDate(payload.recorded_at)}` : "Live scan",
+    source: kind === "replay" ? `Recorded demo, ${formatDate(payload.recorded_at)}` : "Live scan",
     commit: kind === "replay" ? payload.commit_sha.slice(0, 7) : null,
     delivered: 0,
   };
+  state.stageStart = {};
   setBusy(true);
   openOrder(false);
-  document.body.dataset.phase = "run";
-  showOrderBar(`Assay in progress for ${name}.`);
+  setPhase("run");
 
-  // Fresh specimen and track; the previous report goes away.
+  // Fresh header and feed; the previous report goes away.
   clear(dom.report);
   dom.report.hidden = true;
-  renderSpecimen(dom.specimenFields, { name, source: state.run.source, commit: state.run.commit });
+  clear(dom.exportSlot);
+  renderScanHead(dom.scanHead, { name, source: state.run.source, commit: state.run.commit });
   buildTrack(dom.track);
-  dom.specimen.hidden = false;
-  const heading = $("specimen-h");
-  if (!state.instant) heading.focus({ preventScroll: true });
-  scrollToNode(dom.specimen);
-  announce(`Assay started for ${name}. ${kind === "replay" ? "Replaying a recorded scan." : "Live scan."}`);
+  refreshRunStatus();
+  startClock();
+  dom.run.hidden = false;
+  if (!state.instant) $("scan-h").focus({ preventScroll: true });
+  scrollToNode(dom.run);
+  announce(`Scan started for ${name}. ${kind === "replay" ? "Replaying a recorded scan." : "Live scan."}`);
 
   if (state.config.features.progress_feed) {
     dom.track.hidden = false;
@@ -259,7 +301,10 @@ function onEvent(runId, event) {
   if (runId !== state.runId) return;
   if (event.type === "step") {
     const index = STAGES.findIndex(([key]) => key === event.step);
-    setStage(dom.track, event.step, event.state, event.message, null, !state.instant);
+    if (event.state === "running") state.stageStart[event.step] = event.at;
+    const seconds = event.state === "running" ? null : secondsBetween(state.stageStart[event.step], event.at);
+    setStage(dom.track, event.step, event.state, event.message, seconds, !state.instant);
+    refreshRunStatus();
     state.run.delivered += 1;
     announce(`Step ${index + 1} of ${STAGES.length}, ${stageLabel(event.step)}: ${event.state}.`);
   } else if (event.type === "done") {
@@ -293,9 +338,9 @@ function failRun(runId, error) {
   if (runId !== state.runId) return;
   if (state.stop) state.stop();
   state.stop = null;
+  stopClock();
   showSystemError(error);
   announce(error.message);
-  showOrderBar(`The assay for ${state.run.name} did not finish.`);
   openOrder(false);
   setBusy(false);
 }
@@ -305,6 +350,7 @@ async function finish(runId) {
   const scanId = state.run.scanId;
   if (state.stop) state.stop();
   state.stop = null;
+  stopClock();
   clear(dom.report).append(renderReportSkeleton());
   dom.report.hidden = false;
   dom.report.setAttribute("aria-busy", "true");
@@ -329,10 +375,10 @@ function showReport(report) {
   const run = state.run;
   const name = `${report.repo.owner}/${report.repo.name}`;
 
-  // Specimen now carries the facts the scan produced. Keep focus on the heading if it had it.
-  const hadFocus = document.activeElement && document.activeElement.id === "specimen-h";
+  // The header now carries the facts the scan produced. Keep focus on the heading if it had it.
+  const hadFocus = document.activeElement && document.activeElement.id === "scan-h";
   const resolution = report.resolution;
-  renderSpecimen(dom.specimenFields, {
+  renderScanHead(dom.scanHead, {
     name,
     source: run.source,
     commit: report.repo.commit_sha.slice(0, 7),
@@ -343,29 +389,25 @@ function showReport(report) {
         : resolution.method === "compiled"
           ? "Compiled, not locked"
           : "Could not be resolved",
-    issued: formatDateTime(report.generated_at),
     model: report.model,
   });
-  if (hadFocus) $("specimen-h").focus({ preventScroll: true });
+  if (hadFocus) $("scan-h").focus({ preventScroll: true });
   syncTrackFromReport(dom.track, report);
-  dom.track.hidden = false;
   dom.busy.hidden = true;
+  renderExports(dom.exportSlot, api, report, state.config);
 
   const summary = renderSummary(report, { isMock });
-  renderExports(summary.exportSlot, api, report, state.config);
-
   clear(dom.report);
   dom.report.append(summary.node);
   if (report.findings.length > 0) dom.report.append(renderResults(report));
   const notExamined = renderNotExamined(report);
   if (notExamined) dom.report.append(notExamined);
-  dom.report.append(renderMethod(report), renderSignoff(report));
+  dom.report.append(renderMethod(report), renderReportFoot(report));
   dom.report.removeAttribute("aria-busy");
   dom.report.hidden = false;
-  dom.report.classList.add("stack");
+  setPhase("report");
 
   summary.animate(prefersReducedMotion() || state.instant);
-  showOrderBar(`Report ready for ${name}.`);
   setBusy(false);
 
   const by = report.summary.by_verdict;
@@ -383,7 +425,7 @@ function showReport(report) {
 function renderLimits(config) {
   clear(dom.limits).append(
     el("p", {
-      text: `Limits: public GitHub repositories only, up to ${config.limits.max_repo_mb} MB and ${config.limits.max_repo_files} files, with a Python dependency manifest.`,
+      text: `Limits: public GitHub repositories only, up to ${config.limits.max_repo_mb} MB and ${config.limits.max_repo_files} files, with a Python dependency manifest.`,
     }),
     el("p", {
       text: "Live scans take minutes, are rate limited per visitor, and stop when the spend limit is reached. Demo replays are never limited.",
@@ -435,12 +477,16 @@ function init() {
     const note = $("mock-notice-text");
     note.append(
       el("strong", { text: "Prototype on mock data." }),
-      ` Scenario: ${api.mock.scenario}. Repositories, versions and figures are placeholders, not measurements.`,
+      ` Scenario: ${api.mock.scenario}. Figures are placeholders.`,
     );
     $("mock-notice").hidden = false;
   }
 
-  dom.orderToggle.addEventListener("click", () => openOrder(dom.order.dataset.collapsed === "true"));
+  dom.orderToggle.addEventListener("click", () => {
+    const open = dom.order.dataset.collapsed === "true";
+    openOrder(open);
+    if (open) scrollToNode(dom.order);
+  });
 
   dom.form.addEventListener("submit", (event) => {
     event.preventDefault();

@@ -25,13 +25,12 @@ export function renderExports(slot, api, report, config) {
   clear(slot);
   const formats = ["json"];
   if (config.features && config.features.markdown_export) formats.push("md");
-  slot.append(el("span", { class: "label", text: "Export report" }));
   for (const format of formats) {
     slot.append(
       el(
         "a",
         {
-          class: "btn btn--quiet",
+          class: "btn",
           href: api.exportUrl(report.scan_id, format),
           download: exportFilename(report, format),
         },

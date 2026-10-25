@@ -1,0 +1,95 @@
+/*
+ * Design tokens for ProveItReachable. The only place a colour, size, space, radius, shadow or duration is defined.
+ * app.css references these; it never hard-codes a value.
+ */
+:root {
+  color-scheme: light;
+
+  /* Neutral ramp, tinted toward a cool slate hue. */
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --line: #e1e4ea;
+  --line-strong: #c8cdd7;
+  --control-edge: #7b8494; /* 3.6:1 on white: input and control boundaries */
+  --disabled-fill: #e9ecf0;
+  --ink: #10141b;
+  --ink-2: #394152;
+  --ink-3: #576072;
+
+  /* One accent: links, focus, the running state, Tavily credit. */
+  --accent: #2a55d1;
+  --accent-deep: #1d3ea3;
+  --accent-tint: #eaf0fd;
+  --accent-wash: #f5f8ff;
+  --focus: #2a55d1;
+
+  /* Reserved for verdicts. Red = likely reachable. Amber = uncertain. Nothing else borrows them. */
+  --reach: #c8301f;
+  --reach-deep: #a02112;
+  --reach-tint: #fdeceb;
+  --reach-wash: #fff8f7;
+  --unsure: #e0a826;
+  --unsure-edge: #a77a0b;
+  --unsure-tint: #fdf3d6;
+  --unsure-wash: #fffaf0;
+
+  /* Type: one sans, one mono. Scale ratio 1.25 from 16px. */
+  --font-sans: "Geist", ui-sans-serif, system-ui, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+  --fs-xs: 0.8125rem;
+  --fs-sm: 0.875rem;
+  --fs-base: 1rem;
+  --fs-md: 1.125rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.5625rem;
+  --fs-2xl: 1.953rem;
+  --fs-hero: clamp(2rem, 1.3rem + 2.7vw, 3.05rem);
+  --fs-num: clamp(3rem, 1.6rem + 6vw, 5.25rem);
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+
+  /* Space: 4px base. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+  --sp-9: 96px;
+
+  /* Layout. */
+  --page-max: 75rem;
+  --gutter: 16px;
+  --control-h: 48px;
+  --control-h-lg: 52px;
+
+  /* Shape and depth. Hairlines carry most structure; shadows are rare and soft. */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-pill: 999px;
+  --shadow-1: 0 1px 2px rgb(16 20 27 / 0.06);
+  --shadow-2: 0 1px 2px rgb(16 20 27 / 0.05), 0 4px 8px -2px rgb(16 20 27 / 0.12);
+
+  /* Motion. Feedback 150 to 250ms; transform and opacity only. */
+  --dur-fast: 150ms;
+  --dur: 220ms;
+  --dur-slow: 400ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --gutter: 24px;
+  }
+}
+@media (min-width: 80rem) {
+  :root {
+    --gutter: 32px;
+  }
+}

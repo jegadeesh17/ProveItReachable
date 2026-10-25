@@ -1,62 +1,75 @@
 ---
 name: ProveItReachable
-description: A reachability assay printed as a clinical lab report; evidence before explanation, uncertainty as a normal printed result.
+description: A calm developer-tool product. Evidence-first reachability triage, shown as a clean funnel, a visible agent pipeline and ranked findings.
 colors:
-  lab-white: "#f7f8fa"
-  report-sheet: "#fcfdfe"
-  assay-ink: "#20252b"
-  ink-secondary: "#444e59"
-  ink-tertiary: "#596470"
-  hairline: "#d3d9e0"
-  control-edge: "#747f8b"
-  disabled-fill: "#e6e9ed"
-  report-blue: "#2f6fb0"
-  report-blue-deep: "#1f5488"
-  report-blue-tint: "#e4edf7"
-  report-blue-tint-strong: "#cfe0f2"
-  flag-red: "#c2362b"
-  flag-red-tint: "#f9e8e6"
-  flag-amber: "#e3b341"
-  flag-amber-tint: "#fbf1d6"
+  page: "#f6f7f9"
+  surface: "#ffffff"
+  surface-2: "#f0f2f5"
+  hairline: "#e1e4ea"
+  line-strong: "#c8cdd7"
+  control-edge: "#7b8494"
+  ink: "#10141b"
+  ink-secondary: "#394152"
+  ink-tertiary: "#576072"
+  accent: "#2a55d1"
+  accent-deep: "#1d3ea3"
+  accent-tint: "#eaf0fd"
+  accent-wash: "#f5f8ff"
+  reach: "#c8301f"
+  reach-deep: "#a02112"
+  reach-tint: "#fdeceb"
+  reach-wash: "#fff8f7"
+  unsure: "#e0a826"
+  unsure-edge: "#a77a0b"
+  unsure-tint: "#fdf3d6"
+  unsure-wash: "#fffaf0"
 typography:
   display:
-    fontFamily: "Public Sans, system-ui, Segoe UI, Helvetica Neue, sans-serif"
-    fontSize: "clamp(3.052rem, 2rem + 5vw, 5.5rem)"
-    fontWeight: 700
+    fontFamily: "Geist, ui-sans-serif, system-ui, Segoe UI, Helvetica Neue, sans-serif"
+    fontSize: "clamp(2rem, 1.3rem + 2.7vw, 3.05rem)"
+    fontWeight: 600
+    lineHeight: 1.1
+    letterSpacing: "-0.03em"
+  numeral:
+    fontFamily: "Geist, ui-sans-serif, system-ui, Segoe UI, Helvetica Neue, sans-serif"
+    fontSize: "clamp(3rem, 1.6rem + 6vw, 5.25rem)"
+    fontWeight: 600
     lineHeight: 1
     letterSpacing: "-0.04em"
     fontFeature: "tnum"
   headline:
-    fontFamily: "Public Sans, system-ui, Segoe UI, Helvetica Neue, sans-serif"
-    fontSize: "1.5625rem"
-    fontWeight: 700
+    fontFamily: "Geist, ui-sans-serif, system-ui, Segoe UI, Helvetica Neue, sans-serif"
+    fontSize: "1.953rem"
+    fontWeight: 600
     lineHeight: 1.15
-    letterSpacing: "-0.02em"
+    letterSpacing: "-0.025em"
   title:
-    fontFamily: "Public Sans, system-ui, Segoe UI, Helvetica Neue, sans-serif"
+    fontFamily: "Geist, ui-sans-serif, system-ui, Segoe UI, Helvetica Neue, sans-serif"
     fontSize: "1.25rem"
     fontWeight: 600
-    lineHeight: 1.35
+    lineHeight: 1.25
+    letterSpacing: "-0.015em"
   body:
-    fontFamily: "Public Sans, system-ui, Segoe UI, Helvetica Neue, sans-serif"
+    fontFamily: "Geist, ui-sans-serif, system-ui, Segoe UI, Helvetica Neue, sans-serif"
     fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.5
     fontFeature: "tnum"
   label:
-    fontFamily: "Public Sans, system-ui, Segoe UI, Helvetica Neue, sans-serif"
-    fontSize: "0.8rem"
-    fontWeight: 600
+    fontFamily: "Geist, ui-sans-serif, system-ui, Segoe UI, Helvetica Neue, sans-serif"
+    fontSize: "0.875rem"
+    fontWeight: 500
     lineHeight: 1.4
-    letterSpacing: "0.08em"
   data:
-    fontFamily: "JetBrains Mono, ui-monospace, Cascadia Mono, SF Mono, Consolas, monospace"
-    fontSize: "0.9em"
+    fontFamily: "Geist Mono, ui-monospace, Cascadia Mono, SF Mono, Consolas, monospace"
+    fontSize: "0.92em"
     fontWeight: 400
     lineHeight: 1.4
 rounded:
-  control: "2px"
-  round: "50%"
+  sm: "6px"
+  md: "8px"
+  lg: "12px"
+  pill: "999px"
 spacing:
   xs: "4px"
   sm: "8px"
@@ -67,163 +80,187 @@ spacing:
   page: "64px"
 components:
   button-primary:
-    backgroundColor: "{colors.report-blue}"
-    textColor: "{colors.report-sheet}"
-    rounded: "{rounded.control}"
+    backgroundColor: "{colors.ink}"
+    textColor: "{colors.surface}"
+    rounded: "{rounded.md}"
     padding: "8px 24px"
-    height: "44px"
+    height: "52px"
   button-primary-hover:
-    backgroundColor: "{colors.report-blue-deep}"
+    backgroundColor: "{colors.ink-secondary}"
   button-secondary:
-    backgroundColor: "transparent"
-    textColor: "{colors.report-blue-deep}"
-    rounded: "{rounded.control}"
-    padding: "8px 24px"
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.md}"
+    padding: "8px 16px"
     height: "44px"
   button-secondary-hover:
-    backgroundColor: "{colors.report-blue-tint}"
+    backgroundColor: "{colors.surface-2}"
   input-field:
-    backgroundColor: "{colors.report-sheet}"
-    textColor: "{colors.assay-ink}"
-    rounded: "{rounded.control}"
-    padding: "8px 12px"
-    height: "48px"
-  specimen-block:
-    backgroundColor: "{colors.report-sheet}"
-    textColor: "{colors.assay-ink}"
-    rounded: "{rounded.control}"
-    padding: "16px 24px"
-  result-row-reach:
-    backgroundColor: "{colors.flag-red-tint}"
-    textColor: "{colors.assay-ink}"
-    padding: "16px"
-  result-row-uncertain:
-    backgroundColor: "{colors.flag-amber-tint}"
-    textColor: "{colors.assay-ink}"
-    padding: "16px"
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.md}"
+    padding: "8px 16px"
+    height: "52px"
+  demo-row:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.lg}"
+    padding: "12px 16px"
+  verdict-chip-reach:
+    backgroundColor: "{colors.reach-tint}"
+    textColor: "{colors.reach-deep}"
+    rounded: "{rounded.pill}"
+    padding: "4px 12px 4px 8px"
+  verdict-chip-uncertain:
+    backgroundColor: "{colors.unsure-tint}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.pill}"
+    padding: "4px 12px 4px 8px"
+  verdict-chip-none:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink-secondary}"
+    rounded: "{rounded.pill}"
+    padding: "4px 12px 4px 8px"
+  summary-panel:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.lg}"
+    padding: "24px"
 ---
 
 # Design System: ProveItReachable
 
 ## Overview
 
-**Creative North Star: "The Assay Result Sheet"**
+**Creative North Star: "The Clean Console"**
 
-Every scan is issued as a clinical lab report. The repository is the specimen, each advisory is a test, and the verdict sits in a flag column the way a result sits against a reference range. `uncertain` is a normal printed result, not an error state. The system refuses the category defaults of stat tiles, coloured severity badges and a wall of cards: structure comes from hairline rules, a boxed specimen header, a ruled results list, footnotes and a sign-off line.
+ProveItReachable is a developer tool, so it looks like one: a white-on-cool-grey product surface in the spirit of Linear, Vercel or Socket.dev, without borrowing any of their branding. Hairlines and tonal steps do the structuring; shadows are rare and soft; type is one confident sans plus a mono for everything a developer would copy. There is no document metaphor and no decoration. The product earns trust by showing its work: a one-line value proposition, one input, three one-click demos, then a result that leads with the funnel ("6 advisories to 2 likely reachable"), the pipeline that produced it, and the evidence for each finding.
 
-The mood is precise, flat and quiet. Paper is cool lab white, ink is near-black, and the report blue draws structure, rules and links. Red and amber are not decoration: they are reserved for the two verdicts that need a human (`likely reachable`, `uncertain`) and appear only inside a flag mark or its row tint. Everything is operate-mode dense: a reader should find the flag, the package, the advisory id and the file:line without opening anything.
+Mode: **Persuade** on the front door (one message, one action: paste a repo or click a demo), **Operate** from the first scan on (scanability, density, consistency). The user is a Python developer drowning in scanner alerts; the cold evaluator has under three minutes and a laptop.
 
-Evidence comes before explanation, everywhere. In every finding the vulnerable function, call path, source locations and advisory links precede confidence, limitations and the model's explanation.
+Evidence comes before explanation, everywhere. In every finding, the vulnerable function, call path, source locations and advisory links precede confidence, limitations and the model's explanation. The agent pipeline is visible while it runs and in the finished report: each stage names the tool behind it (OSV, Tavily, static analysis in a sandbox, Nemotron). Tavily research is credited on every advisory source it supplied.
 
 **Key Characteristics:**
-- Flat, tonal and ruled; no shadows, no gradients, no blur.
-- One workhorse sans with tabular figures, one mono for data (file:line, SHAs, advisory ids).
+- Light, restrained: neutrals plus one accent; red and amber appear only on verdicts.
+- Geist for interface and prose, Geist Mono for data (file:line, ids, symbols, URLs, tool names).
 - Verdicts are always shape plus words; colour only reinforces.
-- Squared controls (2px), 1px hairlines, 1.5px structural rules, a 4px double rule under the letterhead.
-- Single light theme.
+- Generous whitespace, 8 to 12px radii, 1px hairlines, one soft shadow reserved for the summary panel and the example card.
+- Left-aligned, asymmetric layout; no centred hero, no grid of identical cards.
 
 ## Colors
 
-A cool-tinted neutral ramp, one structural blue, and two reserved flag colours.
+A cool-tinted neutral ramp, one accent, and two reserved verdict colours.
 
 ### Primary
-- **Report Blue** (#2f6fb0): structure, rules, links, the primary button, done-stage stamps. Used on well under a tenth of any screen.
-- **Report Blue Deep** (#1f5488): hover, focus ring, and text on blue tints (4.5:1 or better).
+- **Ink** (#10141b): text, the primary button, done-stage nodes. The primary action is ink, not accent.
+- **Accent** (#2a55d1): links, keyboard focus, the running stage, the Tavily credit. Used on well under a tenth of any screen. **Accent Deep** (#1d3ea3) for text on accent tints and hover.
 
-### Secondary
-- **Flag Red** (#c2362b): reserved for `likely reachable`. Only the filled triangle, the sink step of a call path and the red underline of the "likely reachable" numeral.
-- **Flag Amber** (#e3b341): reserved for `uncertain`. Only the hatched mark, the uncertain row tint and the "why this is uncertain" box. Never used as text.
+### Secondary (reserved)
+- **Reach** (#c8301f) and **Reach Deep** (#a02112): only `likely reachable`: the filled triangle, the chip, the sink node of a call path and the numeral of the funnel.
+- **Unsure** (#e0a826) and **Unsure Edge** (#a77a0b): only `uncertain`: the hatched square, the chip, the reason box. Never used as text.
 
 ### Neutral
-- **Lab White** (#f7f8fa): page ground.
-- **Report Sheet** (#fcfdfe): raised surfaces: specimen block, finding body, inputs.
-- **Assay Ink** (#20252b): text, strong rules, outlines of marks.
-- **Ink Secondary** (#444e59) and **Ink Tertiary** (#596470): secondary and quiet text; both clear 4.5:1 on Lab White.
-- **Hairline** (#d3d9e0): row dividers. **Control Edge** (#747f8b): input and stamp boundaries (3:1).
-- **Flag Red Tint** (#f9e8e6), **Flag Amber Tint** (#fbf1d6), **Report Blue Tint** (#e4edf7): row and hover fills; text on them is always Assay Ink or Report Blue Deep.
+- **Page** (#f6f7f9), **Surface** (#ffffff), **Surface 2** (#f0f2f5): ground, raised surfaces, quiet fills and code wells.
+- **Hairline** (#e1e4ea), **Line Strong** (#c8cdd7), **Control Edge** (#7b8494, 3.5:1 or better on page and surface): rules and control boundaries.
+- **Ink Secondary** (#394152, 10:1) and **Ink Tertiary** (#576072, 5.6:1 or better on every ground used): secondary text and meta.
+- **Reach Wash** (#fff8f7) and **Unsure Wash** (#fffaf0) tint finding rows; **Accent Wash** (#f5f8ff) tints the running stage.
 
 ### Named Rules
-**The Reserved Flags Rule.** Red means `likely reachable` and nothing else; amber means `uncertain` and nothing else. No error, warning or success state borrows them. Errors and notices use ink outlines and a drawn icon.
-**The Never Colour Alone Rule.** Every verdict is a mark (filled triangle, hatched square, outline dash) plus its exact words. Amber alone fails 3:1 on paper, so the hatched mark always carries an ink outline.
+**The Reserved Colour Rule.** Red means `likely reachable` and nothing else; amber means `uncertain` and nothing else. Errors, warnings and success states use ink outlines and drawn icons, never these colours. Done stages are ink, not green: green would imply "safe".
+**The Never Colour Alone Rule.** Every verdict is a mark (filled triangle, hatched square, outline pill) plus its exact words. Every stage state is a drawn node (ring, arc, check, cross, dash) plus a visually hidden state word.
 
 ## Typography
 
-**Display and body font:** Public Sans (with system-ui, Segoe UI, Helvetica Neue)
-**Data font:** JetBrains Mono (with ui-monospace, Cascadia Mono, Consolas)
+**Interface and prose:** Geist (with ui-sans-serif, system-ui, Segoe UI)
+**Data:** Geist Mono (with ui-monospace, Cascadia Mono, Consolas)
 
-**Character:** a neutral, legible institutional sans carries all prose and numerals; mono is used only for things a developer would copy: file:line, commit SHAs, advisory ids, symbols, URLs, snippets. Weights in use: 400, 600, 700. Scale ratio 1.25.
+**Character:** a precise, slightly geometric sans that stays neutral at body size and sharpens at display size; mono is used only for things a developer would copy. Weights in use: 400, 500, 600. Scale ratio 1.25 from 16px.
 
 ### Hierarchy
-- **Display** (700, clamp(3.052rem, 2rem + 5vw, 5.5rem), 1.0, -0.04em, tabular): the two assay numerals only.
-- **Headline** (700, 1.5625rem, 1.15, -0.02em): panel and section titles.
-- **Title** (600, 1.25rem, 1.35): purpose line, reading sentence under the numerals.
-- **Body** (400, 1rem, 1.5): all prose, capped near 68ch.
-- **Label** (600, 0.8rem, +0.08em, uppercase): field labels (dt), table column heads, table captions. Never placed above a heading.
-- **Data** (JetBrains Mono 400, 0.9em): file:line, ids, symbols, snippets; wrapped, never truncated.
+- **Display** (600, clamp 2rem to 3.05rem, 1.1, -0.03em): the front-door headline only.
+- **Numeral** (600, clamp 3rem to 5.25rem, 1.0, -0.04em, tabular): the funnel figures only.
+- **Headline** (600, 1.953rem, 1.15, -0.025em): the repository name (`owner/` in tertiary ink, the name in ink).
+- **Title** (600, 1.25rem, 1.25): section headings (Findings, Method and limitations, How a scan works).
+- **Body** (400, 1rem, 1.5): prose, capped near 68ch.
+- **Label** (500, 0.875rem): field labels, column heads, block titles. Sentence case; no uppercase kickers.
+- **Data** (Geist Mono 400 to 500, 0.92em): file:line, ids, symbols, snippets, tool chips; wrapped, never truncated.
 
 ### Named Rules
-**The Plain Words Rule.** Primary labels are plain developer words ("Run assay", "Resolve dependencies", "Call path from your code"). Lab vocabulary lives in field and column labels ("Specimen", "Flag", "Method").
-**The Tabular Rule.** Every figure uses tabular numerals so columns and counts align.
+**The Plain Words Rule.** Primary labels are plain developer words: "Scan repo", "Run demo", "New scan", "Call path from your code", "Findings".
+**The Tabular Rule.** Every figure uses tabular numerals so counts and durations align.
 
 ## Layout
 
-A single screen with a 75rem content column, 16px gutters on phones, 24px from 48rem, 32px from 80rem. Spacing is a 4px scale (4, 8, 12, 16, 24, 32, 48, 64, 96). Idle: letterhead, then a two-thirds ruled "Order an assay" list beside a one-third live-repo form divided by a single hairline; the key to the three flags sits under the demos. After a run starts, the order panel collapses to a one-line bar, the letterhead's purpose line is dropped, the boxed specimen header with the six-stage processing track takes its place, and the assay numerals land inside the first 900px viewport, followed by the ruled results list with the top finding open.
+A single screen with a 75rem content column, 16px gutters on phones, 24px from 48rem, 32px from 80rem. Spacing is the 4px scale (4, 8, 12, 16, 24, 32, 48, 64, 96).
 
-Responsive: below 62rem the results list reflows to stacked label/value rows, the track to a vertical list and the evidence grid to one column. Nothing scrolls horizontally at 390px; wide tables scroll inside their own wrapper. Rhythm varies on purpose: 48px between report sections, 32px between page blocks, 8–16px within groups.
+**Front door (idle):** a product header (wordmark with a drawn call-path glyph on the left, "Powered by Nebius Token Factory · Nemotron · Tavily" quietly on the right). Below, two columns from 62rem: left, the headline, one sentence of value, and the URL input joined to the primary "Scan repo" button; right, "Or run a recorded demo" with three one-click rows, each showing the recorded verdict counts. Below the fold: "How a scan works" (six stages, each with its tool) beside an example finding and the three-verdict key.
+
+**Scanning:** the pitch disappears. The repository name and facts sit on top with "New scan" at the right. One panel holds the live pipeline: a step label, an elapsed clock, a meter, and six rows (node, stage, tool chip, the stage's message, duration). The running row is tinted with accent wash and spins its node.
+
+**Report:** repository header with New scan and the two export buttons; the summary panel (funnel numerals, a strip with one mark per finding, the reading sentence, the verdict tally, and a "How this report was made" pipeline strip); then Findings as one bordered list with a column header on desktop; then unresolved dependencies, method and limitations, and a quiet report footer.
+
+Responsive: below 62rem the findings reflow to stacked label/value rows and the pipeline rows to node, name, tool, message; the evidence grid becomes one column. Nothing scrolls horizontally at 375px; wide tables scroll inside their own wrapper or stack. Rhythm varies on purpose: 48 to 64px between major blocks, 24px between report sections, 8 to 16px inside groups.
 
 ## Elevation & Depth
 
-Flat. There are no shadows. Depth is a tonal step (Lab White to Report Sheet), a 1.5px ink outline for the specimen block and notices, and 1px hairlines between rows. The only transforms are a 1px press on buttons, the chevron rotation and the stamp.
+Mostly flat: structure is a 1px hairline or a tonal step (Page to Surface to Surface 2). Two soft, offset shadows exist: a hairline-small one on inputs and list containers, and a slightly deeper one (4px offset, 8px blur) on the summary panel, the example card and hovered demo rows. No glow, no glass.
 
 ### Named Rules
-**The Flat Sheet Rule.** A surface is distinguished by a rule or a tint, never by a shadow or a blur.
+**The Quiet Depth Rule.** Shadows carry an offset and a soft blur and are used on at most one raised object per region; a surface is otherwise separated by a rule or a tint.
 
 ## Shapes
 
-Squared and instrument-like: 2px radius on controls, tags and boxes; 50% only on the numbered call-path nodes. Marks are drawn SVG on one 24px grid with a 1.5px stroke: filled triangle (likely reachable), hatched square with ink outline (uncertain), outline dash pill (no reachable path detected). One icon set, one stroke weight.
+Three radii by role: 6px for chips, code wells and tags; 8px for controls; 12px for panels and lists; pill only for verdict chips. Pills, tags and tool chips keep at least 4px vertical and 8px horizontal padding; bordered lists inset their rows by 16px. Marks are drawn SVG on a 24px grid: filled triangle (likely reachable), hatched square with an ink outline (uncertain), outline pill (no reachable path detected). One icon set, one stroke weight (1.8).
 
 ## Components
 
 ### Buttons
-- **Shape:** 2px radius, 44px minimum height, 600 weight.
-- **Primary** ("Run assay"): Report Blue fill, Report Sheet text, 8px 24px padding. Hover: Report Blue Deep. Active: 1px down.
-- **Secondary / quiet** (live scan, export, order another): 1.5px outline in blue or control edge, transparent fill, blue tint on hover.
-- **Disabled:** dashed control-edge outline, disabled fill, tertiary ink, `not-allowed` cursor.
-- **Focus:** 3px Report Blue Deep outline, 2px offset, on every interactive element.
+- **Primary** ("Scan repo"): ink fill, white text, 52px tall, 8px radius. Hover: ink-secondary. One per view.
+- **Secondary** (New scan, downloads): surface fill, 1px line-strong border, 44px minimum height. Hover: surface-2 and control-edge border.
+- **Disabled:** dashed border, disabled fill, tertiary ink, `not-allowed`.
+- **Focus:** 2px accent outline, 2px offset (inside the box on list rows), on every interactive element.
 
-### Inputs / Fields
-- **Style:** 1.5px control-edge stroke, Report Sheet fill, mono text, visible label above, hint beneath.
-- **Focus:** border shifts to Report Blue Deep plus the global ring. **Error:** 3px ink border, `aria-invalid`, message in an ink-outlined notice linked by `aria-describedby`, input value kept. **Disabled:** dashed, filled.
+### Input
+- 52px tall, mono text, visible label above (never placeholder-only), hint beneath, 1px control-edge border with a soft shadow.
+- Focus: border turns accent plus the global ring. Error: 2px ink border, `aria-invalid`, message in an ink-outlined notice linked by `aria-describedby`, the typed value kept. Disabled: dashed and filled.
 
-### Specimen block (signature)
-A boxed header: the repository set in mono at headline size, a three-column field grid of Source, Commit, Branch, Versions, Issued and Model, and a six-column processing track beneath a 1.5px rule. Each stage carries a stamp: pending (dashed), running (blue tint, arrow, one-shot fill bar), done (blue, check, rotated -2deg, stamped in with a 220ms scale-and-fade), failed (ink cross), skipped (dashed dash). Reduced motion: no stamp animation, no fill.
+### Demo rows (signature)
+Each demo is one full-width button: repo name in mono with a "placeholder" tag, a one-line description, the recorded verdict counts as small marks, and "Run demo" with an arrow on the right. Hover lifts with the soft shadow and nudges the arrow 3px.
 
-### Assay summary (signature)
-Two display numerals set inline with their words: total advisories, a drawn arrow, then likely reachable. On landing the second numeral counts down from the total (1.1s, ease-out; final values only under reduced motion). A ruled tally table of the three verdicts, each with its mark, sits beside it.
+### Verdict chip
+Pill with the verdict's mark and its exact words. `likely reachable`: reach tint, reach border, reach-deep text. `uncertain`: unsure tint with an unsure-edge border and ink text. `no reachable path detected`: white with a control-edge border.
 
-### Result rows and findings
-A header row of labels (Flag, Package, Advisory, Where, Confidence) over ruled rows. Each row is a button inside an h3; `likely reachable` rows tint red, `uncertain` rows tint amber and print their reason under the flag, `no reachable path detected` rows stay untinted. An opened row shows, in this order: vulnerable function, call path (numbered nodes on a hairline, dashed for heuristic edges, red sink), source locations with snippets, advisory sources (links open in a new tab with `noopener noreferrer`), then the uncertain reason box, confidence, limitations and the explanation. Uncertain findings carry `data-verdict="uncertain"`.
+### Pipeline (signature)
+The same six stages appear three times: on the front door as a list of what each stage does, live while scanning, and in the finished summary as a strip with durations. Each stage always shows its tool: Lockfile and uv, OSV, Tavily, static analysis in a sandbox, Nemotron, verdict rules. States: pending (empty ring), running (accent arc, tinted row), done (ink check), failed (outlined cross), skipped (dashed dash).
+
+### Summary panel
+White panel with the soft shadow. The funnel line sets two numerals in the numeral style with their words and a drawn arrow; the second numeral is reach-deep and counts down from the total on landing (final value only under reduced motion). Under it, one mark per finding in rank order, staggered in. The tally lists the three verdicts with their marks. Clean and incomplete outcomes show "0" with the dependency counts instead.
+
+### Findings list
+One bordered container. Each finding is a button inside an h3: verdict chip (uncertain rows print the reason), package and version, advisory id, first location, confidence, chevron. `likely reachable` rows carry a faint red wash, `uncertain` rows a faint amber wash, `no reachable path detected` rows stay white. An opened finding shows, in this order: vulnerable function, call path (numbered nodes on a rail, dashed for heuristic edges, reach-tinted sink), where your code touches it with snippets, advisory sources, then a tinted assessment block (uncertain reason, confidence, limitations, explanation). Uncertain findings carry `data-verdict="uncertain"`.
+
+### Advisory sources
+Each link is the exact report URL with `rel="noopener noreferrer"`, followed by a source badge and the URL in mono. Links from Tavily research carry an accent badge with a search icon reading "Tavily research"; OSV links carry a neutral "OSV" badge. A line above the list states how many sources came from Tavily research.
 
 ### Notices
-Ink-outlined box with a drawn icon, a bold title, the API message verbatim, optional facts and a one-line recovery hint. Info notices (paused) use a dashed outline.
-
-### Footnotes and sign-off
-Method and limitations are numbered notes referenced from the summary; the report closes with a ruled sign-off line (issuer, date, model, scan id) and a one-sentence statement that it is automated analysis.
+Surface box with a 1px ink border, a drawn icon, the API message verbatim as the bold lead (no separate title that would repeat it; a title appears only on client-side notices), optional facts and a one-line recovery hint. Info notices (paused) use a dashed border.
 
 ## Do's and Don'ts
 
 ### Do:
 - **Do** keep red for `likely reachable` and amber for `uncertain`, always paired with the mark and the exact verdict words.
 - **Do** put evidence (function, path, locations, sources) before confidence, limitations and explanation in DOM order.
-- **Do** label demo and placeholder data wherever a figure appears.
+- **Do** show the tool behind every pipeline stage and credit Tavily on the sources it found.
+- **Do** label demo and placeholder data wherever a figure appears; take any metric from a fixture field and name its origin.
 - **Do** render all report text with `textContent`; link only http(s) with `rel="noopener noreferrer"`.
-- **Do** keep every control at 44px or more with a visible 3px focus ring and a label.
+- **Do** keep every control at 44px or more with a visible focus ring and a label.
 - **Do** announce stage changes in the polite live region.
 
 ### Don't:
-- **Don't** use stat tiles, coloured severity badges, or a wall of identical cards for findings.
-- **Don't** add shadows, gradients, glass or glow; depth is a rule or a tint.
-- **Don't** signal `uncertain` or any verdict by colour alone.
-- **Don't** show a number that was not produced by a scan or labelled as demo data.
-- **Don't** place kicker labels above headings; uppercase labels belong to fields, columns and captions.
-- **Don't** hard-code colours, sizes or spaces outside the tokens at the top of `web/css/app.css`.
+- **Don't** invent metrics, benchmarks, logos or user counts. The powered-by line is plain text, with no brand marks.
+- **Don't** use gradients, glass, glow or hard offset shadows.
+- **Don't** signal any verdict or stage state by colour alone.
+- **Don't** use green for done: it reads as "safe".
+- **Don't** build a centred hero, a grid of identical feature cards, or kicker labels above headings.
+- **Don't** repeat a message as its own title, or start a wrapped line with a middle dot (glue it to the word before it).
+- **Don't** hard-code colours, sizes, spaces or durations outside `web/css/tokens.css`.
