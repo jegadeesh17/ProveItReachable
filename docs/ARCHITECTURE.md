@@ -1,8 +1,9 @@
 # Architecture
 
 Status: FROZEN (2026-10-25)
+Amended 2026-10-25 after security design review rounds 1 (ADR-0027 to ADR-0031) and 2 (ADR-0032); see [SECURITY_REVIEW](SECURITY_REVIEW.md).
 
-The technical design of ProveItReachable: stack, components, contracts, safety boundaries, operations, test commands and setup requirements. Requirements: [SPEC](SPEC.md) and the [project mental model](PROJECT_MENTAL_MODEL.md); lasting decisions: [DECISIONS](DECISIONS.md). Drafted 2026-10-24; frozen 2026-10-25 after the prototype review ([FEEDBACK](FEEDBACK.md)) and the platform spike ([PLATFORM_FEEDBACK](PLATFORM_FEEDBACK.md)); it now changes only through a change request with a superseding ADR. Open questions OQ-1 to OQ-16 are answered in the sections tagged with their IDs (OQ-16: there is no fallback executor, ADR-0021).
+The technical design of ProveItReachable: stack, components, contracts, safety boundaries, operations, test commands and setup requirements. Requirements: [SPEC](SPEC.md) and the [project mental model](PROJECT_MENTAL_MODEL.md); lasting decisions: [DECISIONS](DECISIONS.md). Drafted 2026-10-24; frozen 2026-10-25 after the prototype review ([FEEDBACK](FEEDBACK.md)) and the platform spike ([PLATFORM_FEEDBACK](PLATFORM_FEEDBACK.md)); it now changes only through a change request with a superseding ADR. Open questions OQ-1 to OQ-16 are answered in the sections tagged with their IDs (OQ-16: there is no fallback executor, ADR-0032).
 
 ## 1. Overview
 
@@ -15,21 +16,19 @@ ProveItReachable is a single Python service (FastAPI) that takes a public GitHub
 | Language, packaging | Python 3.13 in `.venv`; `pyproject.toml` (PEP 621), `pip install -e ".[dev]"`; exact pins set by the scaffold | ADR-0001 |
 | Web, schemas, HTTP | FastAPI + Uvicorn (one worker), SSE via `StreamingResponse`; Pydantic v2 strict models; pydantic-settings (`SecretStr`); httpx behind an allowlisting factory | ADR-0001, ADR-0005, ADR-0011 |
 | Inference | `openai` SDK at `https://api.tokenfactory.nebius.com/v1/`, `nvidia/nemotron-3-super-120b-a12b`, native tool calling | ADR-0023 |
-| Sandbox | `contree-sdk` 0.3.6 (image import, trusted prepare, untag) + Sandboxes REST via httpx (every agent run) | ADR-0021 |
-| Advisories, research | OSV.dev REST (keyless); Tavily Search REST | ADR-0008, ADR-0009 |
+| Sandbox | `contree-sdk` 0.3.6 (image import, trusted prepare, untag) + Sandboxes REST via httpx (every agent run) | ADR-0032 |
+| Advisories, research | OSV.dev REST (keyless); Tavily Search REST | ADR-0008, ADR-0031 |
 | Tracing, eval, logs | `langsmith` (`@traceable`, `wrap_openai`, datasets, experiments, `client.runs.query()`); stdlib `logging` with a JSON formatter | ADR-0017, ADR-0024 |
-| Spend ledger | `huggingface_hub`, one JSON file in a private dataset (hosted); a local file otherwise | ADR-0015 |
+| Spend ledger | `huggingface_hub`, one JSON file in a private dataset, used by every spender after deploy; a local file before deploy | ADR-0029 |
 | Frontend | Plain HTML + CSS + ES modules, no framework, no build; self-hosted Geist fonts | ADR-0012, ADR-0026 |
 | Tests, lint, CI | pytest, pytest-asyncio (`asyncio_mode = "auto"`), `httpx.MockTransport`, pytest-playwright (slow); ruff check + format (no type checker: strict models at every boundary); GitHub Actions | ADR-0001, ADR-0024 |
-| Hosting | Hugging Face Space, Docker SDK, free CPU Basic | ADR-0013 |
+| Hosting | Hugging Face Space, Docker SDK, free CPU Basic; both images pinned by `@sha256:` digest; hash-checked installs | ADR-0013, ADR-0030 |
 
-Runtime dependencies (minimums): `fastapi>=0.115`, `uvicorn>=0.32`, `pydantic>=2.9`, `pydantic-settings>=2.6`, `httpx>=0.27`, `openai>=1.50`, `contree-sdk==0.3.6`, `langsmith` (the spike-verified version, which has `client.runs.query()`), `huggingface_hub>=0.26`. Dev extra: `pytest>=8.3`, `pytest-asyncio>=0.24`, `pytest-playwright>=0.5`, `ruff>=0.7`, `pyyaml>=6` (workflow test, AC-71). No other dependency without an ADR.
+Runtime dependencies (minimums): `fastapi>=0.115`, `uvicorn>=0.32`, `pydantic>=2.9`, `pydantic-settings>=2.6`, `httpx>=0.27`, `openai>=1.50`, `contree-sdk==0.3.6`, `langsmith` (the spike-verified version, which has `client.runs.query()`), `huggingface_hub>=0.26`. Dev extra: `pytest>=8.3`, `pytest-asyncio>=0.24`, `pytest-playwright>=0.5`, `ruff>=0.7`, `pyyaml>=6` (workflow test, AC-71), `uv>=0.5` (only to generate the hashed `requirements.lock`, ADR-0030). No other dependency without an ADR.
 
 ## 3. Test commands
 
-Run from the project root with `.venv` active (Git Bash: `source .venv/Scripts/activate`).
-
-| Purpose | Command |
+| Purpose (run from the project root with `.venv` active; Git Bash: `source .venv/Scripts/activate`) | Command |
 |---|---|
 | **Full** | `python -m pytest -q` |
 | **Fast** (also run by CI) | `python -m ruff check . && python -m ruff format --check . && python -m pytest -q -m "not slow"` |
@@ -44,8 +43,7 @@ Run from the project root with `.venv` active (Git Bash: `source .venv/Scripts/a
 ```mermaid
 flowchart LR
   UI["Web UI"] --> API["HTTP API + SSE"] --> ADM["Admission: rate limit + spend meter"] --> JOBS["Job manager"]
-  JOBS --> PIPE["Scan pipeline"]
-  JOBS --> REPLAY["Replay store"]
+  JOBS --> PIPE["Scan pipeline"] & REPLAY["Replay store"]
   CLI["CLI"] --> PIPE
   CLI --> EVAL["Eval runner"] --> PIPE
   ADM --> LEDGER["Spend ledger"] --> HFDS[("HF private dataset")]
@@ -55,7 +53,7 @@ flowchart LR
   PIPE --> REASON["Reasoner + ast tool"] --> LLM["LLM client"] --> TF[("Token Factory inference")]
   RES --> LLM
   PIPE --> AGENTC["Agent client"] --> EXEC["ContreeExecutor"] --> AGENT["Sandbox agent, uid 65534 (untrusted zone)"]
-  AGENT --> NET[("codeload.github.com, pypi.org")]
+  AGENT -->|"network ON: fetch, compile, proof-install; no repo code runs, no repo file reaches uv"| NET[("Internet, unrestricted egress (no allowlist)")]
   PIPE -.-> LS[("LangSmith")]
   GHA["GitHub Actions: ci, keepalive"] -.-> API
 ```
@@ -78,7 +76,7 @@ flowchart LR
 ## 5. Scan flow
 
 1. **Admission** (API only, before a job exists): parse URL → rate limit → spend cap → concurrency → GitHub validation (public, size, Python markers, commit SHA). A refusal returns an error and starts nothing (AC-02 to AC-06, AC-50, AC-51).
-2. **`resolve`:** `prepare` the agent image (cached), `fetch` (network ON, saves image A = pristine repo files, no repo code ever run in it), `resolve --lockfile-only` from A (OFF), and if needed `resolve --compile` in a disposable branch of A (ON), so a malicious build backend cannot tamper with what the index reads.
+2. **`resolve`:** `prepare` the agent image (cached), `fetch` (network ON, saves image A = pristine repo files, no repo code ever run in it), `resolve --lockfile-only` from A (OFF), and if needed `resolve --compile` in a disposable branch of A (ON: uv from an empty working directory on agent-sanitized input with `--no-build`, so no repo code runs and no repo file reaches uv, section 7.2).
 3. **`osv`:** one `querybatch` for all resolved dependencies; details per unique advisory ID. **`research`:** per unique advisory, `FINDING_CONCURRENCY` at a time.
 4. **`analysis`:** one `index` run from A (network OFF, disposable) with the top-level import names of every vulnerable package. **`reasoning`:** per finding with an identified symbol, most severe first, up to `MAX_FINDINGS_REASONED`.
 5. **`report`** (UI: "Verdicts"): gate, rank, validate, store, emit `done`; saved images are discarded.
@@ -119,8 +117,8 @@ class Resolution(Strict):
     lockfile: str | None; compiled_from: str | None   # repo-relative path iff lockfile; e.g. "pyproject.toml" iff compiled
     notes: list[str]            # includes "Versions were compiled with uv pip compile, not locked." (AC-08)
 class Dependency(Strict):
-    name: str; source: DependencySource; groups: list[str]   # PEP 503 normalized; groups e.g. ["main"], ["dev"] when recorded
-    version: str | None; resolved: bool; unresolved_reason: str | None   # version None iff not resolved; reason iff not resolved (AC-09)
+    name: str; source: DependencySource; groups: list[str]   # PEP 503 normalized, then ^[a-z0-9]+(?:-[a-z0-9]+)*$ (finding 6); groups e.g. ["main"]
+    version: str | None; resolved: bool; unresolved_reason: str | None   # version: the anchored PEP 440 regex (packaging's VERSION_PATTERN, re.X | re.I), else unresolved "not a PEP 440 version"; None iff not resolved; reason iff not resolved (AC-09)
     direct: bool | None         # declared in a root manifest; None if unknown
     osv_status: Literal["checked", "not_checked", "not_queried"]; osv_error: str | None   # not_queried = unresolved, never guessed; error iff not_checked (AC-26)
 class Advisory(Strict):
@@ -193,7 +191,7 @@ class AnalysisIndex(Strict):  # truncated: the agent's own size limit was hit (a
     target_sites: list[TargetSite]; edges: list[Edge]; truncated: bool; stats: dict[str, int]   # files_total, ...
 ```
 
-Determinism (AC-14): sorted file walk, no wall-clock values, every list sorted by `(file, line, col, ...)`. Aliases (AC-15): `import m as a`, `from m import f as g`, `import a.b.c`, `import a.b as ab`, function-level and relative imports are bound; a call or attribute chain is resolved by substituting its first segment with its binding. A function passed without a call (`map(yaml.load, xs)`) is `kind="reference"`.
+Hostile input: `ast.parse` runs per file; `SyntaxError`, `ValueError` (null bytes), `RecursionError` and `MemoryError` skip that file with a `skip_reason` and the index completes. Determinism (AC-14): sorted file walk, no wall-clock values, every list sorted by `(file, line, col, ...)`. Aliases (AC-15): `import m as a`, `from m import f as g`, `import a.b.c`, `import a.b as ab`, function-level and relative imports are bound; a call or attribute chain is resolved by substituting its first segment with its binding. A function passed without a call (`map(yaml.load, xs)`) is `kind="reference"`.
 
 ### 6.4 Research and reasoning (`pir/models/research.py`, `pir/models/reasoning.py`)
 
@@ -214,13 +212,13 @@ class ReasoningOutcome(Strict):   # tool_calls: AC-17 evidence, also traced
 
 ```python
 class ScanRequest(Strict):
-    repo_url: str; ref: str | None = None   # url <= 300 chars; ref ^[A-Za-z0-9._/-]{1,100}$, no "..", or a 40-hex SHA
+    repo_url: str; ref: str | None = None   # url <= 300 chars; ref ^[A-Za-z0-9._/-]{1,100}$, "/"-separated segments non-empty and not starting with "." (so no ".", "..", "//", trailing "/"); all-hex refs over 40 chars rejected
 class ScanAccepted(Strict): scan_id: str; mode: Mode; status_url: str; events_url: str; report_url: str
 class ScanStatusResponse(Strict):
     scan_id: str; mode: Mode; state: Literal["queued", "running", "completed", "failed"]
     steps: list[StepStatus]; outcome: Outcome | None; created_at: datetime; finished_at: datetime | None
 ErrorCode = Literal["invalid_url", "repo_not_found", "repo_too_large", "not_python_project",
-    "rate_limited", "server_busy", "live_scans_paused", "github_unavailable", "scan_not_found",
+    "rate_limited", "server_busy", "too_many_requests", "live_scans_paused", "github_unavailable", "scan_not_found",
     "report_not_ready", "demo_not_found", "finding_not_found", "request_invalid", "internal_error"]
 class ErrorBody(Strict):         # message: exact text from pir/messages.py, shown verbatim (AC-43)
     code: ErrorCode; message: str; details: dict[str, str | int | float] = {}; retry_after_s: int | None = None
@@ -252,9 +250,15 @@ class RecordedEvent(Strict): offset_ms: int; event: ProgressEvent
 class ScanRecording(Strict):           # demo/replays/<slug>.json
     schema_version: Literal["1.0"]; slug: str; title: str; description: str
     recorded_at: datetime; model: str; events: list[RecordedEvent]; report: ScanReport
+Spender = Literal["hosted", "local"]   # serve = hosted; scan, eval, record = local (section 11.2)
 class PoolState(Strict): spent_usd: float; reserved_usd: float
-class Reservation(Strict): scan_id: str; created_at: datetime; amounts: dict[Pool, float]
-class LedgerState(Strict): schema_version: Literal[1]; pools: dict[Pool, PoolState]; reservations: list[Reservation]; updated_at: datetime
+class DayState(Strict): day: date; start_spent_usd: dict[Pool, float]   # UTC day; hosted spent at its first reserve
+class SpenderState(Strict): allowance_usd: dict[Pool, float]; pools: dict[Pool, PoolState]; day: DayState | None
+class Reservation(Strict): scan_id: str; spender: Spender; created_at: datetime; amounts: dict[Pool, float]
+class CasCheck(Strict): verified_at: datetime; hub_version: str   # HF stale-parent check passed (section 7.8)
+class LedgerState(Strict):   # allowances sum to caps_usd per pool; file ledger: only "local", allowance = build cap, cas_verified None
+    schema_version: Literal[2]; caps_usd: dict[Pool, float]; spenders: dict[Spender, SpenderState]; reservations: list[Reservation]
+    cas_verified: CasCheck | None; updated_at: datetime
 class EvalCase(Strict): id: str; repo: str; package: str; advisory: str; label: Verdict; rationale: str  # a [[case]]; repo = [[repo]] id; advisory = OSV ID
 class EvalRepo(Strict): id: str; source: str   # a [[repo]]: "local:eval/fixtures/<dir>" or "github:<owner>/<repo>@<40-hex sha>"
 class EvalRunSummary(Strict):    # eval/results/latest.json (committed); scored False for --no-langsmith or partial runs
@@ -286,18 +290,18 @@ class Executor(Protocol):
 
 | Method | Platform call | Rules |
 |---|---|---|
-| base image (internal) | SDK `await client.images.oci(SANDBOX_BASE_IMAGE)` | Imports on first use (about 12.5 s), reuses after (about 2 s); cached per process. `images.pull` (deprecated) is not used. |
+| base image (internal) | SDK `await client.images.oci(SANDBOX_BASE_IMAGE)` | `SANDBOX_BASE_IMAGE` must end in `@sha256:<64 hex>` (settings refuse a tag-only ref; ADR-0030; the first executor task verifies `images.oci` accepts a digest ref). Imports on first use (about 12.5 s), reuses after (about 2 s); cached per process. `images.pull` (deprecated) is not used. |
 | `prepare(files)` | SDK `image.run(shell=PREPARE_CMD, files=files, disposable=False)`, then `await op.wait()` (`run()` is lazy); returns the result image | Trusted input only: our agent zip, and for local fixtures a trusted tarball; files land root-owned 0644 under `/opt/pir/`. `PREPARE_CMD` is the constant `mkdir -p /work && chown 65534:65534 /work`. The only SDK `run()` call: the SDK runs as root without network control, so it never touches repo content. Cached per process by the sha256 of `files`. If the SDK cannot save a `files=` run, `prepare` uses the REST equivalent; the interface is unchanged. |
-| `run(...)` | REST `POST /sandboxes/v1/instances`, then poll `GET /sandboxes/v1/operations/{id}` (0.5 s doubling to 2 s) until terminal | Body: source image UUID; command `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/uv` + argv (`shlex.join`); `networking.enabled = network`; `uid = gid = 65534`; `disposable = not save`; platform timeout `ceil(timeout_s)`; `truncate_output_at = SANDBOX_MAX_OUTPUT_BYTES` (constant, 11 MiB). |
+| `run(...)` | REST `POST /sandboxes/v1/instances`, then poll `GET /sandboxes/v1/operations/{id}` (0.5 s doubling to 2 s) until terminal | Body: source image UUID; command `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/uv UV_NO_BUILD=1 UV_NO_CONFIG=1 UV_PYTHON_DOWNLOADS=never` + argv (`shlex.join`); nothing else is set, so `VIRTUAL_ENV`, `CONDA_PREFIX`, other `PYTHON*` and proxy variables stay unset (ADR-0032); `networking.enabled = network`; `uid = gid = 65534`; `disposable = not save`; platform timeout `ceil(timeout_s)`; `truncate_output_at = SANDBOX_MAX_OUTPUT_BYTES` (constant, 11 MiB). |
 | `discard(image)` | untag the saved image | Called for every saved image at scan end; failures are logged, not raised. |
 
-Result mapping, in this order: (1) status `SUCCESS` with `state.timed_out == true` (signal 9, exit code -1) → `timed_out=True`, so a timeout always becomes `sandbox_timeout`, never success or `sandbox_failed`; (2) `SUCCESS` → `exit_code`, `stdout`, `stderr`, `truncated`, and `image` from `result_image_uuid` when `save`; (3) any other terminal status, HTTP error or malformed body → `ExecutorUnavailable`. An operation not terminal at `timeout_s + 30` s is cancelled and returned as `timed_out=True`. REST calls use the SDK's base URL and `NEBIUS_API_KEY` / `NEBIUS_PROJECT_ID` auth through the allowlisting factory (section 12); exact JSON field names are pinned by recorded responses in `tests/fixtures/http/contree/` and the live test. A semaphore of `SANDBOX_MAX_CONCURRENT_OPS` bounds concurrency (platform: 50 concurrent, 3,600 s maximum timeout). **Metering:** before each `run`, `budget.try_spend("nebius", ceil(timeout_s) × SANDBOX_USD_PER_SECOND)`; afterwards the hold becomes the operation's reported `cost`, else `duration × SANDBOX_USD_PER_SECOND`; `consumed_cpu` and `consumed_memory` are logged.
+Result mapping, in this order: (1) status `SUCCESS` with `state.timed_out == true` (signal 9, exit code -1) → `timed_out=True`, so a timeout always becomes `sandbox_timeout`, never success or `sandbox_failed`; (2) `SUCCESS` → `exit_code`, `stdout`, `stderr`, `truncated`, and `image` from `result_image_uuid` when `save`; (3) any other terminal status, HTTP error or malformed body → `ExecutorUnavailable`. An operation not terminal at `timeout_s + 30` s is cancelled and returned as `timed_out=True`. REST calls use the SDK's base URL and `NEBIUS_API_KEY` / `NEBIUS_PROJECT_ID` auth through the allowlisting factory (section 12); exact JSON field names are pinned by recorded responses in `tests/fixtures/http/contree/` and the live test. A semaphore of `SANDBOX_MAX_CONCURRENT_OPS` bounds concurrency (platform: 50 concurrent, 3,600 s maximum timeout). **Metering:** before each `run`, `budget.try_spend("nebius", ceil(timeout_s) × SANDBOX_USD_PER_SECOND)`; afterwards the hold becomes the operation's reported cost (`metadata.result.resources.cost`), else `duration × SANDBOX_USD_PER_SECOND`; `consumed_cpu` and `consumed_memory` are logged.
 
 **`FakeExecutor`** (tests; `--executor fake` with a trusted local fixture only): images are temp-directory copies; `run` handles only `unpack`, `resolve --lockfile-only` and `index`, **in-process** through the agent's pure functions; other commands return a recorded `ExecResult` or `exit_code=99`; never a subprocess; `cost_usd=0`. There is no other executor: `EXECUTOR=sandbox|fake`, and `fake` refuses GitHub targets.
 
 ### 7.2 Sandbox agent protocol (`pir/sandbox_agent/`, `pir/agent_client.py`)
 
-Our stdlib-only agent is zipped at runtime into `agent.pyz`, placed at `/opt/pir/agent.pyz` by `prepare`, and run as uid 65534 in `/work/repo`: `python -I -S /opt/pir/agent.pyz <command> --args-b64 <base64 JSON>`. It prints exactly one stdout line `PIR-RESULT:<base64(gzip(JSON))>`; logs go to stderr. Exit codes: 0 ok, 2 bad input, 3 limit exceeded, other = failure.
+Our stdlib-only agent is zipped at runtime into `agent.pyz`, placed at `/opt/pir/agent.pyz` by `prepare`, and run as uid 65534: `/usr/local/bin/python3.13 -I -S /opt/pir/agent.pyz <command> --args-b64 <base64 JSON>` (absolute interpreter; the agent's first action is `os.chdir("/")` and it uses only absolute paths: the repo is at `/work/repo`). It prints exactly one stdout line `PIR-RESULT:<base64(gzip(JSON))>`; logs go to stderr. Exit codes: 0 ok, 2 bad input, 3 limit exceeded, other = failure.
 
 | Command | Network | From | Saves | Output |
 |---|---|---|---|---|
@@ -306,10 +310,17 @@ Our stdlib-only agent is zipped at runtime into `agent.pyz`, placed at `/opt/pir
 | `resolve --lockfile-only` | OFF | A | no | `ResolveResult{method, lockfile, dependencies, notes, needs_compile}` |
 | `resolve --compile --python-version` | ON | A | no | `ResolveResult` |
 | `index --targets yaml,jinja2` | OFF | A | no | `AnalysisIndex` |
-| `proof-install` (M2) | ON | A | P | `{installed: [...]}` |
+| `proof-install --pins-b64` (M2) | ON | A | P | `{installed: [...], no_wheel: [...]}` |
 | `proof-run --entry --target` (M2) | OFF | P | no | `Proof` fields |
 
-`fetch` downloads only `https://codeload.github.com/{owner}/{repo}/tar.gz/{sha}` built from validated parts, streams with a byte cap, and extracts with `tarfile` `filter="data"` plus member-count and size caps. The client maps `timed_out` to `SandboxTimeout(step)`, and `truncated`, a missing or invalid result line, or a non-zero exit to `SandboxFailed(step, detail)`; it parses with caps (10 MiB base64, 50 MiB decompressed via `zlib.decompressobj(max_length=...)`) and validates strictly.
+**Network ON is unrestricted egress (ADR-0032, superseding ADR-0027).** `networking.enabled` is a plain on/off switch with no allowlist (spike check c): an ON run can reach any internet host. ON is therefore allowed only for the three commands above, each under its timeout cap (section 10: 120 s, 180 s, 300 s), and only under this **invariant: while networking is on, nothing from the repo executes and no repo-controlled file influences any tool run.** No path under `/work/repo` is ever a working directory, configuration, interpreter, environment source or tool input; the agent reads repo files only as data, in its own Python code. How each ON step meets it (audit in ADR-0032):
+
+- `fetch` runs only our agent (stdlib HTTP download and `tarfile` extraction). Python started by absolute path with `-I -S` reads no environment variable, `site` or `.pth` file, or working-directory file, and the repo does not exist until fetch writes it.
+- **Every `uv` call** (compile and proof-install) is spawned by the agent with `cwd=/tmp/uvwd`, created fresh by `os.mkdir` (which fails if it exists, so it is always empty and outside the repo); `env=` the fixed environment of section 7.1, never `os.environ`; and the common flags `--python /usr/local/bin/python3.13` (no discovery of `VIRTUAL_ENV`, `CONDA_PREFIX`, `.venv`, `.python-version` or `PATH`; no download), `--no-config` (no `uv.toml`, `[tool.uv]`, user or system config), `--no-build` (no PEP 517 backend, `setup.py` or sdist build), `--no-sources` (no `[tool.uv.sources]`) and `--index-url https://pypi.org/simple`. `HOME` (so `~/.netrc`) and `UV_CACHE_DIR` are under `/tmp`, which the repo cannot reach: extraction is confined to `/work/repo`.
+- `resolve --compile`: the agent writes a sanitized requirements file to `/tmp/pirin/requirements.in` (directory also created fresh by `os.mkdir`; section 13, rule 5) and passes that absolute path; uv never opens a repo file.
+- `proof-install`: `uv pip install --no-deps --only-binary :all: --target /work/deps` + common flags + `-- <name==version>`, one pin per call; wheels are unpacked, never executed.
+
+The only command that runs repo code, `proof-run`, is OFF. `fetch` downloads only `https://codeload.github.com/{owner}/{repo}/tar.gz/{sha}` built from validated parts, streams with a byte cap, and extracts with `tarfile` `filter="data"` (no links leaving the destination, absolute paths or devices) plus member-count and uncompressed-size caps (`MAX_REPO_FILES`, `MAX_REPO_MB`). `proof-install` pins come from validated `Dependency` models (section 6.2 regexes, re-checked by the agent) and the agent builds each `name==version` itself after `--` (live check, section 22.1). The client maps `timed_out` to `SandboxTimeout(step)`, and `truncated`, a missing or invalid result line, or a non-zero exit to `SandboxFailed(step, detail)`; it parses with caps (10 MiB base64, 50 MiB decompressed via `zlib.decompressobj(max_length=...)`) and validates strictly.
 
 ```python
 class SandboxAgentClient:   # __init__(executor, settings); raises SandboxTimeout, SandboxFailed or SpendDenied
@@ -332,7 +343,7 @@ class OsvClient(Protocol):
     def links(self, osv_id: str) -> list[AdvisoryLink]   # osv.dev page + references, exact strings
 ```
 
-GitHub (only `api.github.com`; a 301 is followed manually only if `Location` stays on that host): `GET /repos/{o}/{r}` → `GET /repos/{o}/{r}/commits/{ref or default_branch}` → `GET /repos/{o}/{r}/git/trees/{sha}?recursive=1`. Sizes come from blob sizes; `truncated: true` counts as too large; timeouts, 5xx and 403/429 rate limits raise `GitHubUnavailable`. OSV: `POST https://api.osv.dev/v1/querybatch` with `{"queries": [{"package": {"name": n, "ecosystem": "PyPI"}, "version": v}]}` (chunks of 500, `next_page_token` followed; results carry IDs only), then `GET /v1/vulns/{id}` (cached 24 h in `DATA_DIR/cache/osv/`). Severity comes from `database_specific.severity`; the CVSS vectors in `severity` are not parsed. Aliases are deduped: one candidate per advisory per dependency (AC-10).
+GitHub (only `api.github.com`; a 301 is followed manually only if `Location` stays on that host): `GET /repos/{o}/{r}` → `GET /repos/{o}/{r}/commits/{ref or default_branch}` → `GET /repos/{o}/{r}/git/trees/{sha}?recursive=1`. Sizes come from blob sizes; `truncated: true` counts as too large; timeouts, 5xx and 403/429 rate limits raise `GitHubUnavailable`. OSV: `POST https://api.osv.dev/v1/querybatch` with `{"queries": [{"package": {"name": n, "ecosystem": "PyPI"}, "version": v}]}` (chunks of 500, `next_page_token` followed; results carry IDs only), then `GET /v1/vulns/{id}` (cached 24 h in `DATA_DIR/cache/osv/<id>.json`). OSV and research cache filenames, and the `{id}` path segment, use only IDs matching `^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`; any other ID is neither fetched nor cached, and its dependency gets a `not_checked` finding (`osv_failed`). Severity comes from `database_specific.severity`; the CVSS vectors in `severity` are not parsed. Aliases are deduped: one candidate per advisory per dependency (AC-10).
 
 ### 7.4 Search client and researcher (`pir/research.py`)
 
@@ -345,7 +356,7 @@ class AdvisoryResearcher:
                        budget: ScanBudget) -> AdvisoryResearch      # never raises; failures in .failure
 ```
 
-Tavily: `POST https://api.tavily.com/search` with `Authorization: Bearer <key>`, `query="{package} {advisory_id} {first alias} vulnerable function"`, `search_depth`, `max_results`; only `results[].url`, `title`, `content` are read. Then one Nemotron JSON-mode extraction over the OSV summary and details plus the snippets, returning `{identified, symbols, evidence_urls, reason}`. Host grounding: each symbol matches `^[A-Za-z_]\w*(\.[A-Za-z_]\w*)+$` and its last segment appears verbatim in the supplied text, and `evidence_urls` must be a subset of the returned URLs; otherwise the symbol is dropped. No grounded symbol → `identified=False`, "vulnerable function not identified" (AC-13). Results are cached per advisory ID in `DATA_DIR/cache/research/` for 30 days.
+Tavily: `POST https://api.tavily.com/search` with `Authorization: Bearer <key>`, `query="{package} {advisory_id} {first alias} vulnerable function"`, `search_depth`, `max_results`; only `results[].url`, `title`, `content` are read. Then one Nemotron JSON-mode extraction over the OSV summary and details plus the snippets, returning `{identified, symbols, evidence_urls, reason}`. Host grounding: each symbol matches `^[A-Za-z_]\w*(\.[A-Za-z_]\w*)+$` and its last segment appears verbatim in the supplied text, and `evidence_urls` must be a subset of the returned URLs; otherwise the symbol is dropped. No grounded symbol → `identified=False`, "vulnerable function not identified" (AC-13). Results are cached per advisory ID in `DATA_DIR/cache/research/` for 7 days (ADR-0031: bounds how long a poisoned search result is served to every visitor; the source links stay visible on each finding).
 
 ### 7.5 LLM client (`pir/llm.py`)
 
@@ -361,7 +372,7 @@ class LLMClient(Protocol):              # raises LLMError(kind: "timeout" | "htt
                    max_tokens: int, temperature: float = 0.0, timeout_s: float, budget: ScanBudget) -> ChatResult
 ```
 
-`NebiusLLMClient` wraps `openai.AsyncOpenAI(base_url=TOKEN_FACTORY_BASE_URL, http_client=<allowlisted httpx>)`, wrapped by `wrap_openai` when tracing is on. Settings refuse to start unless `NEBIUS_MODEL` contains `nemotron` (case-insensitive). Nemotron replies start with blank lines, so `content` is stripped before it is returned or parsed (`json_mode` sends `response_format={"type": "json_object"}`). Before a call it holds `ceil(chars/2.5) × in_price + max_tokens × out_price`; afterwards it records `prompt_tokens × in_price + completion_tokens × out_price` (reasoning tokens count as completion tokens, added if reported separately), or the estimate if `usage` is missing. One retry on timeout or 5xx.
+`NebiusLLMClient` wraps `openai.AsyncOpenAI(base_url=TOKEN_FACTORY_BASE_URL, http_client=<allowlisted httpx>)`, wrapped by `wrap_openai` when tracing is on. Settings refuse to start unless `NEBIUS_MODEL` contains `nemotron` (case-insensitive). Nemotron replies start with blank lines, so `content` is stripped before it is returned or parsed (`json_mode` sends `response_format={"type": "json_object"}`). **Output bound and hold (ADR-0029):** the client sends `max_completion_tokens=max_tokens`, which in the OpenAI API bounds visible plus reasoning tokens, and holds `ceil(chars/2.5) × in_price + max_tokens × out_price`. If Token Factory rejects or ignores `max_completion_tokens` (to verify in the first LLM-client task: a call with a small limit must report `completion_tokens` plus any separate reasoning tokens within it), the client sends `max_tokens` and holds the worst case, `LLM_HOLD_COMPLETION_TOKENS` instead of `max_tokens`. Afterwards it records `prompt_tokens × in_price + completion_tokens × out_price` (reasoning tokens added if reported separately), or the hold if `usage` is missing. **Overrun:** if the actual cost exceeds the hold, `ScanBudget.record` stores the actual and marks the scan overrun; every later `try_spend` of that scan is denied (`scan_budget_reached`). One retry on timeout or 5xx.
 
 ### 7.6 Reasoning (`pir/reasoning/`)
 
@@ -374,7 +385,7 @@ class AstTool:                                   # __init__(index: AnalysisIndex
     seen_locations: set[tuple[str, int]]         # every file:line returned so far (for the gate)
 ```
 
-`FindingContext` = package, version, advisory (summary truncated to 1,500 chars inside `<untrusted>` delimiters), grounded symbols, target modules, whether the dependency is direct.
+`FindingContext` = package, version, advisory (summary truncated to 1,500 chars inside `<untrusted>` delimiters), grounded symbols, target modules, whether the dependency is direct. `wrap_untrusted(text)` (`reasoning/prompts.py`, also used by the researcher) first replaces every match of `(?i)<\s*/?\s*untrusted` with `[tag removed]`, so untrusted text cannot close or open a delimiter.
 
 ### 7.7 Report builder, replay store, jobs
 
@@ -394,16 +405,16 @@ class JobManager:       # get raises ScanNotFound
     def get(self, scan_id: str) -> Job;  def events(self, scan_id: str, after_seq: int) -> AsyncIterator[ProgressEvent]
 ```
 
-The replay path imports nothing from the pipeline or any client module (a fast test inspects `pir.replay`'s imports). Jobs run as `asyncio` tasks in the single worker; each task first binds the scan log context (section 19). Finished jobs are kept for `JOB_TTL_S`, at most `MAX_JOBS`, oldest evicted first.
+The replay path imports nothing from the pipeline or any client module (a fast test inspects `pir.replay`'s imports). `ReplayStore.get` accepts only slugs matching `^[a-z0-9-]{1,40}$` that are keys of the loaded set (a dict lookup, never a path join); anything else, such as `../x`, raises `DemoNotFound` without touching the filesystem. Jobs run as `asyncio` tasks in the single worker; each task first binds the scan log context (section 19). **Eviction:** queued and running jobs are never evicted; finished jobs are kept for `JOB_TTL_S`, at most `MAX_JOBS` finished, oldest finished evicted first. Running jobs are bounded by the concurrency caps of section 8.
 
 ### 7.8 Admission (`pir/ratelimit.py`, `pir/spend.py`)
 
 ```python
 class RateLimiter: def check_and_consume(self, client_key: str, now: datetime) -> Allowed | Limited  # Limited.retry_after_s
-class SpendLedger(Protocol):   # load raises LedgerUnavailable
-    async def load(self) -> LedgerState;  async def save(self, state: LedgerState) -> None
-class SpendMeter:                                  # __init__(ledger, caps: SpendCaps, per_scan: ScanBudgetLimits)
-    async def reserve(self, scan_id: str) -> ScanBudget | Refused   # Refused.reason: "paused" | "ledger_unavailable"
+class SpendLedger(Protocol):   # load raises LedgerUnavailable; save raises LedgerConflict (stale parent) or LedgerUnavailable
+    async def load(self) -> tuple[LedgerState, str];  async def save(self, state: LedgerState, parent: str) -> str  # str = revision
+class SpendMeter:              # __init__(ledger, spender: Spender, per_scan: ScanBudgetLimits, clock); one asyncio.Lock
+    async def reserve(self, scan_id: str) -> ScanBudget | Refused   # Refused.reason: "paused" | "daily_limit" | "ledger_unavailable"
     async def settle(self, budget: ScanBudget) -> None;  def status(self) -> Literal["enabled", "paused"]
     def remaining_fractions(self) -> dict[Pool, float] | None       # in-memory state, no I/O
 class ScanBudget:
@@ -411,21 +422,21 @@ class ScanBudget:
     def record(self, hold: SpendHold, actual_usd: float) -> None   # replaces the hold with the actual
 ```
 
-A hold counts against the reservation until `record`, so concurrent calls cannot overshoot it.
+A hold counts against the reservation until `record`, so concurrent calls cannot overshoot it. `reserve()` and `settle()` run under the meter's `asyncio.Lock` (ledger I/O via `asyncio.to_thread`); each is a pure mutation of `LedgerState` applied as load → mutate → `save(parent=revision)`, and on `LedgerConflict` reloaded and re-applied, at most 3 attempts with jitter, then fail closed. `HfDatasetSpendLedger`: revision = the dataset head commit (`repo_info().sha`, file read at that revision); `save` = `create_commit(..., parent_commit=revision)`, a stale parent is a conflict. **Stale-parent gate (not fail-safe, so enforced):** the whole cap depends on the Hub rejecting a commit on a stale parent. `ledger set-caps` therefore first proves it on the ledger dataset: read head H, commit `cas_probe.json` on parent H, commit it again on parent H; the second commit must raise. Only then does it write caps and `cas_verified` (time, installed `huggingface_hub` version); if the stale commit succeeds it exits 1 and writes nothing. The HF ledger refuses every spend (live scans `paused`, CLI spending stopped) while `cas_verified` is missing or its `hub_version` differs from the installed one, so the hosted ledger stays off until the check passes. `FileSpendLedger`: revision = a counter in the file, write to a temp file then `os.replace`. `MemorySpendLedger` (tests) can inject conflicts and failures.
 
 ## 8. HTTP API
 
-Base path `/api`. JSON bodies; every error is an `ErrorResponse`; request bodies capped at 4 KB; no cookies, no auth, no CORS (same origin).
+Base path `/api`. JSON bodies; every error is an `ErrorResponse`; request bodies capped at 4 KB, counted on the bytes received (chunked bodies without `Content-Length` included) by ASGI middleware; no cookies, no auth, no CORS (same origin). A middleware sets the section "Security and data" headers on every response, including errors, 404s, SSE and exports. **Replay and stream caps (finding 5):** at most `MAX_CONCURRENT_REPLAYS` (10) replays running and `MAX_SSE_STREAMS` (40) open SSE streams in total, and per client (key as in section 11) 2 running replays, 4 open streams and `RATE_LIMIT_REPLAYS_PER_CLIENT_HOUR` (30) replay starts per hour; over any of these → `429 too_many_requests` with `Retry-After`. These counters are separate from the live-scan limits, so a client limited for live scans can still replay (AC-50, AC-52). The UI's `http` adapter falls back to `getStatus` polling when the stream is refused.
 
 | Method and path | Request | Success | Errors |
 |---|---|---|---|
 | `POST /api/scans` | `ScanRequest` | `202 ScanAccepted` (`live`) | `invalid_url`, `request_invalid`, `rate_limited` (+ `Retry-After`), `live_scans_paused`, `server_busy`, `repo_not_found`, `repo_too_large`, `not_python_project`, `github_unavailable` |
 | `GET /api/scans/{scan_id}` | none | `200 ScanStatusResponse` | `scan_not_found` |
-| `GET /api/scans/{scan_id}/events` | `Last-Event-ID` header (optional) | `200 text/event-stream` of `ProgressEvent` | `scan_not_found` |
+| `GET /api/scans/{scan_id}/events` | `Last-Event-ID` header (optional) | `200 text/event-stream` of `ProgressEvent` | `scan_not_found`, `too_many_requests` |
 | `GET /api/scans/{scan_id}/report` | `?download=1` adds `Content-Disposition: attachment; filename="proveitreachable-<repo>-<sha7>.json"` | `200 ScanReport` (same bytes either way, AC-61) | `scan_not_found`, `report_not_ready` |
 | `GET /api/scans/{scan_id}/report.md` | `?download=1` | `200 text/markdown` | as above; route absent when `FEATURE_MARKDOWN_EXPORT=false` (AC-64) |
 | `GET /api/demos` | none | `200 list[DemoSummary]` | none |
-| `POST /api/demos/{slug}/replay` | none | `202 ScanAccepted` (`replay`) | `demo_not_found`; never rate limited or spend checked (AC-47, AC-52) |
+| `POST /api/demos/{slug}/replay` | none | `202 ScanAccepted` (`replay`) | `demo_not_found`, `too_many_requests` (replay caps above only); never live-scan rate limited or spend checked (AC-47, AC-52) |
 | `POST /api/scans/{scan_id}/findings/{finding_id}/proof` (M2, cuttable) | `ProofRequest` | `202 ScanAccepted` (`proof`) | `scan_not_found`, `finding_not_found`, `request_invalid` (not `likely reachable`, or bad `entry`), plus the limits of `POST /api/scans`; registered only if `FEATURE_PROOF=true` and `EXECUTOR=sandbox` (AC-65) |
 | `GET /api/config`, `GET /api/health`, `GET /api/schema/report` | none | `200 AppConfigResponse`, `200 HealthResponse`, `200` report JSON Schema | none |
 | `GET /` and static | none | `web/` files | none |
@@ -442,6 +453,7 @@ Error codes, statuses and exact messages (`pir/messages.py`; the UI shows them v
 | `not_python_project` | 422 | "Not a Python project: {detail}." (detail: "no .py files" or "no dependency manifest at the repository root") |
 | `rate_limited` | 429 | "Rate limited: you can start another live scan in {minutes} min. Demo replays still work." |
 | `server_busy` | 429 | "The scanner is busy; try again in a minute. Demo replays still work." |
+| `too_many_requests` | 429 | "Too many requests right now; try again in {minutes} min." |
 | `live_scans_paused` | 503 | "Live scans are paused because the spend limit was reached. Demo replays still work." |
 | `github_unavailable` | 502 | "GitHub did not respond; try again later." |
 | `scan_not_found` | 404 | "That scan does not exist or has expired." |
@@ -485,14 +497,13 @@ No external failure crashes a scan (NFR-06, ADR-0019); each becomes a visible re
 | Tavily error or timeout (after 1 retry) | researcher | That finding `uncertain`, `tavily_failed`; others unaffected | AC-24 |
 | Nebius error or timeout (after 1 retry) | LLM client | That finding `uncertain`, `nebius_failed` | AC-25 |
 | OSV error or timeout (after 2 retries) | OSV client | Deps `not_checked` with `osv_error`; one `kind="not_checked"` `uncertain` finding each (`osv_failed`); never `clean` | AC-26 |
-| Sandbox timeout in `index` (`timed_out=True`) | agent client | `analysis` failed; reasoning skipped; every advisory finding without an earlier reason → `uncertain`, `sandbox_timeout`, "sandbox timeout" (confirmed: without an index no verdict can be grounded) | AC-27 |
-| Other Sandbox failure in `index` (bad exit, truncated or invalid output, `ExecutorUnavailable`) | agent client | As above with `sandbox_failed` | NFR-06 |
+| Sandbox timeout in `index` (`timed_out=True`); other `index` failure (bad exit, truncated or invalid output, `ExecutorUnavailable`) | agent client | `analysis` failed; reasoning skipped; every advisory finding without an earlier reason → `uncertain`, `sandbox_timeout`, "sandbox timeout" (without an index no verdict can be grounded); other failures the same with `sandbox_failed` | AC-27, NFR-06 |
 | Sandbox timeout or failure in `fetch` / `resolve` | agent client | `resolve` failed; declared deps (when known) unresolved with the reason; no OSV queries; outcome `incomplete` | AC-09 |
-| `uv pip compile` fails | agent | Declared deps unresolved with "compile failed: <last 500 chars of stderr>" | AC-09 |
+| Compile input needs a build (section 13, rule 5), or `uv pip compile` fails | agent | Declared deps unresolved with "dynamic metadata needs a build; not run", else "compile failed: <last 500 chars of stderr>" | AC-09 |
 | Model output invalid / reachable claim without a valid path | strategy / gate | Retry up to 2 times, then `model_output_invalid` / `unsupported_reachability_claim`, both `uncertain` | AC-28, AC-22 |
 | Vulnerable symbol not identified | researcher | `uncertain`, `vulnerable_function_not_identified`; no reasoning call | AC-13 |
 | Global cap reached mid-scan (any paid call, incl. Sandbox runs) | `try_spend` | Remaining findings `uncertain`, `spend_cap_reached`, "spend cap reached" | AC-53 |
-| Per-scan budget exhausted / over `MAX_FINDINGS_REASONED` | `try_spend` / pipeline | Remaining or least severe findings `uncertain`, `scan_budget_reached` / `finding_limit_reached` | none |
+| Per-scan budget exhausted (incl. a hold overrun, section 7.5) / over `MAX_FINDINGS_REASONED` | `try_spend` / pipeline | Remaining or least severe findings `uncertain`, `scan_budget_reached` / `finding_limit_reached` | none |
 | Deadline `SCAN_TIMEOUT_S` | pipeline | In-flight work cancelled; unfinished findings `uncertain`, `scan_timeout` | none |
 | GitHub unavailable at admission | `validate_repo` | `502 github_unavailable`; no job | none |
 | Unexpected exception in the pipeline | pipeline | Logged with an error ID; current step failed; report built from what exists | NFR-06 |
@@ -500,7 +511,7 @@ No external failure crashes a scan (NFR-06, ADR-0019); each becomes a visible re
 
 Timeouts (OQ-5; configurable): GitHub 10 s; OSV 15 s, 2 retries; Tavily 20 s, 1 retry; Nebius 60 s per call, 1 retry, 8 tool rounds, 1,500 completion tokens; Sandbox `fetch` 120 s, `resolve --lockfile-only` 60 s, `resolve --compile` 180 s, `index` 120 s, `proof-install` 300 s, `proof-run` 60 s; scan 900 s.
 
-## 11. Spend metering, cap and rate limits (ADR-0022, ADR-0015)
+## 11. Spend metering, cap and rate limits (ADR-0029)
 
 ### 11.1 What is metered (OQ-4)
 
@@ -509,27 +520,27 @@ Timeouts (OQ-5; configurable): GitHub 10 s; OSV 15 s, 2 retries; Tavily 20 s, 1 
 | `nebius` (inference and Sandboxes) | `usage` tokens per call; each Sandbox operation's reported `cost` (else `duration`) | `NEBIUS_PRICE_INPUT_PER_MTOK`, `NEBIUS_PRICE_OUTPUT_PER_MTOK`; `cost` as reported; `SANDBOX_USD_PER_SECOND` only for the pre-call estimate and the no-cost fallback | `SPEND_CAP_NEBIUS_USD=10` |
 | `tavily` | credits per call (basic 1, advanced 2) | `TAVILY_PRICE_PER_CREDIT_USD` | `SPEND_CAP_TAVILY_USD=5` |
 
-OSV and GitHub are free and only counted. `SANDBOX_USD_PER_SECOND=0.001` is twice the highest cost per second the spike saw (about $0.00025 for a 0.5 s operation); Sandboxes are free in the beta but metered anyway, so the cap holds if billing starts. Token prices stay pessimistic defaults until set from the Token Factory pricing page at deploy. **Caps:** the defaults are the build-time caps of the local ledger (credit budget: Token Factory $10, Tavily $5 for development, eval runs and recordings). At deploy the Space sets both caps to the balance remaining then minus headroom ($5 and $3), expected about $25 and $12.
+OSV and GitHub are free and only counted. `SANDBOX_USD_PER_SECOND=0.001` is twice the highest cost per second the spike saw (about $0.00025 for a 0.5 s operation); Sandboxes are free in the beta but metered anyway, so the cap holds if billing starts. Token prices stay pessimistic defaults until set from the Token Factory pricing page at deploy. **Caps (finding 2):** caps and allowances live in the ledger state, not in each process. **Before deploy** every spender is `local` on `FileSpendLedger`, created from the build caps `SPEND_CAP_*_USD` (Token Factory $10, Tavily $5 for development, eval runs and recordings). **At deploy** `python -m pir ledger set-caps --nebius-balance B --tavily-balance T` runs the stale-parent gate (section 7.8), then writes the HF ledger's caps and the `local` allowance (defaults $5 and $2, for later eval runs and recordings); `hosted` gets the rest. **Headroom (round 2, finding 3):** a cap may be at most recorded spend + real balance − headroom, with headroom at least **$5 Token Factory and $3 Tavily** (code constants; a larger headroom may be passed, a smaller one is refused), and that maximum is the default (expected about $25 and $12). One call that overruns its hold (section 7.5) can push `spent` past an allowance by that call's overrun; the headroom keeps such an overrun below the real balance. From then on **every spender, local CLI, eval and record included, uses that one HF ledger**: settings refuse `SPEND_LEDGER_BACKEND=file` while `SPEND_LEDGER_HF_REPO` is set, and the HF ledger refuses spending until `set-caps` has run and recorded `cas_verified`.
 
 ### 11.2 Enforcement
 
-1. `reserve(scan_id)` before any paid call: refuses with "paused" if either pool's `spent + reserved + SCAN_MIN_START_USD > cap`; otherwise reserves `min(per-scan budget, remaining)` per pool and **persists it before returning** (AC-51, AC-53).
-2. Every paid call (LLM, Tavily, Sandbox run) first calls `try_spend(pool, upper-bound estimate)`; on denial that work stops and affected findings become `uncertain` with `spend_cap_reached` when the global cap cut the reservation short, else `scan_budget_reached`. `record` swaps the hold for the actual amount.
-3. `settle()` moves actual spend to `spent`, releases the rest, and persists (two ledger writes per scan).
-4. **Fail closed:** if the ledger cannot be loaded or saved, live scans pause (`live_scans_paused`). At startup a reservation older than `2 × SCAN_TIMEOUT_S` counts as fully spent.
-5. Replays never touch the meter or ledger (AC-47, AC-52). Kill switch: `LIVE_SCANS_ENABLED=false`. CLI and eval use the same meter with `FileSpendLedger` and print spend used and remaining cap per pool to stderr at the end.
-6. `remaining_fractions()` feeds `HealthResponse.budget_remaining`: per pool `clamp((cap - spent_usd) / cap, 0, 1)` over settled spend (open reservations excluded so the alert does not flap mid-scan; a cap of 0 gives 0.0).
+1. `reserve(scan_id)` before any paid call, for the process's spender (`serve` = `hosted`; `scan`, `eval`, `record` = `local`): refuses with "paused" if, in either pool, the spender's `spent + reserved + SCAN_MIN_START_USD > allowance`; otherwise reserves `min(per-scan budget, allowance remaining, daily remaining)` per pool and **persists it (compare-and-swap, section 7.8) before returning** (AC-51, AC-53). Allowances sum to the caps, so no spender can push total spend past them.
+2. **Daily ceiling (`hosted` only, finding 3):** at the first reserve of each UTC day the meter stores `DayState` (the hosted spent per pool). Per pool, `ceiling = (allowance − start_spent) / days_left` with `days_left = max(1, (SPEND_END_DATE − today).days + 1)` (2026-12-15 inclusive), so unspent budget rolls forward. If today's `spent + reserved − start_spent + SCAN_MIN_START_USD > ceiling` in either pool, `reserve` refuses with "daily_limit" → `429 rate_limited`, `Retry-After` = seconds to the next UTC midnight. A reservation cut short by the ceiling gives `scan_budget_reached`, not `spend_cap_reached`.
+3. Every paid call (LLM, Tavily, Sandbox run) first calls `try_spend(pool, upper-bound estimate)`; on denial that work stops and affected findings become `uncertain` with `spend_cap_reached` when the spender's allowance cut the reservation short, else `scan_budget_reached`. `record` swaps the hold for the actual amount. `settle()` moves actual spend to `spent`, releases the rest, and persists (two ledger writes per scan).
+4. **Fail closed:** if the ledger cannot be loaded or saved (including 3 lost compare-and-swap attempts), or the HF ledger lacks a current `cas_verified` (section 7.8), live scans pause (`live_scans_paused`) and CLI spending stops. At every load, a reservation of any spender older than `2 × SCAN_TIMEOUT_S` counts as fully spent.
+5. Replays never touch the meter or ledger (AC-47, AC-52). Kill switch: `LIVE_SCANS_ENABLED=false`. CLI, eval and record print spend used and remaining allowance per pool to stderr at the end.
+6. `remaining_fractions()` feeds `HealthResponse.budget_remaining`: per pool `clamp((cap - total spent_usd) / cap, 0, 1)` over settled spend of all spenders as of the last load or save (open reservations excluded so the alert does not flap mid-scan; a cap of 0 gives 0.0).
 
-**Rate limits (OQ-3):** live-scan and proof requests only. Client key: `request.client.host`, or with `TRUSTED_PROXY_HOPS=n > 0` the n-th address from the right of `X-Forwarded-For`. Limits: 3 per client per hour, 10 per client per day, 30 globally per UTC day, 2 concurrent (then `server_busy`). Every request that passes URL parsing counts (protecting the GitHub quota too). Counters are in memory; the durable cap is the backstop. Logs hold only a salted hash of the key. The per-client values are published in `AppConfigResponse.limits`.
+**Rate limits (OQ-3):** live-scan and proof requests (replay and stream caps: section 8). Client key: `request.client.host`; with `TRUSTED_PROXY_HOPS=n > 0`, the n-th address from the right of `X-Forwarded-For` only if the header has at least n entries, otherwise (fewer entries, missing or malformed) the connection address, never the leftmost entry (finding 8; the hop count is verified at deploy, section 18). Limits: 3 per client per hour, 10 per client per day, 10 globally per UTC day (lowered from 30; the daily spend ceiling is the binding control), 2 concurrent (then `server_busy`). Every request that passes URL parsing counts (protecting the GitHub quota too). Counters are in memory; the durable cap is the backstop. Logs hold only a salted hash of the key. The per-client values are published in `AppConfigResponse.limits`.
 
 ## 12. Repo intake and URL boundary (ADR-0005, OQ-1, OQ-7)
 
 - **Accepted URLs (AC-02, AC-06):** `parse_repo_url` accepts only `https://github.com/{owner}/{repo}` (also `www.github.com`), with optional `.git`, trailing slash and `/tree/{ref}` (sets `ref`). It rejects other schemes, userinfo, ports, other hosts (including `api.github.com` and raw IPs), query strings, fragments, percent-encoded or non-ASCII characters, extra path segments, names outside the `RepoRef` regexes, and inputs over 300 characters. A rejected URL causes no network call.
 - **Outbound allowlist:** all host-side HTTP goes through `pir/http.py` `make_client(allowed_hosts=...)`: a request hook refuses hosts outside the client's set; `follow_redirects=False`; HTTPS only; bodies streamed with a byte cap. User input only fills `{owner}/{repo}` path segments on `api.github.com`. Hosts and caps: `api.github.com` 5 MiB; `api.osv.dev` 5 MiB; `api.tavily.com` 2 MiB; `api.tokenfactory.nebius.com` 5 MiB; Sandboxes REST: the `contree-sdk` client's API host (read at startup, must be HTTPS) 12 MiB. `contree-sdk`, `langsmith` and `huggingface_hub` use fixed endpoints that user input cannot influence. The host never downloads a repo tarball.
 - **Caps:** `MAX_REPO_MB=50` (sum of blob sizes at the commit) and `MAX_REPO_FILES=5000`; a truncated tree counts as over. The agent re-enforces both while downloading and extracting, and skips any `.py` file over `MAX_PY_FILE_BYTES` (a limitation). **Python project (AC-05):** at least one `.py` file **and** a root manifest (`pyproject.toml`, `setup.py`, `setup.cfg`, `requirements*.txt`, `Pipfile`, `Pipfile.lock`, `uv.lock`, `poetry.lock`).
-- **Ref:** the default-branch HEAD, or an optional branch, tag or SHA, is resolved to a SHA at admission; the scan uses that SHA and records it in `repo.commit_sha`.
+- **Ref:** the default-branch HEAD, or an optional branch, tag or SHA (validated by the `ScanRequest` ref rule, which `/tree/{ref}` also passes through, so `.`, `a/./b`, `%2e%2e`, a trailing `/` and a 41-hex string are rejected before any I/O), is resolved to a SHA at admission; the scan uses that SHA and records it in `repo.commit_sha`.
 
-## 13. Dependency resolution (ADR-0006, OQ-6)
+## 13. Dependency resolution (ADR-0028, OQ-6)
 
 Inside the Sandbox, first match wins:
 
@@ -537,15 +548,14 @@ Inside the Sandbox, first match wins:
 2. `poetry.lock`: every `[[package]]`, transitive included; groups recorded; `direct` from `pyproject.toml`.
 3. `Pipfile.lock`: `default` and `develop` entries with `==` versions.
 4. Root `requirements.txt` if every requirement (following `-r` includes inside the repo) is `name==version` (extras, markers, hashes allowed); a limitation notes missing transitive pins.
-5. Else `uv pip compile` (network ON, disposable) on the first of `pyproject.toml`, `requirements.in`, an unpinned `requirements.txt`, `setup.py` / `setup.cfg`, with `--python-version RESOLVE_PYTHON_VERSION` (or the lowest `requires-python` allows), `--no-header --no-annotate --quiet --output-file -`, index `https://pypi.org/simple`; runtime dependencies only (a limitation), transitive included, "compiled, not locked" (AC-08).
-6. Else, or if compile fails: every declared name unresolved with the reason; a bare `Pipfile` is unresolved ("Pipfile without Pipfile.lock is not supported").
+5. Else compile (network ON, unrestricted egress, disposable; no repo code runs and no repo file reaches uv; ADR-0028, ADR-0032) the first of `pyproject.toml` with a static `[project]` table (`dependencies` not listed in `dynamic`), `requirements.in`, an unpinned `requirements.txt`. **Sanitized input:** the agent reads that manifest itself (`tomllib`, or line parsing with `-r` includes inside the repo followed as in rule 4, depth at most 5) and writes to `/tmp/pirin/requirements.in` only plain registry requirements (`name[extras] specifiers ; marker`, matched by an anchored allowlist regex). It drops every option line (`--index-url`, `--extra-index-url`, `--find-links`, `--trusted-host`, `-e`, `-r`, `-c` and any other line starting with `-`; recorded in `notes` as "ignored option <flag>", constraint files included) and every URL, path or VCS requirement (`name @ <url>`, `git+`/`hg+`/`svn+`/`bzr+`, `file:`, archive URLs, `./` or `/` paths, `-e <target>`), which is unresolved "non-registry source" (the rule 1 reason) under its name, or a note when no name can be read. Then `uv pip compile /tmp/pirin/requirements.in` with the section 7.2 common flags from `/tmp/uvwd`, `--python-version RESOLVE_PYTHON_VERSION` (or the lowest `requires-python` allows) and `--no-header --no-annotate --quiet --output-file -`; runtime dependencies only (a limitation), transitive included, "compiled, not locked" (AC-08). The agent checks statically first: a `pyproject.toml` with dynamic dependencies or no `[project]` table, or a repo with only `setup.py` / `setup.cfg`, is not compiled at all; and if uv fails because a build would be needed (a dependency with no wheel and no static metadata; the first resolve task pins uv's exact error text in a fixture), compile output is discarded. In both cases every declared name (when known) is unresolved with "dynamic metadata needs a build; not run".
+6. Else, or if compile fails: every declared name unresolved with the reason ("compile failed: ..."); a bare `Pipfile` is unresolved ("Pipfile without Pipfile.lock is not supported").
 
-Root manifests only (monorepos are a limitation); names PEP 503-normalized. `uv` comes from the base image `ghcr.io/astral-sh/uv:python3.13-bookworm-slim` (Python 3.13.11, verified).
+Root manifests only (monorepos are a limitation); names PEP 503-normalized. `uv` comes from the base image `ghcr.io/astral-sh/uv:python3.13-bookworm-slim` (Python 3.13.11, verified), pinned by digest (ADR-0030).
 
 ## 14. Demo replays (ADR-0016, OQ-11)
 
-- `python -m pir record <repo_url> --slug S --title T --description D` runs a real scan with a `Recorder` sink and writes `demo/replays/<slug>.json` (committed); `demo/replays/index.json` lists display order.
-- **Set:** 3 public repos chosen at the end of M1 from real runs (one with `likely reachable`, one mixed with a visible `uncertain`, one clean or mostly no-path), each pinned to its SHA, under 10 MB, permissively licensed; they replace the prototype's `placeholder-*` demos.
+- `python -m pir record <repo_url> --slug S --title T --description D` runs a real scan with a `Recorder` sink and writes `demo/replays/<slug>.json` (committed); `demo/replays/index.json` lists display order. **Set:** 3 public repos chosen at the end of M1 from real runs (one with `likely reachable`, one mixed with a visible `uncertain`, one clean or mostly no-path), each pinned to its SHA, under 10 MB, permissively licensed; they replace the prototype's `placeholder-*` demos.
 - **Pacing:** offsets scaled by `min(1, REPLAY_MAX_SECONDS / recorded_duration)`, at least 300 ms apart: the report appears within about 25 s (AC-49 needs under 180 s). The replayed report equals the recorded one byte for byte (AC-48); status and SSE carry `mode="replay"`; the UI labels it "Recorded demo, recorded on <date>". Recordings are validated at startup (an invalid one is skipped and logged) and by a fast test.
 
 ## 15. Evaluation suite (ADR-0017)
@@ -553,20 +563,18 @@ Root manifests only (monorepos are a limitation); names PEP 503-normalized. `uv`
 - **Fixtures (OQ-13):** `eval/cases.toml` (`tomllib`) holds `[[repo]]` and `[[case]]` tables: **at least 12 cases, at least 4 `likely reachable`, 3 `no reachable path detected`, 3 `uncertain`** (AC-33 needs 10). At least 5 local synthetic repos in `eval/fixtures/<dir>/` (uploaded into the Sandbox via `unpack`), each pinning a known-vulnerable version and covering: a direct call; `import m as a`; `from m import f as g`; a call reached through two repo functions from a CLI or route entry; an import never called; a dependency never imported; a dynamic `importlib` or `getattr` use (uncertain); an advisory with no identifiable function (uncertain). At least 2 pinned real repos (`github:<owner>/<repo>@<sha>`). OSV and Tavily responses are recorded in `eval/recordings/` (`--refresh-research` re-records); Nemotron and the Sandbox always run live in a scored run.
 - **Metrics (OQ-8, AC-35):** positive class `likely reachable` (LR). Precision = TP / (TP + FP) with TP = `p == LR and y == LR`, FP = `p == LR and y != LR`, `null` when nothing is predicted LR. Recall = TP / count(`y == LR`), reported only (OQ-2). Abstention rate = count(`p == uncertain`) / N. Also reported: N, correct abstentions (`p == y == uncertain`), no-path precision, dangerous misses (`y == LR and p == no-path`), the 3×3 confusion matrix, errored cases, and a limitations statement (fixture count, synthetic share, recorded advisory data, single model, temperature 0). Errored cases (AC-38) and cases whose finding is missing are listed and scored as `p = uncertain`. `pir/evaluation/metrics.py`: pure `compute(pairs: list[tuple[Verdict, Verdict | None]]) -> EvalMetrics`, tested on hand-computed sets.
 - **Precision bar (AC-36, OQ-2):** **LR precision at least 0.80 on a full scored run, with at least one LR prediction.** `python -m pir eval` prints PASS or FAIL and the run's spend, and exits 0 (met), 1 (not met) or 2 (could not run). A FAIL triggers the orchestrator's switch to the full per-task pipeline. Budget: about 5 full runs over the project.
-- **LangSmith (AC-37):** the runner upserts dataset `LANGSMITH_DATASET` (one example per case: inputs repo source, package, advisory; output label) and runs one experiment per eval run (`eval-<UTC timestamp>-<model>`): one root trace per case with child runs per step, LLM call and tool call, per-case feedback `correct`, run metrics as experiment metadata. Runs are read back with `client.runs.query()`; the deprecated `list_runs` is banned by a ruff `banned-api` rule.
-- **Published results (AC-39):** each run writes `eval/results/<timestamp>.json` and `.md` (gitignored) and `eval/results/latest.md` and `latest.json` (`EvalRunSummary`, committed). `AppConfigResponse.eval` is published only when `latest.json` validates, `scored` is true and `precision` is not null; otherwise `null` and the UI shows no figure. The "41 to 3" figure appears only as a labeled motivating example unless `latest.json` measures it. `--no-langsmith` is for offline debugging and writes `scored: false`.
+- **LangSmith (AC-37):** the runner upserts dataset `LANGSMITH_DATASET` (one example per case: inputs repo source, package, advisory; output label) and runs one experiment per eval run (`eval-<UTC timestamp>-<model>`): one root trace per case with child runs per step, LLM call and tool call, per-case feedback `correct`, run metrics as experiment metadata. Runs are read back with `client.runs.query()`; the deprecated `list_runs` is banned by a ruff `banned-api` rule. **Published results (AC-39):** each run writes `eval/results/<timestamp>.json` and `.md` (gitignored) and `eval/results/latest.md` and `latest.json` (`EvalRunSummary`, committed). `AppConfigResponse.eval` is published only when `latest.json` validates, `scored` is true and `precision` is not null; otherwise `null` and the UI shows no figure. The "41 to 3" figure appears only as a labeled motivating example unless `latest.json` measures it. `--no-langsmith` is for offline debugging and writes `scored: false`.
 
 ## 16. Call-chain proof (M2, cuttable; ADR-0018, OQ-15)
 
 - Built only if M1 passed (the Sandbox spike passed 2026-10-25); enabled only with `FEATURE_PROOF=true` **and** `EXECUTOR=sandbox`; otherwise the route is not registered and `/api/config` reports `proof: false` (AC-65). **Entry:** the first step of the validated call path (`pkg.mod:func`); `ProofRequest.entry` may name another step of that path, nothing else.
-- From image A, `proof-install` (ON) installs exactly the resolved pins with `uv pip install --no-deps --target /work/deps` → image P; `proof-run` (OFF) puts the repo and `/work/deps` on `sys.path`, patches the vulnerable symbol with `unittest.mock.patch(target, side_effect=recorder)` (records the caller's `file:line`, returns a `MagicMock`), imports the entry module and calls the entry with `unittest.mock.sentinel` placeholders. "proven" if the recorder fired, else "not proven" with the reason; a timeout gives "not proven", "sandbox timeout" (AC-68). Proof never changes the verdict (AC-67). No payloads (AC-69): only harness-made sentinels and MagicMocks.
+- From image A, `proof-install` (ON) installs exactly the resolved pins **from wheels only** (`uv pip install --no-deps --only-binary :all: --target /work/deps` + the section 7.2 common flags + `-- <name==version>`, run from the fresh empty `/tmp/uvwd` with `--python /usr/local/bin/python3.13`; nothing from the repo or any sdist runs, and no repo file influences uv, while the network is on; ADR-0032) → image P. The agent installs one pin per uv call so a missing wheel is attributed: such a pin is listed in `no_wheel` and the proof is `not_proven` with reason "uncertain: no wheel for <name>==<version>; source builds are not run" (AC-68 pairs `uncertain` with "not proven"), and `proof-run` is skipped. `proof-run` (OFF) puts the repo and `/work/deps` on `sys.path`, patches the vulnerable symbol with `unittest.mock.patch(target, side_effect=recorder)` (records the caller's `file:line`, returns a `MagicMock`), imports the entry module and calls the entry with `unittest.mock.sentinel` placeholders. "proven" if the recorder fired, else "not proven" with the reason; a timeout gives "not proven", "sandbox timeout" (AC-68). Proof never changes the verdict (AC-67). No payloads (AC-69): only harness-made sentinels and MagicMocks.
 
 ## 17. Frontend (ADR-0012, ADR-0026)
 
 Plain HTML, CSS and ES modules; no framework, build, CDN, third-party script or remote stylesheet. FastAPI serves `web/` at `/` after `mimetypes.add_type` for `.js` (`text/javascript`), `.css` (`text/css`) and `.woff2` (`font/woff2`), because the Windows registry can map `.js` to `text/plain`. Visual direction: "The Clean Console" in root `DESIGN.md`.
 
-- **Files (the accepted prototype):** `web/index.html` (the single screen: URL form, demo rows, pipeline, summary, findings, exports, notices; AC-59); `web/css/tokens.css` (design tokens and the `@font-face` rules); `web/css/app.css` (components, tokens only); `web/fonts/` (self-hosted Geist 400/500/600 and Geist Mono 400/500 woff2 from the official release, plus `OFL.txt`); `web/js/app.js` (state, flags), `render.js` (DOM building), `export.js` (downloads); `web/js/api/index.js` (`createApi()`: `mock` when the URL has `?api=mock`, else `http`), `http.js`, `mock.js`, `errors.js` (`ApiError`, `fromErrorBody()`); `web/fixtures/` (`config.json`, `demos.json`, `errors.json`, `reports/<scenario>.json` and `.md`, `events/<scenario>.json`).
-- **Fonts:** the prototype's Google Fonts `<link>` and `preconnect` tags are removed; `tokens.css` declares `@font-face` with `url("../fonts/<file>.woff2") format("woff2")` and `font-display: swap`, keeping the system fallbacks. The CSP stays `'self'`-only; a fast test fails if `web/index.html` or `web/css/*.css` references any `http:` or `https:` URL.
+- **Files (the accepted prototype):** `web/index.html` (the single screen: URL form, demo rows, pipeline, summary, findings, exports, notices; AC-59); `web/css/tokens.css` (design tokens and the `@font-face` rules); `web/css/app.css` (components, tokens only); `web/fonts/` (self-hosted Geist 400/500/600 and Geist Mono 400/500 woff2 from the official release, plus `OFL.txt`); `web/js/app.js` (state, flags), `render.js` (DOM building), `export.js` (downloads); `web/js/api/index.js` (`createApi()`: `mock` when the URL has `?api=mock`, else `http`), `http.js`, `mock.js`, `errors.js` (`ApiError`, `fromErrorBody()`); `web/fixtures/` (`config.json`, `demos.json`, `errors.json`, `reports/<scenario>.json` and `.md`, `events/<scenario>.json`). **Fonts:** the prototype's Google Fonts `<link>` and `preconnect` tags are removed; `tokens.css` declares `@font-face` with `url("../fonts/<file>.woff2") format("woff2")` and `font-display: swap`, keeping the system fallbacks. The CSP stays `'self'`-only; a fast test fails if `web/index.html` or `web/css/*.css` references any `http:` or `https:` URL.
 - **Adapter interface** (JSDoc-typed; both adapters implement exactly this and reject with `ApiError`):
 
 ```js
@@ -579,17 +587,16 @@ export interface Api {
 }
 ```
 
-- **Mock adapter:** `?api=mock&scenario=<name>`: `reachable` (default), `clean`, `incomplete`, `partial-failure`, `error-invalid-url`, `error-not-found`, `error-too-large`, `error-not-python`, `rate-limited`, `paused`; `&jump=report` skips the feed animation. Fixtures follow the frozen models exactly (including `tools`, the `scan_not_found`, `report_not_ready` and `demo_not_found` messages, and the new config fields); fast tests validate every report, event and config fixture and compare `errors.json` with `pir/messages.py`.
+- **Mock adapter:** `?api=mock&scenario=<name>`: `reachable` (default), `clean`, `incomplete`, `partial-failure`, `error-invalid-url`, `error-not-found`, `error-too-large`, `error-not-python`, `rate-limited`, `paused` (an allowlist: any other value falls back to `reachable` and never reaches a fixture path); `&jump=report` skips the feed animation. Fixtures follow the frozen models exactly (including `tools`, the `scan_not_found`, `report_not_ready` and `demo_not_found` messages, and the new config fields); fast tests validate every report, event and config fixture and compare `errors.json` with `pir/messages.py`.
 - **Contract use:** stage tool chips render from `tools` (the client-side tool column of `render.js` `STAGES` is removed); "Sandbox" appears only when `sandbox` is listed; the rate-limit note reads `limits.live_scans_per_client_*`; the eval figure renders only when `config.eval` is not null, labeled with `n` and `run_date`. Flags: `progress_feed=false` → one busy state and `getStatus` polling (AC-42); `markdown_export=false` → JSON only (AC-64); `proof=false` → no proof controls (AC-65).
 - **Untrusted text (AC-60, AC-57):** only `textContent` and `document.createElement`; `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, `eval` and `new Function` are banned (a fast test scans `web/js/**/*.js`). Links only if `new URL(u).protocol` is `http:` or `https:`, `href` = the exact report string, `target="_blank"`, `rel="noopener noreferrer"`. `uncertain` cards carry `data-verdict="uncertain"`, a distinct class and the visible text `uncertain` (AC-56). Card order: evidence (call path, advisory links, vulnerable function), then confidence, limitations, explanation (AC-55).
-- **Preview command (prototype):** `npx --yes http-server web -p 5173 -c-1`, then open `http://localhost:5173/?api=mock`. **Preview (real backend):** `python -m pir serve --port 8000`, then `http://127.0.0.1:8000/` (replays need no keys with `LIVE_SCANS_ENABLED=false`).
-- **Screenshot command:** `npx playwright screenshot --viewport-size=1280,900 --full-page --wait-for-timeout=1500 "http://localhost:5173/?api=mock&scenario=reachable&jump=report" .ui-review/report.png` (swap `scenario` for other states).
+- **Preview command (prototype):** `npx --yes http-server web -p 5173 -c-1`, then open `http://localhost:5173/?api=mock`. **Preview (real backend):** `python -m pir serve --port 8000`, then `http://127.0.0.1:8000/` (replays need no keys with `LIVE_SCANS_ENABLED=false`). **Screenshot command:** `npx playwright screenshot --viewport-size=1280,900 --full-page --wait-for-timeout=1500 "http://localhost:5173/?api=mock&scenario=reachable&jump=report" .ui-review/report.png` (swap `scenario` for other states).
 
 ## 18. Hosting and deployment (ADR-0013)
 
-- **Target:** Hugging Face Space, Docker SDK, free CPU Basic (2 vCPU, 16 GB). **Cost: $0.** One container on port 7860: `python -m pir serve --host 0.0.0.0 --port 7860` (Uvicorn, one worker, JSON logs, no access log). Image `python:3.13-slim`, non-root uid 1000, secrets from Space secrets. Created **private**; made public with the GitHub repo after the user confirms (2026-10-30).
-- **Up until 2026-12-15:** free Spaces sleep after about 48 h idle; the keepalive workflow (section 19) calls `/api/health` every 6 h. GitHub disables schedules after 60 days without activity; 2026-10-30 to 2026-12-15 is 46 days. **State:** jobs, reports and rate-limit counters in memory (lost on restart, acceptable); caches on ephemeral disk; spend ledger durable in a private HF dataset (ADR-0015). **Paid alternatives (not chosen; each needs approval):** HF persistent storage (about $5 per month), HF CPU upgrade (about $22 per month), Fly.io (about $2 to $5 per month, card required).
-- `docs/DEPLOYMENT.md` (M2): push steps, Space front matter (`sdk: docker`, `app_port: 7860`), deploy-time caps and prices, and the deploy checks (SSE through the HF proxy, `X-Forwarded-For` hop count, dataset commit rate, `frame-ancestors` for the embed, keepalive passing).
+- **Target:** Hugging Face Space, Docker SDK, free CPU Basic (2 vCPU, 16 GB). **Cost: $0.** One container on port 7860: `python -m pir serve --host 0.0.0.0 --port 7860` (Uvicorn, one worker, JSON logs, no access log). Image `FROM python:3.13-slim@sha256:<digest>` (ADR-0030), non-root uid 1000, secrets from Space secrets. Install: `pip install --no-cache-dir --require-hashes -r requirements.lock`, then `pip install --no-cache-dir --no-deps .`; `requirements.lock` (committed) is generated by `uv pip compile pyproject.toml --universal --generate-hashes --python-version 3.13 -o requirements.lock`, and a fast test checks that every runtime dependency in `pyproject.toml` appears in it with a `--hash`. `.dockerignore` excludes `.env`, `.env.*` (except `.env.example`), `data/`, `eval/results/`, `.venv/` and `.git/` (a fast test reads it). Created **private**; made public with the GitHub repo after the user confirms (2026-10-30).
+- **Up until 2026-12-15:** free Spaces sleep after about 48 h idle; the keepalive workflow (section 19) calls `/api/health` every 6 h. GitHub disables schedules after 60 days without activity; 2026-10-30 to 2026-12-15 is 46 days. **State:** jobs, reports and rate-limit counters in memory (lost on restart, acceptable); caches on ephemeral disk; spend ledger durable in a private HF dataset (ADR-0029). **Paid alternatives (not chosen; each needs approval):** HF persistent storage (about $5 per month), HF CPU upgrade (about $22 per month), Fly.io (about $2 to $5 per month, card required).
+- `docs/DEPLOYMENT.md` (M2): push steps, Space front matter (`sdk: docker`, `app_port: 7860`), deploy-time prices, `python -m pir ledger set-caps` with the real balances read from the Token Factory and Tavily consoles (it runs the stale-parent gate and keeps at least $5 and $3 of headroom, section 11.1; live scans stay paused until it succeeds) and switching the local `.env` to the HF ledger (section 11.1), and the deploy checks (SSE through the HF proxy; the `X-Forwarded-For` hop count, by sending a spoofed XFF and confirming the logged client hash matches the real address; dataset commit rate; `frame-ancestors` for the embed; the built image has no `.env`; keepalive passing).
 
 ## 19. Production operations (NFR-11 to NFR-13, ADR-0024)
 
@@ -618,7 +625,7 @@ def evaluate(status: int, body: bytes, min_fraction: float = 0.25) -> tuple[int,
 def main(argv: list[str] | None = None) -> int   # keepalive.py <health_url> [--min-fraction 0.25]
 ```
 
-Exit 0: HTTP 200, `status == "ok"`, every pool at or above the threshold. Exit 1: a pool below the threshold; the message names each such pool and its fraction ("Budget alert: nebius at 0.18 (below 0.25)"). Exit 2: health check failed (network error after 3 tries 20 s apart so a sleeping Space can wake, non-200, invalid JSON, `status` not ok, or `budget_remaining` missing or null). `.github/workflows/keepalive.yml`: `schedule` (`17 */6 * * *`) and `workflow_dispatch`; `actions/setup-python` 3.13; `python src/pir/keepalive.py "${{ vars.PIR_HEALTH_URL }}"`. A non-zero exit fails the run and GitHub emails the owner (NFR-01, NFR-13). `PIR_HEALTH_URL` is a repository variable, not a secret, set when the Space goes public.
+Exit 0: HTTP 200, `status == "ok"`, every pool at or above the threshold. Exit 1: a pool below the threshold; the message names each such pool and its fraction ("Budget alert: nebius at 0.18 (below 0.25)"). Exit 2: health check failed (network error after 3 tries 20 s apart so a sleeping Space can wake, non-200, invalid JSON, `status` not ok, or `budget_remaining` missing or null). `.github/workflows/keepalive.yml`: `schedule` (`17 */6 * * *`) and `workflow_dispatch`; `actions/setup-python` 3.13; the step passes the URL through `env: PIR_HEALTH_URL: ${{ vars.PIR_HEALTH_URL }}` and runs `python src/pir/keepalive.py "$PIR_HEALTH_URL"` (no `${{ }}` inside any `run:`, checked by `test_workflows.py`; `main` rejects a URL that is not `https://`). A non-zero exit fails the run and GitHub emails the owner (NFR-01, NFR-13). `PIR_HEALTH_URL` is a repository variable, not a secret, set when the Space goes public.
 
 ## 20. Directory layout
 
@@ -635,7 +642,7 @@ ProveItReachable/
   demo/replays/  # index.json + <slug>.json (committed)
   eval/  cases.toml  fixtures/<repo>/  recordings/{osv,tavily}/  results/ (gitignored except latest.md, latest.json)
   tests/  conftest.py (live skip, socket guard)   fakes/ (FakeLLM, FakeExecutor, fake contree-sdk, MockTransport, MemorySpendLedger, fake LangSmith)
-    fixtures/repos/ (synthetic incl. canary/; never collected)   fixtures/http/ (recorded GitHub, OSV, Tavily, contree/ REST)
+    fixtures/repos/ (synthetic incl. canary/; never collected)   fixtures/uv_canary.py (builds the uv-canary tree)   fixtures/http/ (recorded GitHub, OSV, Tavily, contree/ REST)
     unit/ (test_<module>.py, test_workflows.py, test_logs.py, test_keepalive.py)   integration/   e2e/ (slow)   live/ (slow + live)
   data/  # runtime caches and local ledger (gitignored)
 ```
@@ -653,6 +660,7 @@ The orchestrator adds `data/`, `eval/results/*` (with `!eval/results/latest.md` 
 | `record <repo_url> --slug S --title T --description D` | Record a demo replay. |
 | `serve [--host 127.0.0.1] [--port 8000]`; `schema` | Run the API and UI; print the report JSON Schema. |
 | `check-config [--for scan\|eval\|serve]` | Name missing variables, print metered spend totals; never prints a value. |
+| `ledger set-caps --nebius-balance B --tavily-balance T [--nebius X --tavily Y] [--headroom-nebius 5 --headroom-tavily 3] [--local-nebius 5 --local-tavily 2]` | At deploy (and to raise caps later): run the stale-parent gate (section 7.8; exit 1 and write nothing if it fails), then write caps (default and maximum: recorded spend + balance − headroom; headroom at least $5 and $3) and the `local` allowance into the HF ledger by compare-and-swap, keeping recorded spend; refuses a cap below spend already recorded or above the maximum (section 11.1). |
 
 ## Security and data
 
@@ -660,25 +668,25 @@ Only public repositories are handled (`sensitive-data: no`), but the Sandbox, UR
 
 ### Trust zones and execution boundary (AC-29, AC-30, AC-70, NFR-02)
 
-Zones: the **host process** (trusted code; untrusted **data** only: GitHub metadata, OSV and Tavily JSON, model text, Sandbox output; secrets in memory); the **Token Factory Sandbox** (untrusted: the repo's files, its build backends, its code during proof, our agent); the **browser** (untrusted rendering of untrusted text); **GitHub Actions** (trusted, no secrets; keepalive reads only the public health endpoint).
+Zones: the **host process** (trusted code; untrusted **data** only: GitHub metadata, OSV and Tavily JSON, model text, Sandbox output; secrets in memory); the **Token Factory Sandbox** (untrusted: the repo's files, its code during `proof-run`, our agent; when network is ON its egress is unrestricted); the **browser** (untrusted rendering of untrusted text); **GitHub Actions** (trusted, no secrets; keepalive reads only the public health endpoint).
 
-- Repo code is never imported, executed or installed outside a Token Factory Sandbox. The host never downloads or extracts a repo tarball and never runs `pip`, `uv`, `python setup.py` or any subprocess on repo content. There is no Docker or other local fallback (ADR-0021).
-- **Every agent command runs through REST as uid/gid 65534** with an explicit `networking.enabled`; network is ON only for `fetch`, `resolve --compile` and `proof-install`. The SDK `run()` (root, no network control) is used only by `prepare` with the constant `PREPARE_CMD` on trusted files.
-- **Pristine image:** image A comes only from our agent's fetch and extraction; steps that may run repo code (`resolve --compile`, `proof-*`) run in disposable branches of A or in image P; the index runs from A with network OFF. **No secrets in the Sandbox:** commands start with `env -i` and a fixed minimal environment; `NEBIUS_API_KEY` is used only by host-side control clients.
+- Repo code is never imported, executed or installed outside a Token Factory Sandbox. The host never downloads or extracts a repo tarball and never runs `pip`, `uv`, `python setup.py` or any subprocess on repo content. There is no Docker or other local fallback (ADR-0032).
+- **Every agent command runs through REST as uid/gid 65534** with an explicit `networking.enabled`. The switch has no egress allowlist, so network ON means the whole internet: it is ON only for `fetch`, `resolve --compile` and `proof-install`, and safe only because none of them executes anything from the repo or an sdist and no repo-controlled file influences them (ADR-0032; `fetch` is our agent; every uv call runs from a fresh empty `/tmp/uvwd` with `--python /usr/local/bin/python3.13`, `--no-build --no-config --no-sources` and agent-sanitized input; install is wheels only; section 7.2), each capped at 120 s, 180 s and 300 s. A repo that would need a build is reported unresolved ("dynamic metadata needs a build; not run"), never built. The SDK `run()` (root, no network control) is used only by `prepare` with the constant `PREPARE_CMD` on trusted files.
+- **Pristine image:** image A comes only from our agent's fetch and extraction; compile runs in a disposable branch of A; the only step that runs repo code, `proof-run`, runs from image P with network OFF; the index runs from A with network OFF. **No secrets in the Sandbox:** commands start with `env -i` and a fixed minimal environment; `NEBIUS_API_KEY` is used only by host-side control clients.
 - **Sandbox output is untrusted:** one marker line, size and decompression caps, `truncated` treated as failure, strict validation, path checks (relative, no `..`, present in the index), text length caps. A hostile repo can at most falsify its own report.
-- **Tests:** the canary fixture (`tests/fixtures/repos/canary/`; its `__init__.py` and `setup.py` write a marker file) runs through the full pipeline with `FakeExecutor` while an autouse guard makes `subprocess.Popen`, `asyncio.create_subprocess_exec`, `os.system` and `importlib.import_module` on fixture paths raise; the marker must never appear (AC-29). An executor test asserts analysis goes through `Executor.run` (AC-30). `ContreeExecutor` tests (fake SDK + MockTransport) assert that every REST run carries `uid`/`gid` 65534 and the `networking.enabled` value from the section 7.2 table, that SDK `run()` is called only by `prepare` with `PREPARE_CMD`, that `SUCCESS` + `timed_out` becomes `sandbox_timeout`, that `truncated` becomes `sandbox_failed`, and that reported `cost` is recorded.
+- **Tests:** the canary fixture (`tests/fixtures/repos/canary/`; its `__init__.py` and `setup.py` write a marker file) runs through the full pipeline with `FakeExecutor` while an autouse guard makes `subprocess.Popen`, `asyncio.create_subprocess_exec`, `os.system` and `importlib.import_module` on fixture paths raise; the marker must never appear (AC-29). An executor test asserts analysis goes through `Executor.run` (AC-30). `ContreeExecutor` tests (fake SDK + MockTransport) assert that every REST run carries `uid`/`gid` 65534, the `networking.enabled` value from the section 7.2 table, `UV_NO_BUILD=1` and `UV_PYTHON_DOWNLOADS=never`, that every network-ON `uv` argv has `--no-build`, `--no-config`, `--no-sources` and `--python /usr/local/bin/python3.13` (and `--only-binary :all:` for install), and that no uv working directory, input path or interpreter lies under `/work/repo` (uv-canary tests, section 22), that SDK `run()` is called only by `prepare` with `PREPARE_CMD`, that `SUCCESS` + `timed_out` becomes `sandbox_timeout`, that `truncated` becomes `sandbox_failed`, and that reported `cost` is recorded.
 
 ### URL boundary, untrusted text and prompt injection (AC-02, AC-03, AC-06, AC-57, AC-60)
 
 - Section 12 rules: pure parsing before any I/O; fixed hosts per client; no redirects except `api.github.com` to itself; HTTPS only; byte caps; the tarball URL is built inside the Sandbox from validated `owner`, `repo` and a 40-hex SHA and passed through `shlex.quote`; no user input reaches DNS for another host. Tests cover `http://`, `https://github.com.evil.com/...`, `https://user@github.com/...`, `https://github.com:8443/...`, `https://127.0.0.1/...`, `https://api.github.com/repos/...`, percent-encoding and a 301 to a foreign host.
 - Advisory text, Tavily content, repo snippets and model output are untrusted; the UI renders them only as text (section 17). Headers: CSP `default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://huggingface.co`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`. Markdown export escapes Markdown and HTML metacharacters, puts snippets in code spans with backticks removed, and writes links only as `<https://...>` autolinks of scheme-checked URLs.
-- Prompts wrap untrusted text in delimiters with an instruction to treat it as data. The model's only tools are read-only index queries; output is accepted only after schema validation and the gate; URLs must come from the returned sets; symbols must match the regex and be grounded.
+- Prompts wrap untrusted text in delimiters, after stripping delimiter tokens from it (section 7.6), with an instruction to treat it as data. The model's only tools are read-only index queries; output is accepted only after schema validation and the gate; URLs must come from the returned sets; symbols must match the regex and be grounded.
 
 ### Secrets, spend controls and supply chain (AC-31, AC-75, NFR-03)
 
 - Secrets come only from environment variables (pydantic-settings; `.env` loaded locally by the app, gitignored, never read by agents), held as `SecretStr`. `require(settings, names)` raises `ConfigError("Missing required environment variable: NAME")` naming only the variable, at `serve` start (live scans on) and at `scan` and `eval` start. `redact()` (section 19.2) covers every log line and LangSmith payload; fast tests set every secret variable to a sentinel, run a stubbed scan with one failing external call, and assert no sentinel appears in any log line, report, recording, trace payload or `/api/health` response. `GITHUB_TOKEN` (optional) is fine-grained, public read-only, sent only to `api.github.com`; `HF_TOKEN` is fine-grained with write access to the ledger dataset only; CI uses no secrets; the keepalive uses a repository variable only.
-- Spend and abuse: durable per-pool caps with reserve-before-spend and a fail-closed ledger (section 11); Sandbox runs metered and capped like inference; rate limits; `MAX_CONCURRENT_SCANS`; per-scan budget; `MAX_FINDINGS_REASONED`; size caps; timeouts; the 4 KB body cap; the `LIVE_SCANS_ENABLED` kill switch. Replays cost nothing and work while live scans are paused. `/api/health` and `/api/config` disclose only fractions, flags and public limits: no amounts, keys or internal hosts.
-- Supply chain: exact pins in `pyproject.toml`, installed as-is by the Docker image; `contree-sdk` pinned to 0.3.6; no CDN, third-party script or remote font (Geist and Geist Mono self-hosted under the SIL Open Font License, licence file shipped); GitHub Actions pinned to commit SHAs.
+- Spend and abuse: durable per-pool caps with reserve-before-spend and a fail-closed ledger shared by every spender after deploy (compare-and-swap, per-spender allowances), a daily spend ceiling, and holds that bound reasoning tokens (sections 7.5, 11); replay, SSE and job-eviction limits (sections 7.7, 8); Sandbox runs metered and capped like inference; rate limits; `MAX_CONCURRENT_SCANS`; per-scan budget; `MAX_FINDINGS_REASONED`; size caps; timeouts; the 4 KB body cap; the `LIVE_SCANS_ENABLED` kill switch. Replays cost nothing and work while live scans are paused. `/api/health` and `/api/config` disclose only fractions, flags and public limits: no amounts, keys or internal hosts.
+- Supply chain (ADR-0030): exact pins in `pyproject.toml`, installed by the Docker image from the hashed `requirements.lock` with `--require-hashes`; the Space image and `SANDBOX_BASE_IMAGE` pinned by `@sha256:` digest; `contree-sdk` pinned to 0.3.6; no CDN, third-party script or remote font (Geist and Geist Mono self-hosted under the SIL Open Font License, licence file shipped); GitHub Actions pinned to commit SHAs.
 
 ### Data handled and retention
 
@@ -686,9 +694,9 @@ Zones: the **host process** (trusted code; untrusted **data** only: GitHub metad
 |---|---|---|---|
 | Public repo files | Sandbox images only | untagged at scan end, then platform retention | Token Factory Sandboxes |
 | Repo snippets, advisory text, prompts, verdicts | memory; LangSmith traces | jobs 1 h; traces per the LangSmith plan | Token Factory inference, LangSmith |
-| Research and OSV caches | `DATA_DIR/cache` | 30 days / 24 h; ephemeral when hosted | none |
+| Research and OSV caches | `DATA_DIR/cache` | 7 days / 24 h; ephemeral when hosted | none |
 | Client IP | memory (rate limiter); logs hold a salted hash | until restart | nobody |
-| Spend ledger (amounts only) | private HF dataset or local file | until 2026-12-15 | Hugging Face |
+| Spend ledger (amounts only) | local file before deploy; private HF dataset after | until 2026-12-15 | Hugging Face |
 | Logs (JSON, redacted) | stderr; Space log viewer | per Hugging Face | Hugging Face |
 | Secrets | process memory | process lifetime | only their own service |
 
@@ -698,10 +706,8 @@ No accounts and no personal data beyond the transient IP (the Sandbox beta terms
 
 | Layer | Marker | Covers |
 |---|---|---|
-| Unit: URL parsing, GitHub intake; OSV client; researcher (grounding, exact URLs, failures, cache) | fast | AC-02 to AC-06, AC-10 to AC-13, AC-24, AC-26 |
-| Unit: agent resolve parsers and index on fixture repos (in-process); compile via a recorded `ExecResult` | fast | AC-07 to AC-09, AC-14, AC-15 |
-| Unit: LLM client (allowlist, model check, strip, metering); strategy with `FakeLLM` scripts | fast | AC-16, AC-17, AC-25, AC-28 |
-| Unit: `ContreeExecutor` with fake SDK and recorded REST (uid, network, timeout, truncation, cost, untag) | fast | AC-27, AC-29, AC-30 |
+| Unit: URL parsing, GitHub intake; OSV client; researcher (grounding, exact URLs, failures, cache); agent resolve parsers and index on fixture repos (in-process); compile via a recorded `ExecResult` | fast | AC-02 to AC-15, AC-24, AC-26 |
+| Unit: LLM client (allowlist, model check, strip, metering); strategy with `FakeLLM` scripts; `ContreeExecutor` with fake SDK and recorded REST (uid, network, timeout, truncation, cost, untag) | fast | AC-16, AC-17, AC-25, AC-27 to AC-30 |
 | Unit: verdict gate, confidence caps, ranking, step `tools`, report validation, schema file | fast | AC-18 to AC-23, AC-32 |
 | Unit: metrics; `EvalRunSummary` → `EvalFigure` rule; replay store; spend meter (holds, Sandbox cost), ledgers, rate limiter, fractions | fast | AC-35, AC-39, AC-47, AC-48, AC-50 to AC-53, AC-76 |
 | Unit: config, redaction, JSON formatter, scan context across tasks, stage timer; workflow files and badge; `keepalive.evaluate` and `main`; Markdown; JS ban list; no remote URLs; fixtures; messages | fast | AC-31, AC-57, AC-60, AC-62, AC-71 to AC-75, AC-77 |
@@ -709,8 +715,28 @@ No accounts and no personal data beyond the transient IP (the Sandbox beta terms
 | Integration: API via `httpx.ASGITransport` (errors, SSE, Last-Event-ID, exports, replay during cap, config, health); eval runner with fakes | fast | AC-32 to AC-34, AC-37, AC-38, AC-41, AC-43, AC-47, AC-50 to AC-53, AC-61, AC-63, AC-76 |
 | E2E: Playwright against `create_app()` with fakes and replays | slow | AC-40 to AC-46, AC-49, AC-54 to AC-64 |
 | Live: Token Factory chat and tools; Sandbox round trip (offline, non-root, timeout); Tavily; OSV; LangSmith `runs.query`; proof harness | slow + live | the spike, repeatable; AC-66 to AC-70 |
+| Security review: **Sandbox agent** (`resolve`, `fetch`, `index`, `proof`): compile on a `setup.py` fixture and on a dynamic-`pyproject.toml` fixture → argv has `--no-build` and the deps are unresolved "dynamic metadata needs a build; not run", nothing run; `proof-install` argv is wheels-only with `name==version` after `--`, and a no-wheel pin gives "not proven"; tar members that are symlinks or hardlinks leaving the destination, absolute paths, devices, a member count over the cap, and a decompression bomb under the download cap are refused; `ast.parse` on deep nesting, null bytes and a 1 MB single line skips the file with a reason and the index completes | fast | findings 1, 6 |
+| Security review: **models and intake** (`pir/models`, `github.py`, `osv.py`, `research.py`): `Dependency` names and versions such as `--index-url=x` and `pkg @ https://x` rejected; refs `.`, `a/./b`, `%2e%2e`, trailing `/`, a 41-hex string rejected with no I/O; OSV and research cache filenames only from IDs passing the regex; research cache expires after 7 days; model-written URLs not in the returned set dropped | fast | findings 6, 11 |
+| Security review: **spend meter and ledgers** (`spend.py`): two concurrent `reserve()` near the allowance → exactly one succeeds; a ledger save failure pauses live scans; a `LedgerConflict` is reloaded and re-applied, three conflicts fail closed; `hosted` and `local` allowances enforced in one ledger; file backend refused while `SPEND_LEDGER_HF_REPO` is set; daily ceiling formula, refusal and `Retry-After`; hold uses `max_completion_tokens` (fallback hold in the other mode); an overrun denies further spend in that scan; an HF ledger without `cas_verified`, or with another `hub_version`, refuses all spending; `set-caps` (fake Hub) refuses a cap above recorded spend + balance − headroom or a headroom below $5 / $3, and writes nothing when the stale commit succeeds | fast | findings 2 to 4; round 2, finding 3 |
+| Security review: **HTTP API, jobs, rate limiter** (`api/`, `jobs.py`, `ratelimit.py`): the 4 KB cap on a chunked body with no `Content-Length`; security headers on API JSON, SSE, `report.md`, static files and 404s; `POST /api/demos/../x` gives `demo_not_found` without filesystem access; replay and SSE caps per client and global give `too_many_requests`; running jobs are never evicted; XFF with fewer entries than `TRUSTED_PROXY_HOPS` uses the connection address and a spoofed leftmost entry is ignored | fast | findings 5, 8 |
+| Security review: **logging, prompts, UI, packaging**: the redaction sentinel test also covers `ExecutorUnavailable`, openai exception messages and tracebacks; `wrap_untrusted` strips `</untrusted>` variants; `javascript:` and `data:` advisory links never render as links in the UI (Playwright, slow) or the Markdown export; `?scenario=` accepts allowlisted names only; `.dockerignore` excludes `.env`, `data/`, `eval/results/`; `requirements.lock` hashes; no `${{ }}` in any workflow `run:` | fast (UI link check slow) | findings 7, 9, 10 |
+| Security review round 2: **uv isolation** (`sandbox_agent/resolve.py`, `proof.py`). Fixture: `tests/fixtures/uv_canary.py` builds (as a dict of paths, contents and modes, because `.venv/` is gitignored and Windows drops exec bits) a repo with `.venv/pyvenv.cfg`, an executable `.venv/bin/python` script and an in-tree symlink `.venv/bin/python3` to it (both write `/tmp/pir-canary-ran` and print `PIR-CANARY`), a `.pth` file under `.venv/lib/python3.13/site-packages/`, `.python-version` (`3.12`), `uv.toml`, `[tool.uv]` and `[tool.uv.sources]` in `pyproject.toml`, and a `requirements.in` with `--extra-index-url`, `--find-links`, `-e .`, `-r`, `-c`, `pkg @ https://x/p.whl`, `git+https://x/r.git` and `./local` lines. Asserted on the uv call the agent builds (subprocess replaced by a recorder; temp root injectable): `cwd` is a freshly created empty directory outside the repo (a pre-existing `/tmp/uvwd` fails the step); the argv has `--python /usr/local/bin/python3.13`, `--no-build`, `--no-config`, `--no-sources`, `--index-url https://pypi.org/simple` and an absolute input path outside the repo; `env` equals the fixed environment (has `UV_PYTHON_DOWNLOADS=never`, lacks `VIRTUAL_ENV` and `CONDA_PREFIX`); the sanitized input holds only allowlisted requirement lines; each dropped URL, path or VCS requirement is unresolved "non-registry source", each option line a note | fast | round 2, findings 1, 2 |
 
 `create_app(deps: PipelineDeps | None = None, settings: Settings | None = None)` is the only app factory.
+
+### 22.1 Live checks (verify in the build)
+
+From the round-2 review. Each is a named test in `tests/live/` (slow + live), written and run by the task that builds the piece, with its result in that task's QA entry; a failing gate stops the build until an ADR resolves it.
+
+| Live test | Fact checked | If false |
+|---|---|---|
+| `test_uv_repo_interpreter_never_runs` (**gate** for live `resolve --compile` and `proof-install`) | Compile and proof-install on the uv-canary repo (uploaded with `unpack`; `save=True` in this test only) leave no `/tmp/pir-canary-ran`, checked by a following network-OFF run, and no `PIR-CANARY` in stdout or stderr | Not fail-safe: the build stops |
+| `test_uv_no_build_refuses_sdist`; `test_uv_accepts_double_dash` | `uv pip compile --no-build` and `uv pip install --only-binary :all: --no-build` on an sdist-only package fail without building (uv's exact error text pinned in a fixture); uv accepts `--` before the pin, with the full section 7.2 argv | Fail-safe: any compile or install error becomes unresolved or "no wheel"; an argv error makes the proof "not proven" |
+| `test_max_completion_tokens_bounds_reasoning` | Token Factory honours `max_completion_tokens`, reasoning tokens included | Fail-safe: the 16,000-token hold and the overrun rule (section 7.5) |
+| `test_images_oci_accepts_digest` | `images.oci` accepts an `@sha256:` reference | Fail-safe: a tag-only ref is refused; Sandbox unavailable |
+| `test_network_off_blocks_egress` | `index`, `resolve --lockfile-only` and `proof-run` cannot connect out | Not fail-safe: the build stops |
+| `test_hf_ledger_rejects_stale_parent` (**gate: required before the hosted ledger is enabled**) | `create_commit(parent_commit=<stale>)` on the ledger dataset raises a conflict (the same probe as the section 7.8 gate) | **Not fail-safe:** two writers could overwrite each other's spend. Until it passes, `set-caps` writes nothing, the HF ledger refuses all spending and live scans stay paused (fail closed) |
+| Deploy check (section 18): `X-Forwarded-For` hop count on the HF proxy | Which entry is the client | Fail-safe: `TRUSTED_PROXY_HOPS=0` makes all visitors share one limit |
 
 ## Setup requirements
 
@@ -720,14 +746,12 @@ No accounts and no personal data beyond the transient IP (the Sandbox beta terms
 |---|---|---|---|
 | Python | 3.13 | `python --version` | everything (M1) |
 | Project venv with dev extras (incl. ruff 0.7) | n/a | `.venv/Scripts/python -m pytest --version` and `.venv/Scripts/python -m ruff --version` | tests, lint (M1) |
-| Git | 2.40 | `git --version` | M1 |
-| GitHub CLI (optional) | 2.40 | `gh --version` | set `PIR_HEALTH_URL`, watch CI |
+| Git; GitHub CLI (optional) | 2.40; 2.40 | `git --version`; `gh --version` | M1; set `PIR_HEALTH_URL`, watch CI |
 | Node.js with npx | 20 (user has 24) | `node --version` and `npx --version` | prototype preview, screenshots |
 | Playwright Chromium (Python for e2e; npx for screenshots) | pytest-playwright 0.5; Playwright 1.48 | `.venv/Scripts/python -m playwright --version` and `npx playwright --version` (install each with `... playwright install chromium`) | slow UI tests (M2), screenshots |
-| Impeccable (optional) | n/a | the orchestrator's launcher check | UI review (M2) |
-| Hugging Face CLI (optional) | huggingface_hub 0.26 | `hf --help` (older: `huggingface-cli --help`) | deploy (M2) |
+| Impeccable (optional); Hugging Face CLI (optional) | n/a; huggingface_hub 0.26 | the orchestrator's launcher check; `hf --help` (older: `huggingface-cli --help`) | UI review (M2); deploy (M2) |
 
-`uv` and Docker are not needed on the host.
+`uv` comes with the dev extras (only to regenerate `requirements.lock`); Docker is not needed on the host.
 
 ### Accounts and credentials
 
@@ -739,7 +763,7 @@ No accounts and no personal data beyond the transient IP (the Sandbox beta terms
 | OSV.dev | none | M1 | keyless | free | MockTransport, recorded responses |
 | GitHub token (optional) | `GITHUB_TOKEN` | M2 (hosted; lifts 60 requests per hour) | github.com, fine-grained token, public repos read-only | free | MockTransport |
 | GitHub Actions | none; repository variable `PIR_HEALTH_URL` (not a secret) | M1 (CI), M2 (keepalive) | repository Settings, Variables | free for public repos | `keepalive.evaluate` with stubbed responses |
-| Hugging Face (Space, ledger dataset) | `HF_TOKEN`, `SPEND_LEDGER_HF_REPO` | M2 (deploy) | huggingface.co, Access tokens (fine-grained: write to the ledger dataset only) | free | `MemorySpendLedger`, `FileSpendLedger` |
+| Hugging Face (Space, ledger dataset) | `HF_TOKEN`, `SPEND_LEDGER_HF_REPO` | M2 (deploy; then also in the local `.env` for CLI, eval and record) | huggingface.co, Access tokens (fine-grained: write to the ledger dataset only) | free | `MemorySpendLedger`, `FileSpendLedger` |
 
 ### Local services
 
@@ -752,42 +776,39 @@ For `.env.example`; loaded by `pir/config.py` (`Settings`); an invalid value sto
 | Variable | Default | Purpose | First milestone |
 |---|---|---|---|
 | `NEBIUS_API_KEY` / `NEBIUS_PROJECT_ID` | none (secret; live scans) / none (`EXECUTOR=sandbox`) | Inference and Sandbox auth; Sandbox project | M1 |
-| `NEBIUS_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | Model ID; must contain "nemotron" | M1 |
-| `NEBIUS_PRICE_INPUT_PER_MTOK` / `NEBIUS_PRICE_OUTPUT_PER_MTOK` | `0.60` / `2.40` (pessimistic) | USD per million tokens | M1 |
-| `EXECUTOR` / `SANDBOX_BASE_IMAGE` | `sandbox` / `ghcr.io/astral-sh/uv:python3.13-bookworm-slim` | `sandbox` or `fake` (local fixtures only); base image (verified) | M1 |
+| `NEBIUS_MODEL` / `_PRICE_INPUT_PER_MTOK` / `_PRICE_OUTPUT_PER_MTOK` | `nvidia/nemotron-3-super-120b-a12b` / `0.60` / `2.40` (pessimistic) | Model ID, must contain "nemotron"; USD per million tokens | M1 |
+| `EXECUTOR` / `SANDBOX_BASE_IMAGE` | `sandbox` / `ghcr.io/astral-sh/uv:python3.13-bookworm-slim@sha256:<digest>` (recorded by the first executor task) | `sandbox` or `fake` (local fixtures only); base image, digest required | M1 |
 | `SANDBOX_USD_PER_SECOND` / `SANDBOX_MAX_CONCURRENT_OPS` | `0.001` / `4` | Sandbox estimate and fallback rate; concurrency (platform limit 50) | M1 |
-| `TAVILY_API_KEY` | none (secret; live scans) | Tavily search | M1 |
-| `TAVILY_SEARCH_DEPTH` / `TAVILY_MAX_RESULTS` / `TAVILY_PRICE_PER_CREDIT_USD` | `basic` / `5` / `0.008` | Depth (1 or 2 credits), results, metering | M1 |
-| `LANGSMITH_API_KEY` / `LANGSMITH_TRACING` | none (secret; `eval`) / `false` (`true` for eval and hosted) | Traces and datasets; tracing switch | M1 |
-| `LANGSMITH_PROJECT` / `LANGSMITH_ENDPOINT` / `LANGSMITH_DATASET` | `ProveItReachable` / `https://api.smith.langchain.com` / `proveitreachable-eval-v1` | Project, region endpoint, eval dataset | M1 |
+| `TAVILY_API_KEY` / `_SEARCH_DEPTH` / `_MAX_RESULTS` / `_PRICE_PER_CREDIT_USD` | none (secret; live scans) / `basic` / `5` / `0.008` | Tavily search; depth (1 or 2 credits), results, metering | M1 |
+| `LANGSMITH_API_KEY` / `_TRACING` / `_PROJECT` / `_ENDPOINT` / `_DATASET` | none (secret; `eval`) / `false` (`true` for eval and hosted) / `ProveItReachable` / `https://api.smith.langchain.com` / `proveitreachable-eval-v1` | Traces and datasets; tracing switch; project, region endpoint, eval dataset | M1 |
 | `GITHUB_TOKEN` | unset (secret, optional) | Higher GitHub API limit | M2 |
 | `MAX_REPO_MB` / `MAX_REPO_FILES` / `MAX_PY_FILE_BYTES` / `RESOLVE_PYTHON_VERSION` | `50` / `5000` / `1000000` / `3.12` | Size caps (AC-04); compile target | M1 |
-| `MAX_FINDINGS_REASONED` / `FINDING_CONCURRENCY` / `MAX_TOOL_ROUNDS` / `MAX_MODEL_RETRIES` / `MAX_COMPLETION_TOKENS` | `20` / `4` / `8` / `2` / `1500` | Reasoning bounds (AC-28) | M1 |
+| `MAX_FINDINGS_REASONED` / `FINDING_CONCURRENCY` / `MAX_TOOL_ROUNDS` / `MAX_MODEL_RETRIES` / `MAX_COMPLETION_TOKENS` / `LLM_HOLD_COMPLETION_TOKENS` | `20` / `4` / `8` / `2` / `1500` / `16000` | Reasoning bounds (AC-28); worst-case hold if `max_completion_tokens` is unsupported (section 7.5) | M1 |
 | `TIMEOUT_GITHUB_S` / `_OSV_S` / `_TAVILY_S` / `_NEBIUS_S` / `SCAN_TIMEOUT_S` | `10` / `15` / `20` / `60` / `900` | Call timeouts; whole-scan deadline | M1 |
 | `TIMEOUT_SANDBOX_FETCH_S` / `_RESOLVE_S` / `_COMPILE_S` / `_INDEX_S` / `TIMEOUT_PROOF_INSTALL_S` / `TIMEOUT_PROOF_RUN_S` | `120` / `60` / `180` / `120` / `300` / `60` | Sandbox step and proof timeouts (AC-27, AC-68) | M1 (proof M2) |
-| `SPEND_CAP_NEBIUS_USD` / `SPEND_CAP_TAVILY_USD` | `10` / `5` (build caps; hosted set at deploy) | Hard caps (AC-51) | M1 |
+| `SPEND_CAP_NEBIUS_USD` / `SPEND_CAP_TAVILY_USD` / `SPEND_END_DATE` | `10` / `5` (build caps, file ledger only; HF ledger caps set by `ledger set-caps`) / `2026-12-15` | Hard caps (AC-51); last day of the daily ceiling | M1 |
 | `SCAN_BUDGET_NEBIUS_USD` / `SCAN_BUDGET_TAVILY_USD` / `SCAN_MIN_START_USD` | `0.75` / `0.40` / `0.05` | Per-scan reservation; pause threshold | M1 |
 | `SPEND_LEDGER_BACKEND` / `SPEND_LEDGER_PATH` / `SPEND_LEDGER_HF_REPO` / `HF_TOKEN` | `file` / `./data/spend_ledger.json` / unset / unset (secret) | `file` or `hf_dataset`; file location; `<user>/pir-spend-ledger` private dataset; its write token | M1 (HF: M2) |
-| `LIVE_SCANS_ENABLED` | `true` | Kill switch; `false` = replays only, no keys needed | M2 |
-| `RATE_LIMIT_PER_CLIENT_HOUR` / `_PER_CLIENT_DAY` / `_GLOBAL_DAY` / `MAX_CONCURRENT_SCANS` | `3` / `10` / `30` / `2` | Live-scan limits (AC-50) | M2 |
-| `TRUSTED_PROXY_HOPS` | `0` (deploy: likely `1`) | Which `X-Forwarded-For` entry is the client | M2 |
+| `LIVE_SCANS_ENABLED` / `TRUSTED_PROXY_HOPS` | `true` / `0` (deploy: likely `1`) | Kill switch, `false` = replays only, no keys needed; which `X-Forwarded-For` entry is the client | M2 |
+| `RATE_LIMIT_PER_CLIENT_HOUR` / `_PER_CLIENT_DAY` / `_GLOBAL_DAY` / `MAX_CONCURRENT_SCANS` | `3` / `10` / `10` / `2` | Live-scan limits (AC-50) | M2 |
+| `MAX_CONCURRENT_REPLAYS` / `MAX_SSE_STREAMS` / `RATE_LIMIT_REPLAYS_PER_CLIENT_HOUR` | `10` / `40` / `30` | Replay and stream caps (section 8; per client also 2 replays, 4 streams) | M2 |
 | `FEATURE_PROGRESS_FEED` / `FEATURE_MARKDOWN_EXPORT` / `FEATURE_PROOF` | `true` / `true` / `false` | Cut switches (AC-42, AC-64, AC-65) | M2 |
 | `REPLAY_DIR` / `REPLAY_MAX_SECONDS` / `DATA_DIR` / `JOB_TTL_S` / `MAX_JOBS` | `./demo/replays` / `20` / `./data` / `3600` / `200` | Recordings, pacing (AC-49); caches and local ledger; job retention | M1 |
 | `PORT` / `LOG_LEVEL` / `PIR_LIVE_TESTS` | `8000` (Space: `7860`) / `INFO` / unset | Listen port; JSON log level; `1` enables `live` tests | M1 |
 
-Required sets: `scan` and `eval` need `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `TAVILY_API_KEY` (unless research is recorded), plus `LANGSMITH_API_KEY` for `eval`; `serve` with `LIVE_SCANS_ENABLED=true` needs the scan set, plus `HF_TOKEN` and `SPEND_LEDGER_HF_REPO` with `SPEND_LEDGER_BACKEND=hf_dataset`; `serve` with `LIVE_SCANS_ENABLED=false` needs nothing.
+Required sets: `scan` and `eval` need `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `TAVILY_API_KEY` (unless research is recorded), plus `LANGSMITH_API_KEY` for `eval`, and after deploy `HF_TOKEN`, `SPEND_LEDGER_HF_REPO` and `SPEND_LEDGER_BACKEND=hf_dataset` (also for `record`); `serve` with `LIVE_SCANS_ENABLED=true` needs the scan set, plus `HF_TOKEN` and `SPEND_LEDGER_HF_REPO` with `SPEND_LEDGER_BACKEND=hf_dataset`; `serve` with `LIVE_SCANS_ENABLED=false` needs nothing.
 
 ## Expensive to change
 
 | Item | Why it is expensive |
 |---|---|
 | **Report schema v1.0** (verdict labels, categorical confidence, `Finding` rules, `StepStatus.tools`) | The UI, Markdown export, mock fixtures, eval scoring, the published JSON Schema and every recorded replay depend on it; a change means re-recording replays (credits) and reworking UI and tests. |
-| **Sandbox boundary**: `Executor` interface, SDK-prepare / REST-run split (uid 65534, explicit network per command), agent protocol | It carries the hard safety guarantee (AC-29); any change re-opens the security review and the canary and executor tests. There is no fallback, so a platform change has no second path. |
+| **Sandbox boundary**: `Executor` interface, SDK-prepare / REST-run split (uid 65534, explicit network per command), agent protocol, and the invariant that during network-ON commands nothing from the repo or an sdist executes and no repo-controlled file influences a tool (`--no-build`, wheels only, empty uv working directory, explicit interpreter, sanitized input; ADR-0032) | It carries the hard safety guarantee (AC-29); network ON has no egress allowlist, so adding any network-ON step that can run repo code would let visitors use the Nebius account for attacks. Any change re-opens the security review and the canary and executor tests. There is no fallback, so a platform change has no second path. |
 | **Index-once static analysis and the ast tool contract** | Prompts, the verdict gate and the measured precision are tuned to these tools and index fields; a change invalidates eval results. |
 | **HTTP API contract** (job + SSE, endpoints, error codes and messages, `AppConfigResponse`, `HealthResponse.budget_remaining`) | The UI, mock adapter, e2e tests, replays and the keepalive check depend on it. |
 | **External services**: Token Factory (Nemotron, Sandboxes), Tavily, OSV, LangSmith | Token Factory is a hackathon requirement and Tavily a prize target; LangSmith holds the dataset and experiment history; switching means new clients, metering and recorded fixtures. |
 | **Hosting**: free HF Space, one process, in-memory jobs, no auth | Moving hosts changes deploy, secrets, keepalive and ledger; more than one worker needs a shared job store; accounts would be a new design (a non-goal). |
-| **Durable spend ledger** (private HF dataset) and the two pools | It is the state behind the hard cap and the health fractions; a careless migration resets recorded spend and voids the cap. |
+| **Durable spend ledger** (private HF dataset shared by every spender after deploy; two pools, per-spender allowances, daily state, compare-and-swap writes) | It is the state behind the hard cap, the daily ceiling and the health fractions; a careless migration resets recorded spend and voids the cap, and a second ledger would let spenders overspend the real balance. |
 | **Eval case format, metric definitions, the 0.80 bar, `latest.json`** | Changes break comparison with earlier runs and the LangSmith dataset; the bar drives the orchestrator's pipeline switch; the UI's eval figure reads `latest.json`. |
 | **Recorded replay format** | Recordings come from real scans; a format change means re-recording close to the deadline. |
 

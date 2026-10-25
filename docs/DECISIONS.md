@@ -9,27 +9,33 @@ Each significant technical decision for ProveItReachable, with its reasons, the 
 | [ADR-0003](#adr-0003-run-untrusted-repo-code-only-inside-the-sandbox) | Run untrusted repo code only inside the Sandbox | Superseded by ADR-0021 | 2026-10-24 |
 | [ADR-0004](#adr-0004-local-docker-fallback-only-by-explicit-approval) | Local Docker fallback only by explicit approval | Superseded by ADR-0021 | 2026-10-24 |
 | [ADR-0005](#adr-0005-repo-intake-through-the-github-api-with-size-caps) | Repo intake through the GitHub API with size caps | Accepted | 2026-10-24 |
-| [ADR-0006](#adr-0006-dependency-resolution-order-and-supported-sources) | Dependency resolution order and supported sources | Accepted | 2026-10-24 |
+| [ADR-0006](#adr-0006-dependency-resolution-order-and-supported-sources) | Dependency resolution order and supported sources | Superseded by ADR-0028 | 2026-10-24 |
 | [ADR-0007](#adr-0007-deterministic-ast-index-queried-by-nemotron-through-tool-calls) | Deterministic ast index queried by Nemotron through tool calls | Accepted | 2026-10-24 |
 | [ADR-0008](#adr-0008-osvdev-as-the-advisory-source) | OSV.dev as the advisory source | Accepted | 2026-10-24 |
-| [ADR-0009](#adr-0009-tavily-research-with-exact-source-urls) | Tavily research with exact source URLs | Accepted | 2026-10-24 |
+| [ADR-0009](#adr-0009-tavily-research-with-exact-source-urls) | Tavily research with exact source URLs | Superseded by ADR-0031 | 2026-10-24 |
 | [ADR-0010](#adr-0010-report-schema-verdicts-confidence-and-ranking) | Report schema, verdicts, confidence and ranking | Accepted | 2026-10-24 |
 | [ADR-0011](#adr-0011-job-based-http-api-with-server-sent-events-and-a-cli) | Job-based HTTP API with server-sent events and a CLI | Accepted | 2026-10-24 |
 | [ADR-0012](#adr-0012-single-screen-frontend-in-plain-html-css-and-javascript) | Single-screen frontend in plain HTML, CSS and JavaScript | Accepted | 2026-10-24 |
 | [ADR-0013](#adr-0013-host-the-demo-on-a-free-hugging-face-docker-space) | Host the demo on a free Hugging Face Docker Space | Accepted | 2026-10-24 |
 | [ADR-0014](#adr-0014-spend-metering-hard-caps-and-rate-limits) | Spend metering, hard caps and rate limits | Superseded by ADR-0022 | 2026-10-24 |
-| [ADR-0015](#adr-0015-durable-spend-ledger-in-a-private-hugging-face-dataset) | Durable spend ledger in a private Hugging Face dataset | Accepted | 2026-10-24 |
+| [ADR-0015](#adr-0015-durable-spend-ledger-in-a-private-hugging-face-dataset) | Durable spend ledger in a private Hugging Face dataset | Superseded by ADR-0029 | 2026-10-24 |
 | [ADR-0016](#adr-0016-cached-replays-for-curated-demo-repos) | Cached replays for curated demo repos | Accepted | 2026-10-24 |
 | [ADR-0017](#adr-0017-evaluation-suite-metrics-and-precision-bar-with-langsmith) | Evaluation suite, metrics and precision bar with LangSmith | Accepted | 2026-10-24 |
 | [ADR-0018](#adr-0018-call-chain-proof-with-a-recording-stub-gated-and-cuttable) | Call-chain proof with a recording stub, gated and cuttable | Accepted | 2026-10-24 |
 | [ADR-0019](#adr-0019-bounded-timeouts-and-failure-becomes-uncertain) | Bounded timeouts and failure becomes uncertain | Accepted | 2026-10-24 |
 | [ADR-0020](#adr-0020-mit-license-and-secrets-only-from-environment-variables) | MIT license and secrets only from environment variables | Accepted | 2026-10-24 |
-| [ADR-0021](#adr-0021-sandbox-runs-through-the-sdk-and-rest-api-with-no-docker-fallback) | Sandbox runs through the SDK and REST API, with no Docker fallback | Accepted | 2026-10-25 |
-| [ADR-0022](#adr-0022-spend-metering-from-reported-sandbox-cost-with-build-and-demo-caps) | Spend metering from reported Sandbox cost, with build and demo caps | Accepted | 2026-10-25 |
+| [ADR-0021](#adr-0021-sandbox-runs-through-the-sdk-and-rest-api-with-no-docker-fallback) | Sandbox runs through the SDK and REST API, with no Docker fallback | Superseded by ADR-0027 | 2026-10-25 |
+| [ADR-0022](#adr-0022-spend-metering-from-reported-sandbox-cost-with-build-and-demo-caps) | Spend metering from reported Sandbox cost, with build and demo caps | Superseded by ADR-0029 | 2026-10-25 |
 | [ADR-0023](#adr-0023-nemotron-3-super-with-native-tool-calling-only) | Nemotron 3 Super with native tool calling only | Accepted | 2026-10-25 |
 | [ADR-0024](#adr-0024-production-operations-ci-json-logs-and-spend-alerts) | Production operations: CI, JSON logs and spend alerts | Accepted | 2026-10-25 |
 | [ADR-0025](#adr-0025-contract-additions-from-the-prototype-review) | Contract additions from the prototype review | Accepted | 2026-10-25 |
 | [ADR-0026](#adr-0026-self-hosted-geist-fonts-under-a-strict-csp) | Self-hosted Geist fonts under a strict CSP | Accepted | 2026-10-25 |
+| [ADR-0027](#adr-0027-sandbox-steps-with-network-on-never-run-repository-code) | Sandbox steps with network on never run repository code | Superseded by ADR-0032 | 2026-10-25 |
+| [ADR-0028](#adr-0028-dependency-resolution-order-compiled-without-builds) | Dependency resolution order, compiled without builds | Accepted, amended by ADR-0032 | 2026-10-25 |
+| [ADR-0029](#adr-0029-one-spend-ledger-for-every-spender-with-allowances-and-a-daily-ceiling) | One spend ledger for every spender, with allowances and a daily ceiling | Accepted | 2026-10-25 |
+| [ADR-0030](#adr-0030-images-pinned-by-digest-and-hash-checked-installs) | Images pinned by digest and hash-checked installs | Accepted | 2026-10-25 |
+| [ADR-0031](#adr-0031-tavily-research-with-exact-source-urls-and-a-7-day-cache) | Tavily research with exact source URLs and a 7-day cache | Accepted | 2026-10-25 |
+| [ADR-0032](#adr-0032-no-repository-file-influences-a-network-on-step) | No repository file influences a network-on step | Accepted | 2026-10-25 |
 
 ## ADR-0001: Python and FastAPI service with typed schemas
 
@@ -160,7 +166,7 @@ Validation needs three GitHub calls and gives clear, early errors. Results are r
 ## ADR-0006: Dependency resolution order and supported sources
 
 Date: 2026-10-24
-Status: Accepted
+Status: Superseded by ADR-0028
 
 ### Context
 
@@ -232,7 +238,7 @@ Free and keyless. Severity comes from the advisory's own field and is "unknown" 
 ## ADR-0009: Tavily research with exact source URLs
 
 Date: 2026-10-24
-Status: Accepted
+Status: Superseded by ADR-0031
 
 ### Context
 
@@ -390,7 +396,7 @@ Overspending is prevented by design, at the cost of refusing some scans early. R
 ## ADR-0015: Durable spend ledger in a private Hugging Face dataset
 
 Date: 2026-10-24
-Status: Accepted
+Status: Superseded by ADR-0029
 
 ### Context
 
@@ -540,7 +546,7 @@ The project is simple to set up from `.env.example`. Redaction must cover every 
 ## ADR-0021: Sandbox runs through the SDK and REST API, with no Docker fallback
 
 Date: 2026-10-25
-Status: Accepted
+Status: Superseded by ADR-0027
 
 ### Context
 
@@ -567,7 +573,7 @@ One safety boundary to review and test. Two ways of talking to the same service 
 ## ADR-0022: Spend metering from reported Sandbox cost, with build and demo caps
 
 Date: 2026-10-25
-Status: Accepted
+Status: Superseded by ADR-0029
 
 ### Context
 
@@ -692,3 +698,169 @@ The font files (woff2) are stored in `web/fonts/` with the licence text, declare
 ### Consequences
 
 A few hundred kilobytes of font files in the repository. The UI works without any outside network access.
+
+## ADR-0027: Sandbox steps with network on never run repository code
+
+Date: 2026-10-25
+Status: Superseded by ADR-0032
+
+### Context
+
+ADR-0021 ran every step that touches repo files in the Token Factory Sandbox, as a non-root user, with the network switched on only to download the repo, compile its dependency list, or install dependencies for the proof. The security design review (round 1, 2026-10-25) pointed out that the design assumed those network-on runs could reach only GitHub and PyPI. They cannot be limited: the platform's network setting is a plain on/off switch with no list of allowed sites (confirmed in the platform spike). Compiling a dependency list can run the repo's own build scripts (`setup.py` or a build backend), and installing can build source packages. Either would let any anonymous visitor run their own code with full internet access on the owner's Nebius account, for example to scan or attack other sites, which could get the account suspended before the demo ends on 2026-12-15.
+
+### Decision
+
+- Unchanged from ADR-0021: code from an analyzed repository never runs anywhere except inside a Token Factory Sandbox, and everything the Sandbox returns is untrusted and strictly checked. `ContreeExecutor` is the only real executor; the SDK only imports the base image, adds our own agent with one fixed setup command, and untags images; every agent command runs through the REST API as uid/gid 65534 with the network explicitly on or off; the repo is downloaded once into a clean saved image and analysed with the network off; no secrets enter the Sandbox; a timeout always becomes "sandbox timeout"; there is no Docker fallback.
+- New: **network on means the whole internet.** It stays on only for three steps, and none of them runs anything from the repo or from a source package:
+  - downloading and unpacking the repo, done by our own agent only;
+  - compiling the dependency list with `uv pip compile --no-build` (and `UV_NO_BUILD=1`), ignoring any uv settings in the repo, so no build script ever runs. A repo whose dependency list can only be found by building it is reported as unresolved with "dynamic metadata needs a build; not run";
+  - installing dependencies for the proof from ready-made wheels only (`--only-binary :all:`, `--no-build`). A dependency with no wheel is not installed, and the proof says "not proven" with "uncertain: no wheel ...".
+- The only step that runs repo code, the proof run, has the network off. The time limits of the network-on steps stay at 120, 180 and 300 seconds.
+
+### Alternatives considered
+
+- Accepting the risk with a lower compile quota (the reviewer's other option): fewer runs, but each one still gives a stranger internet-connected code execution on our account.
+- Downloading source packages with the network on and building them later with it off: keeps more repos resolvable, but adds steps, time and complexity before the deadline; it can be added later.
+- Not compiling at all: every repo without a lockfile would come out unresolved, including the many with a plain `pyproject.toml`.
+
+### Consequences
+
+The safety guarantee no longer depends on a network filter the platform does not have. Repos that declare dependencies only through `setup.py`, `setup.cfg` or dynamic metadata come out "incomplete" with a clear reason, and some proofs end "not proven". This rule is now part of the expensive-to-change Sandbox boundary. Platform feedback: an egress allowlist would let builds run safely.
+
+## ADR-0028: Dependency resolution order, compiled without builds
+
+Date: 2026-10-25
+Status: Accepted, amended by ADR-0032 (`--no-sources` and sanitized compile input)
+
+### Context
+
+ADR-0006 set the order for finding exact dependency versions and allowed `uv pip compile` on `setup.py` and `setup.cfg`, noting that compiling can execute repo code. ADR-0027 forbids running any repo code while the network is on, so compiling may no longer build anything.
+
+### Decision
+
+- Order: `uv.lock`, `poetry.lock`, `Pipfile.lock`, then a fully pinned root `requirements.txt`, then `uv pip compile --no-build` on a `pyproject.toml` whose dependencies are written out (not "dynamic"), a `requirements.in`, or an unpinned `requirements.txt`.
+- A repo with only `setup.py` / `setup.cfg`, or with dynamic dependency metadata, or whose compile would need to build a package, is not built: its declared dependencies are unresolved with "dynamic metadata needs a build; not run".
+- Unchanged from ADR-0006: lockfiles contribute every package including transitive ones, with groups; compiling covers runtime dependencies and their transitive ones only, and says so; anything unresolvable, or from git, a local path or a URL, is listed as unresolved with the reason and never looked up with a guessed version; names and versions must match the PEP 503 and PEP 440 formats. All of this runs in the Sandbox, because the repo's files are untrusted.
+
+### Alternatives considered
+
+- Building with the network on: the risk ADR-0027 removes.
+- Reading `setup.py` with a parser instead of running it: unreliable, since `setup.py` is a program; left as a possible improvement.
+- Supporting monorepo subfolders: more value, more time; still a limitation.
+
+### Consequences
+
+The resolution method ("locked" or "compiled") is always visible. Repos that need a build, and repos with only a `Pipfile`, come out unresolved with the reason; the report is "incomplete" rather than wrong.
+
+## ADR-0029: One spend ledger for every spender, with allowances and a daily ceiling
+
+Date: 2026-10-25
+Status: Accepted
+
+### Context
+
+ADR-0015 kept spending in a private Hugging Face dataset for the hosted demo and in a local file otherwise; ADR-0022 metered actual cost, with $10 and $5 build caps locally and hosted caps set at deploy. The security review (round 1) found three gaps. After deploy, local scans, eval runs and demo recordings would still spend through the local file on the build caps, which the hosted cap cannot see, so total spending could exceed the real balance. Nothing limited spending per day, so a visitor rotating addresses could use up the hosted budget in about a day and leave live scans off for six weeks. And the hold for a model call assumed the answer stays within `max_tokens`, although reasoning tokens can go past it.
+
+### Decision
+
+- **Metering (unchanged from ADR-0022):** model spend = reported tokens × configured price; Sandbox spend = each operation's reported cost, else its duration × $0.001 per second. Every paid call first holds an upper-bound estimate against the scan's budget and replaces it with the real amount. Two pools: Token Factory (including Sandboxes) and Tavily.
+- **Before deploy:** every spender writes to a local file ledger with the build caps ($10 and $5).
+- **After deploy: one ledger for everyone.** The private Hugging Face dataset holds the caps (balance left at deploy minus $5 and $3 headroom, expected about $25 and $12) and an allowance per spender: `local` (command-line scans, eval runs, recordings; default $5 and $2) and `hosted` (the public demo; the rest). They are written once with `python -m pir ledger set-caps`. The app refuses to use the local file once the dataset is configured, and refuses to spend until caps are set. Each spender can only reserve within its own allowance, so together they can never pass the caps.
+- **Safe concurrent writes:** each change is read → change → write, where the write names the version it read (`parent_commit`); if someone else wrote in between, the write is rejected and the change is re-applied to the fresh copy, up to three times. Inside one process a lock makes reservations and settlements take turns. If the ledger cannot be read or written, live scans pause (fail closed). Reservations left by a crash count as spent.
+- **Daily ceiling for the hosted demo:** per pool, (allowance − spent) / days left until 2026-12-15, fixed at the first scan of each day. Unspent money rolls forward. Over the ceiling, visitors are told to retry after midnight UTC; replays still work. The global limit falls from 30 to 10 live scans a day; per visitor 3 an hour and 10 a day, 2 at once; per-scan reservations $0.75 and $0.40; the kill switch stays.
+- **Model-call holds:** requests send `max_completion_tokens`, which also bounds reasoning tokens. If Token Factory does not honour it (checked in the first model-client task), the hold uses a worst-case token budget instead. If a call still costs more than its hold, that scan may spend nothing more.
+
+### Alternatives considered
+
+- Separate ledgers with the remaining balance split between them: the reviewer's concern stays, because two records must be kept consistent by hand.
+- One shared ledger without allowances: a long eval run could starve the demo, or the demo the eval.
+- Caps in each process's settings: settings on the laptop and the Space can drift apart; storing them in the ledger gives one source of truth.
+- A database such as Upstash Redis: a new vendor and account, while the Hugging Face dataset already supports safe conditional writes.
+- Forbidding local spending after deploy: blocks the eval runs that measure precision.
+
+### Consequences
+
+Spending stays within the real balance whoever spends it, and the hosted budget lasts until 2026-12-15. Each scan makes two or more dataset writes; the commit rate is checked at deploy. After deploy the local `.env` needs `HF_TOKEN` and the dataset name. Busy days end earlier for visitors, with replays still available.
+
+## ADR-0030: Images pinned by digest and hash-checked installs
+
+Date: 2026-10-25
+Status: Accepted
+
+### Context
+
+The security review (round 1) noted that the Sandbox base image and the Space's `python:3.13-slim` image are referenced by tags, which their publishers can move, and that the Space installs Python packages without checking their hashes. A replaced image or package would run with our secrets on the Space or inside our Sandbox runs.
+
+### Decision
+
+- Both images are referenced by their exact `@sha256:` digest; the app refuses a Sandbox image setting without one.
+- The Space installs Python packages only from a committed `requirements.lock` that lists a hash for every file, using `pip install --require-hashes`. The lock is generated with `uv pip compile --generate-hashes`, so `uv` becomes a development-only dependency. A test checks that every runtime dependency appears in the lock with a hash.
+
+### Alternatives considered
+
+- pip-tools for the lock file: works, but adds a second tool when uv is already the resolver used in the Sandbox.
+- Writing hashes by hand: error-prone.
+- Keeping tags: simplest, but the image can change underneath us.
+
+### Consequences
+
+Updating an image or a dependency becomes a deliberate edit (new digest or regenerated lock). The first Sandbox task checks that the SDK accepts a digest reference.
+
+## ADR-0031: Tavily research with exact source URLs and a 7-day cache
+
+Date: 2026-10-25
+Status: Accepted
+
+### Context
+
+ADR-0009 cached research results per advisory for 30 days. The security review (round 1) noted that a poisoned search result would then be shown to every visitor for a month.
+
+### Decision
+
+- Unchanged from ADR-0009: for each advisory, one Tavily search (basic depth by default), then one Nemotron extraction that names the vulnerable function from the OSV text and the snippets; a name is kept only if it has the shape of a Python path and its last part appears word for word in the supplied text; evidence URLs must be among the URLs returned; links are stored exactly as returned; if no function is identified the finding is `uncertain` with "vulnerable function not identified".
+- Changed: research results are cached for **7 days**, and only under advisory IDs that pass a strict format check.
+
+### Alternatives considered
+
+- 30 days: the exposure the reviewer flagged.
+- 1 day or no cache: repeated advisories would cost Tavily credits on almost every scan for little gain.
+
+### Consequences
+
+A bad result is served for at most a week, and its source link stays visible on the finding so readers can judge it. An advisory's vulnerable function rarely changes within a week, and the hosted cache is lost on every restart anyway, so the extra cost is at most 1 to 2 credits per advisory per week.
+
+## ADR-0032: No repository file influences a network-on step
+
+Date: 2026-10-25
+Status: Accepted
+
+### Context
+
+ADR-0027 made sure no build script runs while the Sandbox has internet access. The security design review (round 2, 2026-10-25) found a gap: the dependency tool `uv` was started inside the repository's folder, and before doing anything it looks around its current folder for a Python program to use (a `.venv` folder, a `.python-version` file). A repository could ship a fake `.venv/bin/python` and so have its own program run, with full internet access, on the owner's account. The review also found that a repository could make uv contact servers of its choosing, through `[tool.uv.sources]` in `pyproject.toml` or through option lines such as `--extra-index-url` in a requirements file (no code runs that way, but the repo picks the hosts and can invent versions). A third, smaller point: a single model call that costs more than its reserved amount can push spending a little past an allowance.
+
+### Decision
+
+This ADR replaces ADR-0027's network-on rule with a stronger **invariant: while networking is on, nothing from the repository executes and no file the repository controls influences any tool run** (as working folder, configuration, interpreter, environment or input). Everything else in ADR-0027 stays as it was. Concretely:
+
+- Every uv call (dependency compile and proof install) starts in an empty folder outside the repository (`/tmp/uvwd`, created fresh by our agent; the step fails if it already exists), is told exactly which Python to use (`--python /usr/local/bin/python3.13`), may not download a Python (`UV_PYTHON_DOWNLOADS=never`), and gets a fixed environment with `VIRTUAL_ENV` and `CONDA_PREFIX` unset.
+- **Amends ADR-0028:** compile also runs with `--no-sources`, and uv never reads the repository's manifest. Our agent reads it as plain data, keeps only ordinary package requirements, and writes them to a separate file (`/tmp/pirin/requirements.in`) that is passed to uv by its full path. Option lines (`--index-url`, `--extra-index-url`, `--find-links`, `-e`, `-r`, `-c` and any other line starting with `-`) are dropped and noted; `-r` includes inside the repo are read by the agent itself, as for pinned requirements files. Requirements that point at a web address, a local path or a version-control repository are dropped and reported unresolved with ADR-0028's existing reason "non-registry source", so no new reason code is needed. Both uv calls also name the package index explicitly (`https://pypi.org/simple`).
+- Tests: a fixture repository with a booby-trapped `.venv/bin/python`, `pyvenv.cfg`, a `.pth` file and `.python-version` (plus uv settings and hostile requirement lines); fast tests check uv's working folder, interpreter flag, environment and sanitized input; a live test proves in the real Sandbox that the trap never fires and gates live compile and proof install.
+- Related round-2 items (ADR-0029 is unchanged in substance): `ledger set-caps` keeps at least $5 (Token Factory) and $3 (Tavily) between the caps and the real balance, and refuses to write caps until it has proved on the live ledger that Hugging Face rejects a write based on an out-of-date version. Until that proof passes, the hosted ledger refuses all spending and live scans stay paused.
+
+**Audit of every network-on step** (working folder, configuration, interpreter, environment; all pass after this ADR):
+
+| Step | Working folder | Configuration | Interpreter | Environment and inputs |
+|---|---|---|---|---|
+| `fetch` (our agent only) | `/`; the repo does not exist yet | Python `-I -S` reads no `PYTHON*` variable, `site`, `.pth` or user files | `/usr/local/bin/python3.13` by full path, from the pinned base image | `env -i` fixed set, no proxy variables; URL built from validated parts; extraction confined to `/work/repo` |
+| `resolve --compile` (uv) | fresh empty `/tmp/uvwd` | `--no-config` (no `uv.toml`, `[tool.uv]`, user or system files), `--no-sources` | `--python /usr/local/bin/python3.13`, no downloads; no `.venv`, `.python-version`, `VIRTUAL_ENV`, `CONDA_PREFIX` or `PATH` search | fixed set; input is the agent's sanitized file outside the repo; `--index-url` fixed; `--no-build`; `HOME` and cache under `/tmp`, out of the repo's reach |
+| `proof-install` (uv) | fresh empty `/tmp/uvwd` | as compile | as compile | fixed set; each `name==version` built by the agent from validated pins after `--`; `--only-binary :all:`, `--no-build`, `--no-deps`; target `/work/deps`, outside the repo |
+
+### Alternatives considered
+
+- Keeping the repository folder as uv's working folder and only adding `--python`: closes the known trick but leaves uv free to read other files there in future versions; an empty folder removes the whole class.
+- Letting uv read the repository's `pyproject.toml` or requirements file with more "ignore" flags: each new uv feature could reopen the hole; having our agent rewrite the input is simpler to check.
+- Rejecting any repository that contains a `.venv` folder: easy to dodge (`.python-version`, symlinks) and it would refuse harmless repos.
+
+### Consequences
+
+uv can no longer be steered by anything inside a repository, and the guarantee is checked by fast tests and a live canary. Repos that rely on extra package indexes, local paths or git dependencies show those dependencies as unresolved with a clear reason, and constraint files are ignored (noted in the report). The rule is part of the expensive-to-change Sandbox boundary; any new network-on step must pass the same audit.
