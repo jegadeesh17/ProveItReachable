@@ -38,6 +38,7 @@ Each significant technical decision for ProveItReachable, with its reasons, the 
 | [ADR-0032](#adr-0032-no-repository-file-influences-a-network-on-step) | No repository file influences a network-on step | Accepted | 2026-10-25 |
 | [ADR-0033](#adr-0033-sandbox-base-image-imported-by-version-tag-and-checked-against-a-reviewed-fingerprint) | Sandbox base image imported by version tag and checked against a reviewed fingerprint | Accepted (amended 2026-10-25: measured on GitHub Actions) | 2026-10-25 |
 | [ADR-0034](#adr-0034-sandbox-contract-corrections-from-the-live-platform-checks) | Sandbox contract corrections from the live platform checks | Accepted | 2026-10-25 |
+| [ADR-0035](#adr-0035-fixed-prompt-token-overhead-in-the-llm-spend-hold) | Fixed prompt-token overhead in the LLM spend hold | Accepted | 2026-10-25 |
 
 ## ADR-0001: Python and FastAPI service with typed schemas
 
@@ -957,3 +958,26 @@ The first runs against the real Nebius Sandbox (M1-TASK-08, 2026-10-25) showed f
 ### Consequences
 
 The contract now matches the platform. The compile and parsing code change in small, testable ways; the protocol cap constant changes in two files; the scan pipeline must catch `ExecutorSpendDenied` for Sandbox steps. Any future change of the Sandbox image also re-records the Sandbox uv error-text fixture.
+
+## ADR-0035: Fixed prompt-token overhead in the LLM spend hold
+
+Date: 2026-10-25
+Status: Accepted (amends the LLM hold estimate of ADR-0029; corrects ARCHITECTURE sections 7.5 and 11.1)
+
+### Context
+
+Before every model call the spend meter sets aside ("holds") an upper-bound estimate of its cost. The prompt part of that estimate was the prompt length in characters divided by 2.5. The first live calls (M1-TASK-09, 2026-10-25) showed that Token Factory's chat template adds about 20 prompt tokens to every call that this does not cover: a 43-character prompt was billed 32 prompt tokens against an estimate of 18. A call that uses its full answer allowance can then cost more than its hold; the scan budget then marks the scan as overrun and refuses all later spending in that scan, so reasoning ends early.
+
+### Decision
+
+The hold's prompt tokens become `ceil(chars / CHARS_PER_TOKEN) + PROMPT_OVERHEAD_TOKENS`, with `CHARS_PER_TOKEN = 2.5` and `PROMPT_OVERHEAD_TOKENS = 64`, both module constants in `pir/llm.py`. The overhead applies in both modes: the normal one (answer allowance `max_tokens`) and the fallback one (answer allowance `LLM_HOLD_COMPLETION_TOKENS`). 64 is about three times the observed overhead, leaving room for tool definitions and per-message wrapping. What is recorded after the call (the billed usage) does not change.
+
+### Alternatives considered
+
+- An environment setting for the overhead: the project keeps the other estimate factor (`CHARS_PER_TOKEN`) as a constant, and a setting adds a knob nobody needs to turn; a code change with a test is the right way to adjust it.
+- A smaller overhead (for example 24): fits the one measurement but leaves no margin for longer conversations with tools.
+- Raising the overrun tolerance instead: would weaken the cap guarantee rather than fix the estimate.
+
+### Consequences
+
+Each hold grows by 64 prompt tokens, a fraction of a cent at the configured prices, so the budget slightly over-reserves during a scan and releases the difference when the call is recorded. Overruns caused by the template overhead stop. The LLM client's hold calculation and its unit test change; no other contract changes.
