@@ -31,11 +31,13 @@ Each significant technical decision for ProveItReachable, with its reasons, the 
 | [ADR-0025](#adr-0025-contract-additions-from-the-prototype-review) | Contract additions from the prototype review | Accepted | 2026-10-25 |
 | [ADR-0026](#adr-0026-self-hosted-geist-fonts-under-a-strict-csp) | Self-hosted Geist fonts under a strict CSP | Accepted | 2026-10-25 |
 | [ADR-0027](#adr-0027-sandbox-steps-with-network-on-never-run-repository-code) | Sandbox steps with network on never run repository code | Superseded by ADR-0032 | 2026-10-25 |
-| [ADR-0028](#adr-0028-dependency-resolution-order-compiled-without-builds) | Dependency resolution order, compiled without builds | Accepted, amended by ADR-0032 | 2026-10-25 |
+| [ADR-0028](#adr-0028-dependency-resolution-order-compiled-without-builds) | Dependency resolution order, compiled without builds | Accepted, amended by ADR-0032 and ADR-0034 | 2026-10-25 |
 | [ADR-0029](#adr-0029-one-spend-ledger-for-every-spender-with-allowances-and-a-daily-ceiling) | One spend ledger for every spender, with allowances and a daily ceiling | Accepted | 2026-10-25 |
 | [ADR-0030](#adr-0030-images-pinned-by-digest-and-hash-checked-installs) | Images pinned by digest and hash-checked installs | Accepted | 2026-10-25 |
 | [ADR-0031](#adr-0031-tavily-research-with-exact-source-urls-and-a-7-day-cache) | Tavily research with exact source URLs and a 7-day cache | Accepted | 2026-10-25 |
 | [ADR-0032](#adr-0032-no-repository-file-influences-a-network-on-step) | No repository file influences a network-on step | Accepted | 2026-10-25 |
+| [ADR-0033](#adr-0033-sandbox-base-image-imported-by-version-tag-and-checked-against-a-reviewed-fingerprint) | Sandbox base image imported by version tag and checked against a reviewed fingerprint | Proposed | 2026-10-25 |
+| [ADR-0034](#adr-0034-sandbox-contract-corrections-from-the-live-platform-checks) | Sandbox contract corrections from the live platform checks | Accepted | 2026-10-25 |
 
 ## ADR-0001: Python and FastAPI service with typed schemas
 
@@ -730,7 +732,7 @@ The safety guarantee no longer depends on a network filter the platform does not
 ## ADR-0028: Dependency resolution order, compiled without builds
 
 Date: 2026-10-25
-Status: Accepted, amended by ADR-0032 (`--no-sources` and sanitized compile input)
+Status: Accepted, amended by ADR-0032 (`--no-sources` and sanitized compile input) and ADR-0034 (compile output file, authoritative uv error text)
 
 ### Context
 
@@ -864,3 +866,67 @@ This ADR replaces ADR-0027's network-on rule with a stronger **invariant: while 
 ### Consequences
 
 uv can no longer be steered by anything inside a repository, and the guarantee is checked by fast tests and a live canary. Repos that rely on extra package indexes, local paths or git dependencies show those dependencies as unresolved with a clear reason, and constraint files are ignored (noted in the report). The rule is part of the expensive-to-change Sandbox boundary; any new network-on step must pass the same audit.
+
+## ADR-0033: Sandbox base image imported by version tag and checked against a reviewed fingerprint
+
+Date: 2026-10-25
+Status: Proposed (needs the user's approval; once accepted it amends ADR-0030 for the Sandbox image only, and the Space image stays pinned by digest)
+
+### Context
+
+ADR-0030 says the Sandbox's starting image must be named by its exact fingerprint (an `@sha256:` digest), so nobody can swap it under us by moving a tag. The live check on 2026-10-25 (M1-TASK-08) found that the Sandbox's image importer (contree-sdk 0.3.6 `images.oci`) answers `HTTP 404 page not found` for every digest reference it was given: the ghcr.io index digest, the amd64 manifest digest, with or without a tag, and docker.io as well. Plain tags import fine. Without a `tag=` override the SDK also invents a local name containing `@`, which then fails with 400. As written, live scans cannot start. The demo is on 2026-10-30.
+
+What a swapped image could do: it runs only inside the Sandbox, which holds no secrets, so it cannot steal keys. It could falsify every scan's report, and its Python and uv run our network-on steps (ADR-0032), so it could use those steps (each capped at 120 to 300 seconds and metered) to send traffic from our account. The Python and uv in the image are therefore part of what ADR-0032's guarantee relies on.
+
+### Decision (proposed)
+
+- **Import by a version tag.** The Sandbox imports `ghcr.io/astral-sh/uv:0.9.30-python3.13-bookworm-slim` (astral publishes one tag per uv release; the floating `python3.13-bookworm-slim` tag moves with every release and would trip the check below every week), always with the `tag=` override `pir-base/sha256-<digest hex>`.
+- **Configuration keeps the digest.** `SANDBOX_BASE_IMAGE` stays `<tag>@sha256:<digest>` and the settings check is unchanged: the digest records which reviewed build the tag must deliver. The executor imports only the part before `@`. The developer first confirms with `docker buildx imagetools inspect` that the version tag exists and records its index digest (expected to equal `531f855b...44ca`; if not, the version tag's digest is used).
+- **A reviewed fingerprint, measured outside the Sandbox.** A new agent command `selfcheck` (network off, no arguments) prints: the Python version, the output of `uv --version`, the sha256 of `/usr/local/bin/python3.13`, `/usr/local/lib/libpython3.13.so.1.0`, `/usr/local/bin/uv`, `/usr/local/bin/uvx`, `/lib64/ld-linux-x86-64.so.2` and `/lib/x86_64-linux-gnu/libc.so.6` (a missing file is recorded as `"missing"`), and one hash over every file and link under `/usr/local/lib/python3.13` (sorted relative paths with their content hashes). The developer runs it once with Docker on the laptop, where pulling by digest works: `docker run --rm --platform linux/amd64 --network none --user 65534:65534 -v <dir with agent.pyz>:/opt/pir:ro <SANDBOX_BASE_IMAGE> /usr/local/bin/python3.13 -I -S /opt/pir/agent.pyz selfcheck --args-b64 e30=`. The decoded result, plus the digest it came from, is committed as `src/pir/executor/base_image_fingerprint.json`.
+- **Checked on the image actually used.** In every process, right after `prepare` and before the first `fetch` or `unpack`, `SandboxAgentClient` runs `selfcheck` with network off from the prepared image (cached with `prepare`, so once per process) and requires the result to equal the committed fingerprint exactly, and the fingerprint's digest to equal the digest in `SANDBOX_BASE_IMAGE`. Any difference raises `SandboxFailed("selfcheck", "base image does not match the reviewed fingerprint")`: the scan reports the Sandbox as unavailable and nothing else runs (fail closed). `FakeExecutor` skips the check.
+- The live test `test_images_oci_accepts_digest` is replaced by `test_base_image_fingerprint_matches` (import by tag, `selfcheck` equals the committed fingerprint).
+- Changing the image (new uv or Python) is a deliberate edit, as under ADR-0030: new tag and digest, a re-measured fingerprint, a re-run of the live gates and a re-recorded Sandbox uv error-text fixture (ADR-0034).
+- The digest-import failure is reported to Nebius. When digest imports work, the executor goes back to importing by digest and keeps `selfcheck` as a cheap second check (a new ADR).
+
+### Alternatives considered
+
+- **(a) Check the tag's digest from the host through the ghcr.io registry API, then import by tag** (about half a day; adds `ghcr.io` to the host allowlist): there is a gap between the check and the Sandbox's own download in which the tag can move; it checks the registry, not the image the platform actually runs (the platform reuses earlier imports); and nothing proves afterwards what was imported.
+- **(b) A one-time setup step that checks the digest, imports by tag and stores the platform's image ID in configuration** (about one day; new CLI command and setting): the stored ID cannot change, but the same gap exists at setup and the ID's lifetime on the platform is unknown, so it could vanish during the demo.
+- **(c) Import once by tag, verify inside the Sandbox, then pin the platform image ID:** the same check as the decision, but it adds (b)'s storage and lifetime risk; checking per process on the image in use removes both at the cost of one short Sandbox run per process.
+- **Accept a tag without any check** (minutes): drops the security review's finding 7 for the Sandbox image.
+- **Wait for Nebius to fix digest imports:** no date; misses the demo.
+- **Copy the image into our own registry:** tags there can move too, it needs another account, and digest imports would still fail.
+
+### Consequences
+
+- **Security:** the files that run our network-on steps are proven equal to those of the reviewed build, on the very image every scan uses, so there is no gap between check and use. Limit: the check runs on the image's own Python, so a deliberately crafted malicious image could lie about its own files. That would need a compromise of astral's publishing aimed at this check, and the harm stays bounded as described above. This is weaker than a working digest import and much stronger than a bare tag.
+- **Cost and time:** one Sandbox run of a few seconds per process (well under $0.01, metered); about half a day to one day of development; fits the 2026-10-30 demo.
+- **Availability:** if astral re-publishes the version tag with different contents, live scans stop with "Sandbox unavailable" until the image is re-pinned; demo replays keep working.
+
+## ADR-0034: Sandbox contract corrections from the live platform checks
+
+Date: 2026-10-25
+Status: Accepted (amends ADR-0028 for the compile output and the authoritative uv error text; corrects ARCHITECTURE sections 7.1, 7.2, 13 and 22.1)
+
+### Context
+
+The first runs against the real Nebius Sandbox (M1-TASK-08, 2026-10-25) showed five places where the frozen design did not match how the tools actually behave. None of them changes the safety guarantees; they make the contract describe what the platform and uv really do.
+
+### Decision
+
+1. **Compile output goes to a file.** `uv pip compile ... --output-file -` does not print to the screen in uv 0.13.5 (development) or uv 0.9.30 (Sandbox image): nothing appears and a file literally named `-` is written. The compile command now ends with `--output-file /tmp/pirin/requirements.txt` (a fresh folder created by our agent, so no old file can steer the result). After a successful run the agent reads only that file, with the existing size cap; a missing or oversized file is "compile failed: no output". The workaround that also looked for a file named `-` is removed.
+2. **Output size caps.** The Sandbox accepts at most 10 MiB (10485760 bytes) for `truncate_output_at`; 11 MiB is refused. It stays at 10 MiB. The largest result our agent may print is lowered from 10 MiB to 8 MiB (8388608 bytes of base64) on both sides; the agent checks it before printing and, if over, prints nothing and exits with code 3 ("limit exceeded"), and it writes at most 1 MiB of log lines. A valid result can then never be cut off by the platform. The 50 MiB limit after decompression is unchanged.
+3. **Spend refusals are exceptions in the executor.** The spend meter's `SpendDenied` is a plain value, not an error. The executor turns it into `ExecutorSpendDenied`, an error carrying the original value as `.denied`, raised before any Sandbox request; the Sandbox client lets it pass through, and the scan pipeline maps its reason to "spend cap reached" or "scan budget reached". The model and search clients keep handling the plain value.
+4. **Preparing the image.** In the async SDK, `image.run(...)` is awaited directly and returns the saved image; there is no separate `op.wait()` step.
+5. **Which uv error text counts.** The uv inside the pinned Sandbox image (0.9.30) is authoritative, because it is the one that runs in real scans. The live test must match the Sandbox-image fixture `tests/fixtures/http/contree/uv_no_build_sdist.sandbox.stderr.txt` exactly; the development fixture from uv 0.13.5 stays as a second test case. The detector for "a build would be needed" relies only on the sentences both versions share, and a unit test runs it on both. Neither the image nor the development pin changes: the development uv only regenerates `requirements.lock` on the laptop and never runs in the Sandbox, and moving the image would mean re-running every live gate before the demo.
+
+### Alternatives considered
+
+- Dropping `--output-file` and reading the screen output: shorter, but not checked live, and it depends on how uv treats `--quiet`; a file path in our own folder is unambiguous.
+- Keeping a 10 MiB result cap with 10 MiB truncation: a result near the cap would be cut and wrongly reported as a Sandbox failure.
+- Making `SpendDenied` itself an exception: changes the spend meter (M1-TASK-07, done) and every caller of it, for no gain.
+- Matching uv error text across versions exactly: impossible, as the layouts differ; aligning the development pin to 0.9.30 could change the lock file format for no safety benefit.
+
+### Consequences
+
+The contract now matches the platform. The compile and parsing code change in small, testable ways; the protocol cap constant changes in two files; the scan pipeline must catch `ExecutorSpendDenied` for Sandbox steps. Any future change of the Sandbox image also re-records the Sandbox uv error-text fixture.
