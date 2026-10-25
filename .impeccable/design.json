@@ -1,0 +1,538 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-25T06:04:00.000Z",
+  "title": "Design System: ProveItReachable",
+  "extensions": {
+    "colorMeta": {
+      "page": {
+        "role": "neutral",
+        "displayName": "Page",
+        "canonical": "oklch(98% 0.003 265)",
+        "tonalRamp": [
+          "#151617",
+          "#323334",
+          "#525254",
+          "#737476",
+          "#97989a",
+          "#bdbebf",
+          "#dddee0",
+          "#f1f2f4"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "oklch(100% 0.000 90)",
+        "tonalRamp": [
+          "#161616",
+          "#333333",
+          "#525252",
+          "#747474",
+          "#989898",
+          "#bebebe",
+          "#dedede",
+          "#f2f2f2"
+        ]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Surface 2",
+        "canonical": "oklch(96% 0.005 258)",
+        "tonalRamp": [
+          "#151618",
+          "#313335",
+          "#515355",
+          "#737477",
+          "#96989b",
+          "#bcbec1",
+          "#dcdee1",
+          "#f0f2f5"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "oklch(92% 0.009 265)",
+        "tonalRamp": [
+          "#14161a",
+          "#313337",
+          "#505358",
+          "#72747a",
+          "#95989e",
+          "#bbbec3",
+          "#dbdee4",
+          "#eff2f8"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Line Strong",
+        "canonical": "oklch(85% 0.015 264)",
+        "tonalRamp": [
+          "#13161d",
+          "#2f333b",
+          "#4e535b",
+          "#70757e",
+          "#9498a2",
+          "#b9bec8",
+          "#d9dee8",
+          "#edf2fc"
+        ]
+      },
+      "control-edge": {
+        "role": "neutral",
+        "displayName": "Control Edge",
+        "canonical": "oklch(61% 0.026 262)",
+        "tonalRamp": [
+          "#0f1622",
+          "#2b3341",
+          "#4b5362",
+          "#6c7584",
+          "#8f99a9",
+          "#b5becf",
+          "#d5dff0",
+          "#ebf2ff"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "oklch(19% 0.016 262)",
+        "tonalRamp": [
+          "#12161d",
+          "#2e333b",
+          "#4e535b",
+          "#6f757e",
+          "#9399a2",
+          "#b8bec8",
+          "#d8dee9",
+          "#ecf2fd"
+        ]
+      },
+      "ink-secondary": {
+        "role": "neutral",
+        "displayName": "Ink Secondary",
+        "canonical": "oklch(38% 0.031 265)",
+        "tonalRamp": [
+          "#0f1624",
+          "#2b3343",
+          "#4a5364",
+          "#6c7587",
+          "#8f98ac",
+          "#b4bed3",
+          "#d4def3",
+          "#ecf2ff"
+        ]
+      },
+      "ink-tertiary": {
+        "role": "neutral",
+        "displayName": "Ink Tertiary",
+        "canonical": "oklch(49% 0.031 264)",
+        "tonalRamp": [
+          "#0f1624",
+          "#2b3343",
+          "#4a5364",
+          "#6b7587",
+          "#8f99ac",
+          "#b4bed2",
+          "#d4def3",
+          "#ebf2ff"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Accent",
+        "canonical": "oklch(50% 0.197 265)",
+        "tonalRamp": [
+          "#020054",
+          "#051595",
+          "#1b42bd",
+          "#3a69e6",
+          "#6592fe",
+          "#a1bdfb",
+          "#cfdeff",
+          "#ecf2fe"
+        ]
+      },
+      "accent-deep": {
+        "role": "primary",
+        "displayName": "Accent Deep",
+        "canonical": "oklch(41% 0.168 265)",
+        "tonalRamp": [
+          "#020055",
+          "#092186",
+          "#2548ad",
+          "#446dd5",
+          "#6692ff",
+          "#a1bdfb",
+          "#cfdeff",
+          "#ecf2fe"
+        ]
+      },
+      "accent-tint": {
+        "role": "primary",
+        "displayName": "Accent Tint",
+        "canonical": "oklch(95% 0.019 266)",
+        "tonalRamp": [
+          "#12161f",
+          "#2e333d",
+          "#4e535d",
+          "#6f7480",
+          "#9398a4",
+          "#b8beca",
+          "#d8deeb",
+          "#ecf2ff"
+        ]
+      },
+      "accent-wash": {
+        "role": "primary",
+        "displayName": "Accent Wash",
+        "canonical": "oklch(98% 0.010 267)",
+        "tonalRamp": [
+          "#14161b",
+          "#313338",
+          "#505258",
+          "#72747a",
+          "#95989f",
+          "#bbbec4",
+          "#dbdee5",
+          "#eff2f9"
+        ]
+      },
+      "reach": {
+        "role": "secondary",
+        "displayName": "Reach",
+        "canonical": "oklch(55% 0.191 30)",
+        "tonalRamp": [
+          "#350000",
+          "#640601",
+          "#9d0a00",
+          "#cc3523",
+          "#f75f4a",
+          "#fba494",
+          "#fed2ca",
+          "#feeeea"
+        ]
+      },
+      "reach-deep": {
+        "role": "secondary",
+        "displayName": "Reach Deep",
+        "canonical": "oklch(46% 0.165 31)",
+        "tonalRamp": [
+          "#330000",
+          "#650300",
+          "#991809",
+          "#c24432",
+          "#ec6a56",
+          "#fca393",
+          "#fed2ca",
+          "#feedea"
+        ]
+      },
+      "reach-tint": {
+        "role": "secondary",
+        "displayName": "Reach Tint",
+        "canonical": "oklch(96% 0.019 22)",
+        "tonalRamp": [
+          "#1e1312",
+          "#3c2f2f",
+          "#5c4f4e",
+          "#7f7070",
+          "#a49493",
+          "#cab9b8",
+          "#ead9d9",
+          "#feedec"
+        ]
+      },
+      "reach-wash": {
+        "role": "secondary",
+        "displayName": "Reach Wash",
+        "canonical": "oklch(98% 0.008 27)",
+        "tonalRamp": [
+          "#191514",
+          "#373131",
+          "#575150",
+          "#797372",
+          "#9d9796",
+          "#c3bcbb",
+          "#e3dcdb",
+          "#f7f0ef"
+        ]
+      },
+      "unsure": {
+        "role": "tertiary",
+        "displayName": "Unsure",
+        "canonical": "oklch(76% 0.148 83)",
+        "tonalRamp": [
+          "#201300",
+          "#432f02",
+          "#6b4d02",
+          "#956d01",
+          "#c18f13",
+          "#ecb337",
+          "#fed992",
+          "#fff0d5"
+        ]
+      },
+      "unsure-edge": {
+        "role": "tertiary",
+        "displayName": "Unsure Edge",
+        "canonical": "oklch(61% 0.123 82)",
+        "tonalRamp": [
+          "#211300",
+          "#442f00",
+          "#6a4d06",
+          "#956d09",
+          "#be902f",
+          "#e5b659",
+          "#fed894",
+          "#fff0d6"
+        ]
+      },
+      "unsure-tint": {
+        "role": "tertiary",
+        "displayName": "Unsure Tint",
+        "canonical": "oklch(96% 0.039 91)",
+        "tonalRamp": [
+          "#1d1501",
+          "#3a321b",
+          "#5b5239",
+          "#7d745a",
+          "#a1987d",
+          "#c7bda2",
+          "#e8dec1",
+          "#fbf2d5"
+        ]
+      },
+      "unsure-wash": {
+        "role": "tertiary",
+        "displayName": "Unsure Wash",
+        "canonical": "oklch(99% 0.014 85)",
+        "tonalRamp": [
+          "#19160f",
+          "#36322b",
+          "#56524a",
+          "#78746b",
+          "#9c988f",
+          "#c2bdb4",
+          "#e2ddd4",
+          "#f6f1e7"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Front-door headline only."
+      },
+      "numeral": {
+        "displayName": "Numeral",
+        "purpose": "Funnel figures only, tabular."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Repository name; owner/ in tertiary ink."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Prose, capped near 68ch."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Field labels, column heads, block titles; sentence case."
+      },
+      "data": {
+        "displayName": "Data",
+        "purpose": "file:line, ids, symbols, snippets, tool chips."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-1",
+        "value": "0 1px 2px rgb(16 20 27 / 0.06)",
+        "purpose": "Inputs, list containers, the pipeline panel."
+      },
+      {
+        "name": "shadow-2",
+        "value": "0 1px 2px rgb(16 20 27 / 0.05), 0 4px 8px -2px rgb(16 20 27 / 0.12)",
+        "purpose": "Summary panel, example card, hovered demo rows. At most one raised object per region."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Entering and feedback."
+      },
+      {
+        "name": "ease-in",
+        "value": "cubic-bezier(0.4, 0, 1, 1)",
+        "purpose": "Leaving."
+      },
+      {
+        "name": "dur-fast",
+        "value": "150ms",
+        "purpose": "Hover and press feedback."
+      },
+      {
+        "name": "dur",
+        "value": "220ms",
+        "purpose": "Chevron rotation, stage settle, arrow nudge."
+      },
+      {
+        "name": "dur-slow",
+        "value": "400ms",
+        "purpose": "Meter fill and the advisory strip stagger (70ms per mark)."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "all animation and transitions off",
+        "purpose": "prefers-reduced-motion: reduce removes every animation; the funnel shows final values."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "36rem"
+      },
+      {
+        "name": "md",
+        "value": "48rem"
+      },
+      {
+        "name": "lg",
+        "value": "62rem"
+      },
+      {
+        "name": "xl",
+        "value": "80rem"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Scan repo: the one primary action.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Scan repo</button>",
+      "css": ".ds-btn-primary{min-height:52px;padding:8px 24px;border:1px solid #10141b;border-radius:8px;background:#10141b;color:#fff;font-family:\"Geist\",ui-sans-serif,system-ui,\"Segoe UI\",sans-serif;font-size:1rem;font-weight:500;cursor:pointer;transition:background-color 150ms}.ds-btn-primary:hover{background:#394152;border-color:#394152}.ds-btn-primary:active{transform:translateY(1px)}.ds-btn-primary:focus-visible{outline:2px solid #2a55d1;outline-offset:2px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "New scan and the export downloads.",
+      "html": "<button class=\"ds-btn\" type=\"button\">Download JSON</button>",
+      "css": ".ds-btn{min-height:44px;padding:8px 16px;border:1px solid #c8cdd7;border-radius:8px;background:#fff;color:#10141b;font-family:\"Geist\",ui-sans-serif,system-ui,\"Segoe UI\",sans-serif;font-size:.875rem;font-weight:500;cursor:pointer;transition:background-color 150ms}.ds-btn:hover{background:#f0f2f5;border-color:#7b8494}.ds-btn:focus-visible{outline:2px solid #2a55d1;outline-offset:2px}"
+    },
+    {
+      "name": "Repository URL Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Labelled mono input for the live scan.",
+      "html": "<label class=\"ds-label\" for=\"ds-url\">GitHub repository URL</label><input class=\"ds-input\" id=\"ds-url\" placeholder=\"https://github.com/owner/repo\">",
+      "css": ".ds-label{display:block;margin-bottom:8px;font-family:\"Geist\",ui-sans-serif,system-ui,\"Segoe UI\",sans-serif;font-size:.875rem;font-weight:500;color:#10141b}.ds-input{box-sizing:border-box;width:100%;min-height:52px;padding:8px 16px;border:1px solid #7b8494;border-radius:8px;background:#fff;color:#10141b;font-family:\"Geist Mono\",ui-monospace,Consolas,monospace;font-size:.875rem;box-shadow:0 1px 2px rgb(16 20 27 / .06)}.ds-input::placeholder{color:#576072}.ds-input:focus-visible{outline:2px solid #2a55d1;outline-offset:2px;border-color:#2a55d1}"
+    },
+    {
+      "name": "Demo Row",
+      "kind": "card",
+      "refersTo": "demo-row",
+      "description": "One-click recorded demo with its verdict counts.",
+      "html": "<button class=\"ds-demo\" type=\"button\"><span><span class=\"ds-demo-name\">placeholder-demo/flask-notes</span><span class=\"ds-demo-desc\">A small web app with a likely reachable finding.</span><span class=\"ds-demo-res\">2 likely reachable, 2 uncertain</span></span><span class=\"ds-demo-go\">Run demo</span></button>",
+      "css": ".ds-demo{display:grid;grid-template-columns:1fr auto;gap:8px 16px;align-items:center;width:100%;padding:12px 16px;border:1px solid #e1e4ea;border-radius:12px;background:#fff;color:#10141b;text-align:left;cursor:pointer;font-family:\"Geist\",ui-sans-serif,system-ui,\"Segoe UI\",sans-serif;transition:box-shadow 150ms,border-color 150ms}.ds-demo:hover{border-color:#7b8494;box-shadow:0 1px 2px rgb(16 20 27 / .05),0 4px 8px -2px rgb(16 20 27 / .12)}.ds-demo:focus-visible{outline:2px solid #2a55d1;outline-offset:2px}.ds-demo-name{display:block;font-family:\"Geist Mono\",ui-monospace,Consolas,monospace;font-size:.875rem;font-weight:500}.ds-demo-desc{display:block;margin-top:4px;font-size:.875rem;color:#394152}.ds-demo-res{display:block;margin-top:8px;font-size:.8125rem;color:#394152}.ds-demo-go{font-size:.875rem;font-weight:600;color:#1d3ea3;white-space:nowrap}"
+    },
+    {
+      "name": "Verdict Chip: likely reachable",
+      "kind": "chip",
+      "refersTo": "verdict-chip-reach",
+      "description": "Filled triangle plus the exact words; reserved red.",
+      "html": "<span class=\"ds-chip-reach\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3.5 22 20.5H2Z\" fill=\"#c8301f\" stroke=\"#a02112\" stroke-width=\"1.5\" stroke-linejoin=\"round\"/></svg>likely reachable</span>",
+      "css": ".ds-chip-reach{display:inline-flex;align-items:center;gap:8px;padding:4px 12px 4px 8px;border:1px solid #c8301f;border-radius:999px;background:#fdeceb;color:#a02112;font-family:\"Geist\",ui-sans-serif,system-ui,\"Segoe UI\",sans-serif;font-size:.875rem;font-weight:500;line-height:1.3}"
+    },
+    {
+      "name": "Verdict Chip: uncertain",
+      "kind": "chip",
+      "refersTo": "verdict-chip-uncertain",
+      "description": "Hatched square plus the word; reserved amber, ink text.",
+      "html": "<span class=\"ds-chip-un\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><defs><pattern id=\"dsh\" width=\"5\" height=\"5\" patternUnits=\"userSpaceOnUse\" patternTransform=\"rotate(45)\"><rect width=\"5\" height=\"5\" fill=\"#e0a826\"/><line x1=\"0\" y1=\"0\" x2=\"0\" y2=\"5\" stroke=\"#10141b\" stroke-width=\"1.5\"/></pattern></defs><rect x=\"3.5\" y=\"3.5\" width=\"17\" height=\"17\" fill=\"url(#dsh)\" stroke=\"#10141b\" stroke-width=\"1.5\"/></svg>uncertain</span>",
+      "css": ".ds-chip-un{display:inline-flex;align-items:center;gap:8px;padding:4px 12px 4px 8px;border:1px solid #a77a0b;border-radius:999px;background:#fdf3d6;color:#10141b;font-family:\"Geist\",ui-sans-serif,system-ui,\"Segoe UI\",sans-serif;font-size:.875rem;font-weight:500;line-height:1.3}"
+    },
+    {
+      "name": "Verdict Chip: no reachable path",
+      "kind": "chip",
+      "refersTo": "verdict-chip-none",
+      "description": "Outline pill plus the words; neutral.",
+      "html": "<span class=\"ds-chip-none\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"2.75\" y=\"9\" width=\"18.5\" height=\"6\" rx=\"3\" fill=\"none\" stroke=\"#576072\" stroke-width=\"1.75\"/></svg>no reachable path detected</span>",
+      "css": ".ds-chip-none{display:inline-flex;align-items:center;gap:8px;padding:4px 12px 4px 8px;border:1px solid #7b8494;border-radius:999px;background:#fff;color:#394152;font-family:\"Geist\",ui-sans-serif,system-ui,\"Segoe UI\",sans-serif;font-size:.875rem;font-weight:500;line-height:1.3}"
+    },
+    {
+      "name": "Tool Chip",
+      "kind": "chip",
+      "refersTo": "tool-chip",
+      "description": "The tool behind a pipeline stage, in mono, and the Tavily source badge.",
+      "html": "<span class=\"ds-tool\">Static analysis · Sandbox</span><span class=\"ds-src\">Tavily research</span>",
+      "css": ".ds-tool{display:inline-block;padding:4px 8px;border:1px solid #e1e4ea;border-radius:6px;background:#f0f2f5;color:#394152;font-family:\"Geist Mono\",ui-monospace,Consolas,monospace;font-size:.8125rem;line-height:1.4;white-space:nowrap}.ds-src{display:inline-block;margin-left:8px;padding:4px 8px;border:1px solid #2a55d1;border-radius:6px;background:#eaf0fd;color:#1d3ea3;font-family:\"Geist\",ui-sans-serif,system-ui,\"Segoe UI\",sans-serif;font-size:.8125rem;font-weight:500;line-height:1.4}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Clean Console",
+    "overview": "ProveItReachable is a developer tool, so it looks like one: a white-on-cool-grey product surface in the spirit of Linear, Vercel or Socket.dev, without borrowing any of their branding. Hairlines and tonal steps do the structuring; shadows are rare and soft; type is one confident sans plus a mono for everything a developer would copy. There is no document metaphor and no decoration. The product earns trust by showing its work: a one-line value proposition, one input, three one-click demos, then a result that leads with the funnel (\"6 advisories to 2 likely reachable\"), the pipeline that produced it, and the evidence for each finding.\n\nMode: **Persuade** on the front door (one message, one action: paste a repo or click a demo), **Operate** from the first scan on (scanability, density, consistency). The user is a Python developer drowning in scanner alerts; the cold evaluator has under three minutes and a laptop.\n\nEvidence comes before explanation, everywhere. In every finding, the vulnerable function, call path, source locations and advisory links precede confidence, limitations and the model's explanation. The agent pipeline is visible while it runs and in the finished report: each stage names the tool behind it (OSV, Tavily, static analysis in a sandbox, Nemotron). Tavily research is credited on every advisory source it supplied.",
+    "keyCharacteristics": [
+      "Light, restrained: neutrals plus one accent; red and amber appear only on verdicts.",
+      "Geist for interface and prose, Geist Mono for data (file:line, ids, symbols, URLs, tool names).",
+      "Verdicts are always shape plus words; colour only reinforces.",
+      "Generous whitespace, 8 to 12px radii, 1px hairlines, one soft shadow reserved for the summary panel and the example card.",
+      "Left-aligned, asymmetric layout; no centred hero, no grid of identical cards."
+    ],
+    "rules": [
+      {
+        "name": "The Reserved Colour Rule",
+        "body": "Red means `likely reachable` and nothing else; amber means `uncertain` and nothing else. Errors, warnings and success states use ink outlines and drawn icons, never these colours. Done stages are ink, not green: green would imply \"safe\".",
+        "section": "colors"
+      },
+      {
+        "name": "The Never Colour Alone Rule",
+        "body": "Every verdict is a mark (filled triangle, hatched square, outline pill) plus its exact words. Every stage state is a drawn node (ring, arc, check, cross, dash) plus a visually hidden state word.",
+        "section": "colors"
+      },
+      {
+        "name": "The Plain Words Rule",
+        "body": "Primary labels are plain developer words: \"Scan repo\", \"Run demo\", \"New scan\", \"Call path from your code\", \"Findings\".",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Every figure uses tabular numerals so counts and durations align.",
+        "section": "typography"
+      },
+      {
+        "name": "The Quiet Depth Rule",
+        "body": "Shadows carry an offset and a soft blur and are used on at most one raised object per region; a surface is otherwise separated by a rule or a tint.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** keep red for `likely reachable` and amber for `uncertain`, always paired with the mark and the exact verdict words.",
+      "**Do** put evidence (function, path, locations, sources) before confidence, limitations and explanation in DOM order.",
+      "**Do** show the tool behind every pipeline stage and credit Tavily on the sources it found.",
+      "**Do** label demo and placeholder data wherever a figure appears; take any metric from a fixture field and name its origin.",
+      "**Do** render all report text with `textContent`; link only http(s) with `rel=\"noopener noreferrer\"`.",
+      "**Do** keep every control at 44px or more with a visible focus ring and a label.",
+      "**Do** announce stage changes in the polite live region."
+    ],
+    "donts": [
+      "**Don't** invent metrics, benchmarks, logos or user counts. The powered-by line is plain text, with no brand marks.",
+      "**Don't** use gradients, glass, glow or hard offset shadows.",
+      "**Don't** signal any verdict or stage state by colour alone.",
+      "**Don't** use green for done: it reads as \"safe\".",
+      "**Don't** build a centred hero, a grid of identical feature cards, or kicker labels above headings.",
+      "**Don't** repeat a message as its own title, or start a wrapped line with a middle dot (glue it to the word before it).",
+      "**Don't** hard-code colours, sizes, spaces or durations outside `web/css/tokens.css`."
+    ]
+  }
+}

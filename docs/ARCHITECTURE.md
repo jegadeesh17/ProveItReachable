@@ -79,9 +79,7 @@ flowchart LR
 2. **`resolve`:** `prepare` the agent image (cached), `fetch` (network ON, saves image A = pristine repo files, no repo code ever run in it), `resolve --lockfile-only` from A (OFF), and if needed `resolve --compile` in a disposable branch of A (ON: uv from an empty working directory on agent-sanitized input with `--no-build`, so no repo code runs and no repo file reaches uv, section 7.2).
 3. **`osv`:** one `querybatch` for all resolved dependencies; details per unique advisory ID. **`research`:** per unique advisory, `FINDING_CONCURRENCY` at a time.
 4. **`analysis`:** one `index` run from A (network OFF, disposable) with the top-level import names of every vulnerable package. **`reasoning`:** per finding with an identified symbol, most severe first, up to `MAX_FINDINGS_REASONED`.
-5. **`report`** (UI: "Verdicts"): gate, rank, validate, store, emit `done`; saved images are discarded.
-
-Step identifiers `resolve`, `osv`, `research`, `analysis`, `reasoning`, `report` are used everywhere (report, SSE, logs, UI).
+5. **`report`** (UI: "Verdicts"): gate, rank, validate, store, emit `done`; saved images are discarded. These six step identifiers are used everywhere (report, SSE, logs, UI).
 
 ## 6. Data models
 
@@ -92,9 +90,8 @@ All models live in `pir/models/` and derive from `Strict(BaseModel)` with `Confi
 ```python
 Verdict = Literal["likely reachable", "no reachable path detected", "uncertain"]   # exact, case-sensitive
 Confidence = Literal["high", "medium", "low"];  Mode = Literal["live", "replay", "proof"];  Pool = Literal["nebius", "tavily"]
-StepName = Literal["resolve", "osv", "research", "analysis", "reasoning", "report"]
-StepState = Literal["pending", "running", "done", "failed", "skipped"];  Outcome = Literal["findings", "clean", "incomplete"]
-Severity = Literal["critical", "high", "moderate", "low", "unknown"]
+StepName = Literal["resolve", "osv", "research", "analysis", "reasoning", "report"];  Outcome = Literal["findings", "clean", "incomplete"]
+StepState = Literal["pending", "running", "done", "failed", "skipped"];  Severity = Literal["critical", "high", "moderate", "low", "unknown"]
 ToolName = Literal["lockfile", "uv", "sandbox", "osv", "tavily", "nemotron", "ast", "verdict_gate"]
 DependencySource = Literal["uv.lock", "poetry.lock", "Pipfile.lock", "requirements.txt", "uv pip compile", "manifest"]  # manifest = declared, unresolved
 ReasonCode = Literal["vulnerable_function_not_identified", "tavily_failed", "nebius_failed", "model_output_invalid",
@@ -119,8 +116,7 @@ class Resolution(Strict):
 class Dependency(Strict):
     name: str; source: DependencySource; groups: list[str]   # PEP 503 normalized, then ^[a-z0-9]+(?:-[a-z0-9]+)*$ (finding 6); groups e.g. ["main"]
     version: str | None; resolved: bool; unresolved_reason: str | None   # version: the anchored PEP 440 regex (packaging's VERSION_PATTERN, re.X | re.I), else unresolved "not a PEP 440 version"; None iff not resolved; reason iff not resolved (AC-09)
-    direct: bool | None         # declared in a root manifest; None if unknown
-    osv_status: Literal["checked", "not_checked", "not_queried"]; osv_error: str | None   # not_queried = unresolved, never guessed; error iff not_checked (AC-26)
+    direct: bool | None; osv_status: Literal["checked", "not_checked", "not_queried"]; osv_error: str | None   # direct: declared in a root manifest, None if unknown; not_queried = unresolved, never guessed; error iff not_checked (AC-26)
 class Advisory(Strict):
     id: str; aliases: list[str]; summary: str | None   # OSV ID as returned; CVE and other IDs, sorted; summary <= 500, untrusted
     severity: Severity          # lower-cased database_specific.severity (GitHub label), else "unknown"
@@ -161,17 +157,12 @@ class ScanReport(Strict):
     dependencies: list[Dependency]          # sorted by name; includes unresolved (AC-45)
     findings: list[Finding]                 # ranked (section 9.2, rule 6); unique finding_ids
     summary: ReportSummary; limitations: list[str]   # scan-level scope statement
-    # "clean" iff findings == [] and no unresolved and no not_checked and resolve done (AC-11);
-    # "incomplete" iff findings == [] and (unresolved or failed resolve); otherwise "findings".
+    # outcome: "clean" iff findings == [] and no unresolved, no not_checked, resolve done (AC-11); "incomplete" iff findings == [] and (unresolved or failed resolve); else "findings"
 ```
 
-**Step tools rule:** `StepStatus.tools` lists, in this order, the tools whose results the step used (cached research counts): `resolve` → `sandbox` (a Sandbox operation returned, including a timeout) and `lockfile` or `uv`; `osv` → `osv`; `research` → `tavily`, `nemotron`; `analysis` → `sandbox` (only `ContreeExecutor`), `ast`; `reasoning` → `nemotron`, `ast`; `report` → `verdict_gate`; skipped steps `[]`. `FakeExecutor` never yields `sandbox`, so the UI claims "Sandbox" only when one ran.
-
-**Interpretations:** (a) AC-19's "at least one advisory link" applies to `kind == "advisory"`; AC-26 entries are `kind == "not_checked"` with no advisory and no invented link. (b) `source_locations` may be `[]` for a non-`likely reachable` finding whose package is never imported; its limitations say "no import or call site found". (c) Unresolved dependencies (AC-09) are not findings; they appear in `dependencies` with `resolved == False`. Worked examples: `web/fixtures/reports/*.json`, validated against `ScanReport` by a fast test.
+**Step tools rule:** `StepStatus.tools` lists, in this order, the tools whose results the step used (cached research counts): `resolve` → `sandbox` (a Sandbox operation returned, including a timeout) and `lockfile` or `uv`; `osv` → `osv`; `research` → `tavily`, `nemotron`; `analysis` → `sandbox` (only `ContreeExecutor`), `ast`; `reasoning` → `nemotron`, `ast`; `report` → `verdict_gate`; skipped steps `[]`. `FakeExecutor` never yields `sandbox`, so the UI claims "Sandbox" only when one ran. **Interpretations:** (a) AC-19's "at least one advisory link" applies to `kind == "advisory"`; AC-26 entries are `kind == "not_checked"` with no advisory and no invented link. (b) `source_locations` may be `[]` for a non-`likely reachable` finding whose package is never imported; its limitations say "no import or call site found". (c) Unresolved dependencies (AC-09) are not findings; they appear in `dependencies` with `resolved == False`. Worked examples: `web/fixtures/reports/*.json`, validated against `ScanReport` by a fast test.
 
 ### 6.3 Static analysis index (`pir/models/index.py`)
-
-Produced by the agent inside the Sandbox as plain JSON; validated on the host:
 
 ```python
 class IndexedFile(Strict): path: str; lines: int; is_test: bool; parsed: bool; skip_reason: str | None
@@ -191,7 +182,7 @@ class AnalysisIndex(Strict):  # truncated: the agent's own size limit was hit (a
     target_sites: list[TargetSite]; edges: list[Edge]; truncated: bool; stats: dict[str, int]   # files_total, ...
 ```
 
-Hostile input: `ast.parse` runs per file; `SyntaxError`, `ValueError` (null bytes), `RecursionError` and `MemoryError` skip that file with a `skip_reason` and the index completes. Determinism (AC-14): sorted file walk, no wall-clock values, every list sorted by `(file, line, col, ...)`. Aliases (AC-15): `import m as a`, `from m import f as g`, `import a.b.c`, `import a.b as ab`, function-level and relative imports are bound; a call or attribute chain is resolved by substituting its first segment with its binding. A function passed without a call (`map(yaml.load, xs)`) is `kind="reference"`.
+The agent produces the index inside the Sandbox as plain JSON; the host validates it. Hostile input: `ast.parse` runs per file; `SyntaxError`, `ValueError` (null bytes), `RecursionError` and `MemoryError` skip that file with a `skip_reason` and the index completes. Determinism (AC-14): sorted file walk, no wall-clock values, every list sorted by `(file, line, col, ...)`. Aliases (AC-15): `import m as a`, `from m import f as g`, `import a.b.c`, `import a.b as ab`, function-level and relative imports are bound; a call or attribute chain is resolved by substituting its first segment with its binding. A function passed without a call (`map(yaml.load, xs)`) is `kind="reference"`.
 
 ### 6.4 Research and reasoning (`pir/models/research.py`, `pir/models/reasoning.py`)
 
@@ -234,8 +225,7 @@ class EvalFigure(Strict):        # only from a scored eval run (section 15); pre
 class AppConfigResponse(Strict):
     version: str; live_scans_enabled: bool; live_scans_paused_reason: str | None
     features: dict[Literal["progress_feed", "markdown_export", "proof"], bool]
-    limits: dict[Literal["max_repo_mb", "max_repo_files", "live_scans_per_client_hour",
-                         "live_scans_per_client_day"], int]   # all four keys always present
+    limits: dict[Literal["max_repo_mb", "max_repo_files", "live_scans_per_client_hour", "live_scans_per_client_day"], int]   # all four keys always present
     eval: EvalFigure | None            # None: the UI shows no eval figure (AC-39)
 class HealthResponse(Strict):
     status: Literal["ok"]; version: str; live_scans: Literal["enabled", "paused", "disabled"]
@@ -280,8 +270,7 @@ class ExecResult(Strict):   # timed_out: platform state.timed_out or host deadli
 class Executor(Protocol):
     kind: Literal["sandbox", "fake"]
     async def prepare(self, files: dict[str, bytes]) -> ImageRef          # base image + trusted files
-    async def run(self, image: ImageRef, argv: list[str], *, network: bool, timeout_s: float,
-                  save: bool = False, budget: ScanBudget | None = None) -> ExecResult
+    async def run(self, image: ImageRef, argv: list[str], *, network: bool, timeout_s: float, save: bool = False, budget: ScanBudget | None = None) -> ExecResult
     async def discard(self, image: ImageRef) -> None                       # best effort; never raises
 # Raises ExecutorUnavailable (auth, HTTP error, status FAILED/CANCELLED, malformed body) or SpendDenied; a timeout is a result.
 ```
@@ -317,8 +306,7 @@ Our stdlib-only agent is zipped at runtime into `agent.pyz`, placed at `/opt/pir
 
 - `fetch` runs only our agent (stdlib HTTP download and `tarfile` extraction). Python started by absolute path with `-I -S` reads no environment variable, `site` or `.pth` file, or working-directory file, and the repo does not exist until fetch writes it.
 - **Every `uv` call** (compile and proof-install) is spawned by the agent with `cwd=/tmp/uvwd`, created fresh by `os.mkdir` (which fails if it exists, so it is always empty and outside the repo); `env=` the fixed environment of section 7.1, never `os.environ`; and the common flags `--python /usr/local/bin/python3.13` (no discovery of `VIRTUAL_ENV`, `CONDA_PREFIX`, `.venv`, `.python-version` or `PATH`; no download), `--no-config` (no `uv.toml`, `[tool.uv]`, user or system config), `--no-build` (no PEP 517 backend, `setup.py` or sdist build), `--no-sources` (no `[tool.uv.sources]`) and `--index-url https://pypi.org/simple`. `HOME` (so `~/.netrc`) and `UV_CACHE_DIR` are under `/tmp`, which the repo cannot reach: extraction is confined to `/work/repo`.
-- `resolve --compile`: the agent writes a sanitized requirements file to `/tmp/pirin/requirements.in` (directory also created fresh by `os.mkdir`; section 13, rule 5) and passes that absolute path; uv never opens a repo file.
-- `proof-install`: `uv pip install --no-deps --only-binary :all: --target /work/deps` + common flags + `-- <name==version>`, one pin per call; wheels are unpacked, never executed.
+- `resolve --compile`: the agent writes a sanitized requirements file to `/tmp/pirin/requirements.in` (directory also created fresh by `os.mkdir`; section 13, rule 5) and passes that absolute path; uv never opens a repo file. `proof-install`: `uv pip install --no-deps --only-binary :all: --target /work/deps` + common flags + `-- <name==version>`, one pin per call; wheels are unpacked, never executed.
 
 The only command that runs repo code, `proof-run`, is OFF. `fetch` downloads only `https://codeload.github.com/{owner}/{repo}/tar.gz/{sha}` built from validated parts, streams with a byte cap, and extracts with `tarfile` `filter="data"` (no links leaving the destination, absolute paths or devices) plus member-count and uncompressed-size caps (`MAX_REPO_FILES`, `MAX_REPO_MB`). `proof-install` pins come from validated `Dependency` models (section 6.2 regexes, re-checked by the agent) and the agent builds each `name==version` itself after `--` (live check, section 22.1). The client maps `timed_out` to `SandboxTimeout(step)`, and `truncated`, a missing or invalid result line, or a non-zero exit to `SandboxFailed(step, detail)`; it parses with caps (10 MiB base64, 50 MiB decompressed via `zlib.decompressobj(max_length=...)`) and validates strictly.
 
@@ -335,8 +323,7 @@ class SandboxAgentClient:   # __init__(executor, settings); raises SandboxTimeou
 ```python
 def parse_repo_url(url: str) -> RepoCoordinates          # pure; raises InvalidRepoUrl; no I/O (AC-02)
 async def validate_repo(coords: RepoCoordinates, ref: str | None) -> ValidatedTarget
-# ValidatedTarget(coords, default_branch, commit_sha, files_total, bytes_total, py_files, manifests); raises
-# RepoNotFound (404 or private), RepoTooLarge(caps, actual), NotPythonProject(detail), GitHubUnavailable.
+# ValidatedTarget(coords, default_branch, commit_sha, files_total, bytes_total, py_files, manifests); raises RepoNotFound (404 or private), RepoTooLarge(caps, actual), NotPythonProject(detail), GitHubUnavailable.
 class OsvClient(Protocol):
     async def query(self, deps: list[Dependency]) -> dict[str, list[str] | OsvFailure]   # key "name==version"
     async def get_advisory(self, osv_id: str) -> Advisory | OsvFailure
@@ -349,11 +336,9 @@ GitHub (only `api.github.com`; a 301 is followed manually only if `Location` sta
 
 ```python
 class SearchClient(Protocol):
-    async def search(self, query: str, *, max_results: int, depth: Literal["basic", "advanced"],
-                     timeout_s: float) -> list[SearchResult]       # raises SearchFailed
+    async def search(self, query: str, *, max_results: int, depth: Literal["basic", "advanced"], timeout_s: float) -> list[SearchResult]  # raises SearchFailed
 class AdvisoryResearcher:
-    async def research(self, advisory: Advisory, package: str, osv_links: list[AdvisoryLink],
-                       budget: ScanBudget) -> AdvisoryResearch      # never raises; failures in .failure
+    async def research(self, advisory: Advisory, package: str, osv_links: list[AdvisoryLink], budget: ScanBudget) -> AdvisoryResearch  # never raises; failures in .failure
 ```
 
 Tavily: `POST https://api.tavily.com/search` with `Authorization: Bearer <key>`, `query="{package} {advisory_id} {first alias} vulnerable function"`, `search_depth`, `max_results`; only `results[].url`, `title`, `content` are read. Then one Nemotron JSON-mode extraction over the OSV summary and details plus the snippets, returning `{identified, symbols, evidence_urls, reason}`. Host grounding: each symbol matches `^[A-Za-z_]\w*(\.[A-Za-z_]\w*)+$` and its last segment appears verbatim in the supplied text, and `evidence_urls` must be a subset of the returned URLs; otherwise the symbol is dropped. No grounded symbol → `identified=False`, "vulnerable function not identified" (AC-13). Results are cached per advisory ID in `DATA_DIR/cache/research/` for 7 days (ADR-0031: bounds how long a poisoned search result is served to every visitor; the source links stay visible on each finding).
@@ -367,9 +352,8 @@ class ChatResult(Strict):   # content: leading/trailing whitespace stripped; Too
     usage: Usage                        # prompt_tokens, completion_tokens, reasoning_tokens, estimated: bool
 class LLMClient(Protocol):              # raises LLMError(kind: "timeout" | "http" | "rate_limited" | "bad_response" | "budget")
     model: str
-    async def chat(self, messages: list[ChatMessage], *, tools: list[ToolSpec] | None = None,
-                   tool_choice: Literal["auto", "none"] | ForcedTool | None = None, json_mode: bool = False,
-                   max_tokens: int, temperature: float = 0.0, timeout_s: float, budget: ScanBudget) -> ChatResult
+    async def chat(self, messages: list[ChatMessage], *, tools: list[ToolSpec] | None = None, tool_choice: Literal["auto", "none"] | ForcedTool | None = None,
+                   json_mode: bool = False, max_tokens: int, temperature: float = 0.0, timeout_s: float, budget: ScanBudget) -> ChatResult
 ```
 
 `NebiusLLMClient` wraps `openai.AsyncOpenAI(base_url=TOKEN_FACTORY_BASE_URL, http_client=<allowlisted httpx>)`, wrapped by `wrap_openai` when tracing is on. Settings refuse to start unless `NEBIUS_MODEL` contains `nemotron` (case-insensitive). Nemotron replies start with blank lines, so `content` is stripped before it is returned or parsed (`json_mode` sends `response_format={"type": "json_object"}`). **Output bound and hold (ADR-0029):** the client sends `max_completion_tokens=max_tokens`, which in the OpenAI API bounds visible plus reasoning tokens, and holds `ceil(chars/2.5) × in_price + max_tokens × out_price`. If Token Factory rejects or ignores `max_completion_tokens` (to verify in the first LLM-client task: a call with a small limit must report `completion_tokens` plus any separate reasoning tokens within it), the client sends `max_tokens` and holds the worst case, `LLM_HOLD_COMPLETION_TOKENS` instead of `max_tokens`. Afterwards it records `prompt_tokens × in_price + completion_tokens × out_price` (reasoning tokens added if reported separately), or the hold if `usage` is missing. **Overrun:** if the actual cost exceeds the hold, `ScanBudget.record` stores the actual and marks the scan overrun; every later `try_spend` of that scan is denied (`scan_budget_reached`). One retry on timeout or 5xx.
@@ -390,8 +374,7 @@ class AstTool:                                   # __init__(index: AnalysisIndex
 ### 7.7 Report builder, replay store, jobs
 
 ```python
-def build_finding(candidate: Candidate, research: AdvisoryResearch | None, outcome: ReasoningOutcome | None,
-                  index: AnalysisIndex | None, forced: tuple[ReasonCode, str] | None = None) -> Finding  # gate
+def build_finding(candidate: Candidate, research: AdvisoryResearch | None, outcome: ReasoningOutcome | None, index: AnalysisIndex | None, forced: tuple[ReasonCode, str] | None = None) -> Finding  # gate
 def rank(findings: list[Finding]) -> list[Finding]
 def build_report(ctx: ScanContext, findings: list[Finding]) -> ScanReport   # final strict validation
 def render_markdown(report: ScanReport) -> str                               # same order as the UI
@@ -441,9 +424,7 @@ Base path `/api`. JSON bodies; every error is an `ErrorResponse`; request bodies
 | `GET /api/config`, `GET /api/health`, `GET /api/schema/report` | none | `200 AppConfigResponse`, `200 HealthResponse`, `200` report JSON Schema | none |
 | `GET /` and static | none | `web/` files | none |
 
-SSE: `id: <seq>`, `event: step|done|error`, `data: <ProgressEvent JSON>`, blank line. On connect the server sends every stored event with `seq > Last-Event-ID`, then live events, and closes after `done` or `error`; `: keepalive` every 15 s; headers `Cache-Control: no-cache`, `X-Accel-Buffering: no`. Per step: `running`, then `done`, `failed` or `skipped`, in pipeline order (AC-41).
-
-Error codes, statuses and exact messages (`pir/messages.py`; the UI shows them verbatim; a fast test checks `web/fixtures/errors.json` against them):
+SSE: `id: <seq>`, `event: step|done|error`, `data: <ProgressEvent JSON>`, blank line. On connect the server sends every stored event with `seq > Last-Event-ID`, then live events, and closes after `done` or `error`; `: keepalive` every 15 s; headers `Cache-Control: no-cache`, `X-Accel-Buffering: no`. Per step: `running`, then `done`, `failed` or `skipped`, in pipeline order (AC-41). Error codes, statuses and exact messages (`pir/messages.py`; the UI shows them verbatim; a fast test checks `web/fixtures/errors.json` against them):
 
 | Code | Status | Message |
 |---|---|---|
@@ -490,7 +471,7 @@ The model sees the repository only through these tools, which are pure functions
 
 ## 10. Failure handling
 
-No external failure crashes a scan (NFR-06, ADR-0019); each becomes a visible reason, and the report always completes and validates.
+No external failure crashes a scan (NFR-06, ADR-0019); each becomes a visible reason, and the report always completes and validates. Timeouts (OQ-5; configurable): GitHub 10 s; OSV 15 s, 2 retries; Tavily 20 s, 1 retry; Nebius 60 s per call, 1 retry, 8 tool rounds, 1,500 completion tokens; Sandbox `fetch` 120 s, `resolve --lockfile-only` 60 s, `resolve --compile` 180 s, `index` 120 s, `proof-install` 300 s, `proof-run` 60 s; scan 900 s.
 
 | Failure | Caught in | Effect | AC |
 |---|---|---|---|
@@ -508,8 +489,6 @@ No external failure crashes a scan (NFR-06, ADR-0019); each becomes a visible re
 | GitHub unavailable at admission | `validate_repo` | `502 github_unavailable`; no job | none |
 | Unexpected exception in the pipeline | pipeline | Logged with an error ID; current step failed; report built from what exists | NFR-06 |
 | Unexpected exception building the report | job runner | Job `failed`; SSE `error` with `internal_error` and the error ID | AC-43 |
-
-Timeouts (OQ-5; configurable): GitHub 10 s; OSV 15 s, 2 retries; Tavily 20 s, 1 retry; Nebius 60 s per call, 1 retry, 8 tool rounds, 1,500 completion tokens; Sandbox `fetch` 120 s, `resolve --lockfile-only` 60 s, `resolve --compile` 180 s, `index` 120 s, `proof-install` 300 s, `proof-run` 60 s; scan 900 s.
 
 ## 11. Spend metering, cap and rate limits (ADR-0029)
 
@@ -542,7 +521,7 @@ OSV and GitHub are free and only counted. `SANDBOX_USD_PER_SECOND=0.001` is twic
 
 ## 13. Dependency resolution (ADR-0028, OQ-6)
 
-Inside the Sandbox, first match wins:
+Inside the Sandbox, root manifests only (monorepos are a limitation), names PEP 503-normalized; `uv` comes from the base image `ghcr.io/astral-sh/uv:python3.13-bookworm-slim` (Python 3.13.11, verified), pinned by digest (ADR-0030). First match wins:
 
 1. `uv.lock`: every registry package, transitive included; `direct` from the root package; git, path and URL sources unresolved ("non-registry source").
 2. `poetry.lock`: every `[[package]]`, transitive included; groups recorded; `direct` from `pyproject.toml`.
@@ -550,8 +529,6 @@ Inside the Sandbox, first match wins:
 4. Root `requirements.txt` if every requirement (following `-r` includes inside the repo) is `name==version` (extras, markers, hashes allowed); a limitation notes missing transitive pins.
 5. Else compile (network ON, unrestricted egress, disposable; no repo code runs and no repo file reaches uv; ADR-0028, ADR-0032) the first of `pyproject.toml` with a static `[project]` table (`dependencies` not listed in `dynamic`), `requirements.in`, an unpinned `requirements.txt`. **Sanitized input:** the agent reads that manifest itself (`tomllib`, or line parsing with `-r` includes inside the repo followed as in rule 4, depth at most 5) and writes to `/tmp/pirin/requirements.in` only plain registry requirements (`name[extras] specifiers ; marker`, matched by an anchored allowlist regex). It drops every option line (`--index-url`, `--extra-index-url`, `--find-links`, `--trusted-host`, `-e`, `-r`, `-c` and any other line starting with `-`; recorded in `notes` as "ignored option <flag>", constraint files included) and every URL, path or VCS requirement (`name @ <url>`, `git+`/`hg+`/`svn+`/`bzr+`, `file:`, archive URLs, `./` or `/` paths, `-e <target>`), which is unresolved "non-registry source" (the rule 1 reason) under its name, or a note when no name can be read. Then `uv pip compile /tmp/pirin/requirements.in` with the section 7.2 common flags from `/tmp/uvwd`, `--python-version RESOLVE_PYTHON_VERSION` (or the lowest `requires-python` allows) and `--no-header --no-annotate --quiet --output-file -`; runtime dependencies only (a limitation), transitive included, "compiled, not locked" (AC-08). The agent checks statically first: a `pyproject.toml` with dynamic dependencies or no `[project]` table, or a repo with only `setup.py` / `setup.cfg`, is not compiled at all; and if uv fails because a build would be needed (a dependency with no wheel and no static metadata; the first resolve task pins uv's exact error text in a fixture), compile output is discarded. In both cases every declared name (when known) is unresolved with "dynamic metadata needs a build; not run".
 6. Else, or if compile fails: every declared name unresolved with the reason ("compile failed: ..."); a bare `Pipfile` is unresolved ("Pipfile without Pipfile.lock is not supported").
-
-Root manifests only (monorepos are a limitation); names PEP 503-normalized. `uv` comes from the base image `ghcr.io/astral-sh/uv:python3.13-bookworm-slim` (Python 3.13.11, verified), pinned by digest (ADR-0030).
 
 ## 14. Demo replays (ADR-0016, OQ-11)
 
@@ -618,14 +595,7 @@ export interface Api {
 
 ### 19.3 Budget fractions and the keepalive alert (AC-76, AC-77)
 
-`GET /api/health` returns `budget_remaining` from `SpendMeter.remaining_fractions()` (section 11.2, rule 6): in memory, no amounts, no keys. `pir/keepalive.py` is stdlib-only and imports nothing from `pir`, so the workflow runs it without installing the package:
-
-```python
-def evaluate(status: int, body: bytes, min_fraction: float = 0.25) -> tuple[int, str]   # pure
-def main(argv: list[str] | None = None) -> int   # keepalive.py <health_url> [--min-fraction 0.25]
-```
-
-Exit 0: HTTP 200, `status == "ok"`, every pool at or above the threshold. Exit 1: a pool below the threshold; the message names each such pool and its fraction ("Budget alert: nebius at 0.18 (below 0.25)"). Exit 2: health check failed (network error after 3 tries 20 s apart so a sleeping Space can wake, non-200, invalid JSON, `status` not ok, or `budget_remaining` missing or null). `.github/workflows/keepalive.yml`: `schedule` (`17 */6 * * *`) and `workflow_dispatch`; `actions/setup-python` 3.13; the step passes the URL through `env: PIR_HEALTH_URL: ${{ vars.PIR_HEALTH_URL }}` and runs `python src/pir/keepalive.py "$PIR_HEALTH_URL"` (no `${{ }}` inside any `run:`, checked by `test_workflows.py`; `main` rejects a URL that is not `https://`). A non-zero exit fails the run and GitHub emails the owner (NFR-01, NFR-13). `PIR_HEALTH_URL` is a repository variable, not a secret, set when the Space goes public.
+`GET /api/health` returns `budget_remaining` from `SpendMeter.remaining_fractions()` (section 11.2, rule 6): in memory, no amounts, no keys. `pir/keepalive.py` is stdlib-only and imports nothing from `pir`, so the workflow runs it without installing the package. It has a pure `evaluate(status: int, body: bytes, min_fraction: float = 0.25) -> tuple[int, str]` and `main(argv: list[str] | None = None) -> int` (CLI: `keepalive.py <health_url> [--min-fraction 0.25]`). Exit 0: HTTP 200, `status == "ok"`, every pool at or above the threshold. Exit 1: a pool below the threshold; the message names each such pool and its fraction ("Budget alert: nebius at 0.18 (below 0.25)"). Exit 2: health check failed (network error after 3 tries 20 s apart so a sleeping Space can wake, non-200, invalid JSON, `status` not ok, or `budget_remaining` missing or null). `.github/workflows/keepalive.yml`: `schedule` (`17 */6 * * *`) and `workflow_dispatch`; `actions/setup-python` 3.13; the step passes the URL through `env: PIR_HEALTH_URL: ${{ vars.PIR_HEALTH_URL }}` and runs `python src/pir/keepalive.py "$PIR_HEALTH_URL"` (no `${{ }}` inside any `run:`, checked by `test_workflows.py`; `main` rejects a URL that is not `https://`). A non-zero exit fails the run and GitHub emails the owner (NFR-01, NFR-13). `PIR_HEALTH_URL` is a repository variable, not a secret, set when the Space goes public.
 
 ## 20. Directory layout
 
@@ -664,7 +634,7 @@ The orchestrator adds `data/`, `eval/results/*` (with `!eval/results/latest.md` 
 
 ## Security and data
 
-Only public repositories are handled (`sensitive-data: no`), but the Sandbox, URL-fetch boundary and spend cap get a security review, so this section is written for it.
+Only public repositories are handled (`sensitive-data: no`); no accounts and no personal data beyond the transient IP (the Sandbox beta terms forbid personal data); CSRF does not apply (no cookies or sessions) and CORS is off. The Sandbox, URL-fetch boundary and spend cap get a security review, so this section is written for it.
 
 ### Trust zones and execution boundary (AC-29, AC-30, AC-70, NFR-02)
 
@@ -699,8 +669,6 @@ Zones: the **host process** (trusted code; untrusted **data** only: GitHub metad
 | Spend ledger (amounts only) | local file before deploy; private HF dataset after | until 2026-12-15 | Hugging Face |
 | Logs (JSON, redacted) | stderr; Space log viewer | per Hugging Face | Hugging Face |
 | Secrets | process memory | process lifetime | only their own service |
-
-No accounts and no personal data beyond the transient IP (the Sandbox beta terms forbid personal data; only public code is processed). CSRF does not apply (no cookies or sessions); CORS is off.
 
 ## 22. Testing strategy
 

@@ -12,6 +12,10 @@ Thumbs.db
 # Review tooling output
 .ui-review/
 .impeccable/review/
+.impeccable/hook.cache.json
+.impeccable/questions/
+.impeccable/surfaces/
+.impeccable/config.local.json
 
 # User's personal files (contain a personal email / private planning notes)
 Gmail - *.pdf
