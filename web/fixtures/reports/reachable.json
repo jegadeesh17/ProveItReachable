@@ -17,6 +17,10 @@
     {
       "name": "resolve",
       "state": "done",
+      "tools": [
+        "sandbox",
+        "lockfile"
+      ],
       "started_at": "2026-10-12T09:14:03Z",
       "finished_at": "2026-10-12T09:14:09Z",
       "message": "Resolved 12 pinned dependencies from uv.lock."
@@ -24,6 +28,9 @@
     {
       "name": "osv",
       "state": "done",
+      "tools": [
+        "osv"
+      ],
       "started_at": "2026-10-12T09:14:09Z",
       "finished_at": "2026-10-12T09:14:11Z",
       "message": "Queried OSV for 12 packages at exact versions: 6 advisories."
@@ -31,6 +38,10 @@
     {
       "name": "research",
       "state": "done",
+      "tools": [
+        "tavily",
+        "nemotron"
+      ],
       "started_at": "2026-10-12T09:14:11Z",
       "finished_at": "2026-10-12T09:14:23Z",
       "message": "Researched 6 advisories with Tavily; a vulnerable function was identified for 5."
@@ -38,6 +49,10 @@
     {
       "name": "analysis",
       "state": "done",
+      "tools": [
+        "sandbox",
+        "ast"
+      ],
       "started_at": "2026-10-12T09:14:23Z",
       "finished_at": "2026-10-12T09:14:31Z",
       "message": "Indexed 15 Python files in the sandbox; 14 parsed, 1 skipped (syntax error)."
@@ -45,6 +60,10 @@
     {
       "name": "reasoning",
       "state": "done",
+      "tools": [
+        "nemotron",
+        "ast"
+      ],
       "started_at": "2026-10-12T09:14:31Z",
       "finished_at": "2026-10-12T09:14:49Z",
       "message": "Nemotron reasoned over 5 findings using 23 analysis tool calls."
@@ -52,6 +71,9 @@
     {
       "name": "report",
       "state": "done",
+      "tools": [
+        "verdict_gate"
+      ],
       "started_at": "2026-10-12T09:14:49Z",
       "finished_at": "2026-10-12T09:14:50Z",
       "message": "Built the ranked report: 2 likely reachable, 2 uncertain, 2 no reachable path detected."

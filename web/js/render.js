@@ -148,6 +148,9 @@ const ERROR_HINT = {
   server_busy: "Demo replays are still available.",
   github_unavailable: "Nothing was scanned. Try again later, or run a demo.",
   internal_error: "Nothing was lost. Try again, or run a demo.",
+  demo_not_found: "Pick one of the demos in the list.",
+  scan_not_found: "Start a new scan, or run a demo.",
+  network_error: "Check your connection and try again.",
 };
 
 /**
@@ -252,7 +255,7 @@ export function renderDemos(list, demos, onRun) {
           el(
             "span",
             { class: "demo__main" },
-            el("span", { class: "demo__name" }, el("span", { text: demo.title }), el("span", { class: "tag", text: "placeholder" })),
+            el("span", { class: "demo__name" }, el("span", { text: demo.title }), el("span", { class: "tag", text: `Recorded ${formatDate(demo.recorded_at)}` })),
             el("span", { class: "demo__desc", text: demo.description }),
             demoResult(demo.by_verdict),
           ),
@@ -269,15 +272,32 @@ export function setDemosDisabled(list, disabled) {
 
 /* ------------------------------------------------------------ progress feed */
 
-/** [key, row label, short label, the tool behind the stage]. The tool is shown beside every stage. */
+/** [key, row label, short label]. The tools behind a stage come from the API (`tools`), never from this table. */
 export const STAGES = [
-  ["resolve", "Resolve dependencies", "Resolve", "Lockfile · uv"],
-  ["osv", "Find known advisories", "Advisories", "OSV"],
-  ["research", "Research the vulnerable function", "Research", "Tavily"],
-  ["analysis", "Index your code", "Analysis", "Static analysis · Sandbox"],
-  ["reasoning", "Reason over the evidence", "Reasoning", "Nemotron"],
-  ["report", "Rank and write verdicts", "Verdicts", "Verdict rules"],
+  ["resolve", "Resolve dependencies", "Resolve"],
+  ["osv", "Find known advisories", "Advisories"],
+  ["research", "Research the vulnerable function", "Research"],
+  ["analysis", "Index your code", "Analysis"],
+  ["reasoning", "Reason over the evidence", "Reasoning"],
+  ["report", "Rank and write verdicts", "Verdicts"],
 ];
+
+/** Display names for the API's ToolName values. "Sandbox" appears only when `sandbox` is listed. */
+const TOOL_LABEL = {
+  lockfile: "Lockfile",
+  uv: "uv",
+  sandbox: "Sandbox",
+  osv: "OSV",
+  tavily: "Tavily",
+  nemotron: "Nemotron",
+  ast: "Static analysis",
+  verdict_gate: "Verdict rules",
+};
+
+/** "Sandbox · Static analysis" for a step's `tools`, in the order the API lists them; "" when none. */
+export function toolText(tools) {
+  return (Array.isArray(tools) ? tools : []).map((name) => TOOL_LABEL[name] || String(name)).join(" · ");
+}
 const NODE_ICON = { running: "stamp-running", done: "stamp-done", failed: "stamp-failed", skipped: "stamp-skipped" };
 const STATE_WORD = { pending: "Pending", running: "Running", done: "Done", failed: "Failed", skipped: "Skipped" };
 
@@ -289,7 +309,7 @@ function fillNode(node, state) {
 
 export function buildTrack(track) {
   clear(track);
-  for (const [key, label, , tool] of STAGES) {
+  for (const [key, label] of STAGES) {
     const node = el("span", { class: "stage__node" });
     fillNode(node, "pending");
     track.append(
@@ -298,7 +318,7 @@ export function buildTrack(track) {
         { class: "stage", dataset: { step: key, state: "pending" } },
         node,
         el("p", { class: "stage__name", text: label }),
-        el("p", { class: "stage__tool" }, el("span", { class: "tool", text: tool })),
+        el("p", { class: "stage__tool" }),
         el("p", { class: "stage__msg" }),
         el("p", { class: "stage__time" }),
       ),
@@ -312,12 +332,15 @@ export function stageLabel(step) {
 }
 
 /** Move one stage to a state. `stamp` replays the settle motion (CSS drops it for reduced motion). */
-export function setStage(track, step, state, message, seconds, stamp = false) {
+export function setStage(track, step, state, message, seconds, stamp = false, tools = []) {
   const li = track.querySelector(`[data-step="${step}"]`);
   if (!li) return;
   const changed = li.dataset.state !== state;
   li.dataset.state = state;
   fillNode(li.querySelector(".stage__node"), state);
+  const chips = clear(li.querySelector(".stage__tool"));
+  const text = toolText(tools);
+  if (text) chips.append(el("span", { class: "tool", text }));
   li.querySelector(".stage__msg").textContent = message || "";
   li.querySelector(".stage__time").textContent = seconds === null || seconds === undefined ? "" : formatSeconds(seconds);
   if (stamp && changed && ["done", "failed", "skipped"].includes(state)) {
@@ -329,7 +352,7 @@ export function setStage(track, step, state, message, seconds, stamp = false) {
 
 export function syncTrackFromReport(track, report) {
   for (const step of report.steps) {
-    setStage(track, step.name, step.state, step.message, secondsBetween(step.started_at, step.finished_at), false);
+    setStage(track, step.name, step.state, step.message, secondsBetween(step.started_at, step.finished_at), false, step.tools);
   }
 }
 
@@ -405,8 +428,8 @@ function advisoryStrip(report) {
   return strip;
 }
 
-/** Glue the middle dot to the word before it, so a wrapped line never starts with "·". */
-const keepDot = (text) => text.replace(" · ", " · ");
+/** Glue the middle dot to the word before it (no-break space), so a wrapped line never starts with the dot. */
+const keepDot = (text) => text.replaceAll(" · ", " · ");
 
 function pipelineStrip(report) {
   const steps = report.steps || [];
@@ -435,7 +458,7 @@ function pipelineStrip(report) {
           { class: "pipe__item", dataset: { state: step.state } },
           node,
           el("p", { class: "pipe__name", text: stage ? stage[2] : step.name }),
-          el("p", { class: "pipe__tool", text: stage ? keepDot(stage[3]) : "" }),
+          el("p", { class: "pipe__tool", text: keepDot(toolText(step.tools)) }),
           seconds !== null && el("p", { class: "pipe__time", text: formatSeconds(seconds) }),
         );
       }),
@@ -589,6 +612,25 @@ function sourceNote(links) {
   return el("p", { class: "src-note", text });
 }
 
+/** The optional call-chain proof (M2), read-only: the status in words, then the facts the run recorded. */
+function renderProof(proof) {
+  const words = proof.status === "proven" ? "proven" : "not proven";
+  return el(
+    "div",
+    { class: "ev-proof", dataset: { proof: proof.status } },
+    el("h4", { class: "block-title", text: "Call-chain proof" }),
+    el("p", { class: "proof-status" }, el("strong", { text: words }), " ", el("span", { class: "hint", text: `run ${formatDateTime(proof.ran_at)}` })),
+    el("p", { text: proof.reason }),
+    el(
+      "dl",
+      { class: "kv" },
+      dtRow("Entry", el("code", { text: proof.entry })),
+      dtRow("Target", el("code", { text: proof.target })),
+      proof.recorded_call && dtRow("Recorded call", el("code", { text: proof.recorded_call })),
+    ),
+  );
+}
+
 function renderEvidence(f) {
   const evidence = el("div", { class: "evidence" });
 
@@ -638,6 +680,8 @@ function renderEvidence(f) {
       ),
     );
   }
+
+  if (f.proof) evidence.append(renderProof(f.proof));
 
   if (f.kind === "advisory") {
     evidence.append(
@@ -852,7 +896,7 @@ function pipelineLog(report) {
       return el(
         "li",
         {},
-        el("p", {}, el("strong", { text: stage ? stage[1] : step.name }), " ", el("span", { class: "tool", text: stage ? stage[3] : "" }), " ", el("span", { class: "hint", text: STATE_WORD[step.state] || step.state })),
+        el("p", {}, el("strong", { text: stage ? stage[1] : step.name }), " ", toolText(step.tools) && el("span", { class: "tool", text: toolText(step.tools) }), " ", el("span", { class: "hint", text: STATE_WORD[step.state] || step.state })),
         el("p", { class: "log__msg", text: step.message || "No message recorded." }),
         el("p", { class: "hint", text: seconds === null ? "" : formatSeconds(seconds) }),
       );

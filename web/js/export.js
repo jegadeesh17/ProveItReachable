@@ -18,10 +18,11 @@ export function exportFilename(report, format) {
 /**
  * @param {HTMLElement} slot
  * @param {{ exportUrl(scanId: string, format: "json"|"md"): string }} api
+ * @param {string} scanId the job id from ScanAccepted (a replay's report.scan_id is the recording's, not this)
  * @param {object} report a ScanReport
  * @param {{ features: { markdown_export: boolean } }} config
  */
-export function renderExports(slot, api, report, config) {
+export function renderExports(slot, api, scanId, report, config) {
   clear(slot);
   const formats = ["json"];
   if (config.features && config.features.markdown_export) formats.push("md");
@@ -31,7 +32,7 @@ export function renderExports(slot, api, report, config) {
         "a",
         {
           class: "btn",
-          href: api.exportUrl(report.scan_id, format),
+          href: api.exportUrl(scanId, format),
           download: exportFilename(report, format),
         },
         icon("icon-download", "icon icon--sm"),

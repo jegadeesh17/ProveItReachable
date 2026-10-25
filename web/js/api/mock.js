@@ -1,28 +1,39 @@
 /**
  * Mock adapter: drives the whole UI from web/fixtures without a backend.
- * Select with ?api=mock&scenario=<name>. `&jump=report` skips the feed animation.
- * Extra switches for the cut-fallbacks: `&feed=off` (AC-42), `&md=off` (AC-64), `&speed=<n>` (faster feed).
+ * Select with ?api=mock&scenario=<name>; the name must be on the allowlist below, anything else is
+ * `reachable` and never reaches a fixture path. `&jump=report` skips the feed animation.
+ * Extra switches: `&feed=off` (AC-42), `&md=off` (AC-64), `&eval=on` (a labelled sample eval figure),
+ * `&speed=<n>` (faster feed).
  */
-import { ApiError, fromErrorBody } from "./errors.js";
+import { fromErrorBody } from "./errors.js";
 
 const FIXTURES = new URL("../../fixtures/", import.meta.url);
 
-const REPORT_SCENARIOS = ["reachable", "clean", "incomplete", "partial-failure"];
-/** Scenario name -> error code in fixtures/errors.json */
-const ERROR_SCENARIOS = {
-  "error-invalid-url": "invalid_url",
-  "error-not-found": "repo_not_found",
-  "error-too-large": "repo_too_large",
-  "error-not-python": "not_python_project",
-  "rate-limited": "rate_limited",
-  paused: "live_scans_paused",
-};
-/** With no explicit scenario, each demo replays its own recorded fixture. */
-const DEMO_SCENARIO = {
-  "placeholder-flask-notes": "reachable",
-  "placeholder-data-pipeline": "partial-failure",
-  "placeholder-tiny-cli": "clean",
-};
+/** The scenario allowlist (ARCHITECTURE section 17). Report scenarios are the only names used in a fixture path. */
+const REPORT_SCENARIOS = new Set(["reachable", "clean", "incomplete", "partial-failure"]);
+/** Scenario name -> error code in fixtures/errors.json. These reject startScan (paused also locks the form). */
+const SCAN_ERRORS = new Map([
+  ["error-invalid-url", "invalid_url"],
+  ["error-not-found", "repo_not_found"],
+  ["error-too-large", "repo_too_large"],
+  ["error-not-python", "not_python_project"],
+  ["rate-limited", "rate_limited"],
+  ["paused", "live_scans_paused"],
+]);
+/** These reject startReplay. */
+const REPLAY_ERRORS = new Map([
+  ["demo-not-found", "demo_not_found"],
+  ["too-many-requests", "too_many_requests"],
+]);
+const DEFAULT_SCENARIO = "reachable";
+/** With no explicit report scenario, each recorded demo replays one of the fixtures (the mock has no real recordings). */
+const DEMO_SCENARIO = new Map([
+  ["planesweeppose", "reachable"],
+  ["pyrl", "partial-failure"],
+  ["co2tools", "clean"],
+]);
+/** A labelled sample for `&eval=on`, so the eval line can be seen. Not a measurement. */
+const SAMPLE_EVAL = { precision: 0.8, n: 25, run_date: "2026-10-20", model: "mock sample, not a measurement" };
 const SAMPLE_URL = "https://github.com/placeholder-demo/flask-notes";
 const BAD_SAMPLE_URL = "https://gitlab.com/placeholder-demo/flask-notes";
 
@@ -65,19 +76,24 @@ function parseRepoUrl(input) {
 
 export function createMockApi(params) {
   const requested = params.get("scenario") || "";
-  const explicit = REPORT_SCENARIOS.includes(requested) || requested in ERROR_SCENARIOS ? requested : "";
-  if (requested && !explicit) {
-    console.warn(`Unknown mock scenario "${requested}"; using "reachable".`);
+  const allowed = REPORT_SCENARIOS.has(requested) || SCAN_ERRORS.has(requested) || REPLAY_ERRORS.has(requested);
+  if (requested && !allowed) {
+    console.warn("Unknown mock scenario; using the default.");
   }
-  const scenario = explicit || "reachable";
+  const explicit = allowed ? requested : "";
+  const scenario = explicit || DEFAULT_SCENARIO;
   const jump = params.get("jump") === "report";
   const speed = Math.max(0.25, Number(params.get("speed")) || 1);
   const feedOff = params.get("feed") === "off";
   const markdownOff = params.get("md") === "off";
+  const evalOn = params.get("eval") === "on";
   const latency = (ms) => (jump ? wait(0) : wait(ms));
 
   /** @type {Map<string, any>} */
   const jobs = new Map();
+  /** Like the server, a job id is its own: it is not the report's scan_id. */
+  const newJobId = () =>
+    [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
   let errorsCache = null;
   const errors = async () => (errorsCache ??= await loadJson("errors.json"));
   const rejectWith = async (code) => {
@@ -86,6 +102,7 @@ export function createMockApi(params) {
   };
 
   async function createJob(reportScenario, mode, repoOverride) {
+    if (!REPORT_SCENARIOS.has(reportScenario)) throw new Error("Not a report scenario.");
     const [report, events, md] = await Promise.all([
       loadJson(`reports/${reportScenario}.json`),
       loadJson(`events/${reportScenario}.json`),
@@ -95,13 +112,18 @@ export function createMockApi(params) {
     if (repoOverride) {
       const oldUrl = report.repo.url;
       const oldName = `${report.repo.owner}/${report.repo.name}`;
+      const oldSha = report.repo.commit_sha;
       report.repo.url = `https://github.com/${repoOverride.owner}/${repoOverride.name}`;
       report.repo.owner = repoOverride.owner;
       report.repo.name = repoOverride.name;
       markdown = markdown.split(oldUrl).join(report.repo.url).split(oldName).join(`${repoOverride.owner}/${repoOverride.name}`);
+      if (repoOverride.commit_sha) {
+        report.repo.commit_sha = repoOverride.commit_sha;
+        markdown = markdown.split(oldSha).join(repoOverride.commit_sha);
+      }
     }
     const job = {
-      scanId: report.scan_id,
+      scanId: newJobId(),
       mode,
       report,
       events: events.map((item) => item.event).map((event, i) => ({ ...event, offset: events[i].offset_ms })),
@@ -124,11 +146,9 @@ export function createMockApi(params) {
     };
   }
 
-  const getJob = (scanId) => {
+  const getJob = async (scanId) => {
     const job = jobs.get(scanId);
-    if (!job) {
-      throw new ApiError({ code: "scan_not_found", message: "That scan does not exist." });
-    }
+    if (!job) return rejectWith("scan_not_found");
     return job;
   };
 
@@ -149,9 +169,9 @@ export function createMockApi(params) {
       /** What `&jump=report` should do on load. */
       jumpPlan() {
         if (scenario === "paused") return null;
-        if (scenario === "reachable") return { type: "replay", slug: "placeholder-flask-notes" };
-        if (scenario === "clean") return { type: "replay", slug: "placeholder-tiny-cli" };
-        if (scenario === "partial-failure") return { type: "replay", slug: "placeholder-data-pipeline" };
+        if (REPLAY_ERRORS.has(scenario) || scenario === "reachable") return { type: "replay", slug: "planesweeppose" };
+        if (scenario === "clean") return { type: "replay", slug: "co2tools" };
+        if (scenario === "partial-failure") return { type: "replay", slug: "pyrl" };
         return { type: "scan", url: scenario === "error-invalid-url" ? BAD_SAMPLE_URL : SAMPLE_URL };
       },
     },
@@ -161,6 +181,7 @@ export function createMockApi(params) {
       const config = await loadJson("config.json");
       if (feedOff) config.features.progress_feed = false;
       if (markdownOff) config.features.markdown_export = false;
+      if (evalOn) config.eval = { ...SAMPLE_EVAL };
       if (scenario === "paused") {
         const table = await errors();
         config.live_scans_enabled = false;
@@ -176,26 +197,46 @@ export function createMockApi(params) {
 
     async startScan(repoUrl) {
       await latency(500);
-      if (scenario in ERROR_SCENARIOS) return rejectWith(ERROR_SCENARIOS[scenario]);
+      if (SCAN_ERRORS.has(scenario)) return rejectWith(SCAN_ERRORS.get(scenario));
       const parsed = parseRepoUrl(repoUrl);
       if (!parsed) return rejectWith("invalid_url");
-      const job = await createJob(scenario, "live", parsed);
+      const job = await createJob(REPORT_SCENARIOS.has(scenario) ? scenario : DEFAULT_SCENARIO, "live", parsed);
       return accepted(job);
     },
 
     async startReplay(slug) {
       await latency(250);
+      if (REPLAY_ERRORS.has(scenario)) return rejectWith(REPLAY_ERRORS.get(scenario));
       const demos = await loadJson("demos.json");
-      if (!demos.some((demo) => demo.slug === slug)) {
-        throw new ApiError({ code: "scan_not_found", message: "That demo does not exist." });
-      }
-      const reportScenario = REPORT_SCENARIOS.includes(explicit) ? explicit : DEMO_SCENARIO[slug];
-      const job = await createJob(reportScenario, "replay", null);
+      const demo = demos.find((d) => d.slug === slug);
+      if (!demo) return rejectWith("demo_not_found");
+      const reportScenario = REPORT_SCENARIOS.has(explicit) ? explicit : DEMO_SCENARIO.get(slug) || DEFAULT_SCENARIO;
+      // The fixture stands in for the recording: show the demo's own repository and commit.
+      const [owner, name] = new URL(demo.repo_url).pathname.split("/").filter(Boolean);
+      const job = await createJob(reportScenario, "replay", { owner, name, commit_sha: demo.commit_sha });
       return accepted(job);
     },
 
     subscribe(scanId, onEvent) {
-      const job = getJob(scanId);
+      const job = jobs.get(scanId);
+      if (!job) {
+        // The real adapter ends up here when the server refuses the stream and the status poll says scan_not_found.
+        const timer = setTimeout(async () => {
+          const table = await errors();
+          onEvent({
+            seq: 1,
+            scan_id: scanId,
+            type: "error",
+            step: null,
+            state: null,
+            message: table.scan_not_found.error.message,
+            at: new Date().toISOString(),
+            outcome: null,
+            tools: [],
+          });
+        }, 0);
+        return () => clearTimeout(timer);
+      }
       job.startedAt = performance.now();
       const timers = job.events.map((event, i) =>
         setTimeout(() => onEvent(stripOffset(event)), jump ? i : event.offset / speed),
@@ -205,15 +246,17 @@ export function createMockApi(params) {
 
     async getStatus(scanId) {
       await latency(150);
-      const job = getJob(scanId);
+      const job = await getJob(scanId);
       const elapsed = (performance.now() - job.startedAt) * speed;
       const finished = jump || elapsed >= job.events[job.events.length - 1].offset;
       const seen = job.events.filter((e) => jump || e.offset <= elapsed);
       const steps = job.report.steps.map((step) => {
         const latest = [...seen].reverse().find((e) => e.step === step.name);
+        const state = finished ? step.state : latest ? latest.state : "pending";
         return {
           name: step.name,
-          state: finished ? step.state : latest ? latest.state : "pending",
+          state,
+          tools: ["done", "failed", "skipped"].includes(state) ? step.tools : [],
           started_at: null,
           finished_at: null,
           message: latest ? latest.message : null,
@@ -232,16 +275,15 @@ export function createMockApi(params) {
 
     async getReport(scanId) {
       await latency(450);
-      const job = getJob(scanId);
+      const job = await getJob(scanId);
       const elapsed = (performance.now() - job.startedAt) * speed;
-      if (!jump && elapsed < job.events[job.events.length - 1].offset) {
-        throw new ApiError({ code: "report_not_ready", message: "The report is not ready yet." });
-      }
+      if (!jump && elapsed < job.events[job.events.length - 1].offset) return rejectWith("report_not_ready");
       return clone(job.report);
     },
 
     exportUrl(scanId, format) {
-      const job = getJob(scanId);
+      const job = jobs.get(scanId);
+      if (!job) return "#";
       if (!job.blobs[format]) {
         const blob =
           format === "md"

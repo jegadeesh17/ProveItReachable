@@ -4,12 +4,13 @@
     "event": {
       "seq": 1,
       "scan_id": "c3f61a98d2e04b57906ae1b7f45d8c20",
-      "at": "2026-10-12T09:14:00.400Z",
-      "outcome": null,
       "type": "step",
       "step": "resolve",
       "state": "running",
-      "message": "Resolving exact dependency versions."
+      "message": "Resolving exact dependency versions.",
+      "at": "2026-10-12T09:14:00.400Z",
+      "outcome": null,
+      "tools": []
     }
   },
   {
@@ -17,12 +18,16 @@
     "event": {
       "seq": 2,
       "scan_id": "c3f61a98d2e04b57906ae1b7f45d8c20",
-      "at": "2026-10-12T09:14:03.200Z",
-      "outcome": null,
       "type": "step",
       "step": "resolve",
       "state": "done",
-      "message": "Compiled 5 of 7 dependencies with uv pip compile; 2 could not be resolved."
+      "message": "Compiled 5 of 7 dependencies with uv pip compile; 2 could not be resolved.",
+      "at": "2026-10-12T09:14:03.200Z",
+      "outcome": null,
+      "tools": [
+        "sandbox",
+        "uv"
+      ]
     }
   },
   {
@@ -30,12 +35,13 @@
     "event": {
       "seq": 3,
       "scan_id": "c3f61a98d2e04b57906ae1b7f45d8c20",
-      "at": "2026-10-12T09:14:03.500Z",
-      "outcome": null,
       "type": "step",
       "step": "osv",
       "state": "running",
-      "message": "Querying OSV for each exact version."
+      "message": "Querying OSV for each exact version.",
+      "at": "2026-10-12T09:14:03.500Z",
+      "outcome": null,
+      "tools": []
     }
   },
   {
@@ -43,12 +49,15 @@
     "event": {
       "seq": 4,
       "scan_id": "c3f61a98d2e04b57906ae1b7f45d8c20",
-      "at": "2026-10-12T09:14:04.800Z",
-      "outcome": null,
       "type": "step",
       "step": "osv",
       "state": "done",
-      "message": "Queried OSV for the 5 resolved packages: no advisories. The 2 unresolved packages were not queried."
+      "message": "Queried OSV for the 5 resolved packages: no advisories. The 2 unresolved packages were not queried.",
+      "at": "2026-10-12T09:14:04.800Z",
+      "outcome": null,
+      "tools": [
+        "osv"
+      ]
     }
   },
   {
@@ -56,12 +65,13 @@
     "event": {
       "seq": 5,
       "scan_id": "c3f61a98d2e04b57906ae1b7f45d8c20",
-      "at": "2026-10-12T09:14:05.100Z",
-      "outcome": null,
       "type": "step",
       "step": "research",
       "state": "skipped",
-      "message": "Skipped: no advisories to research."
+      "message": "Skipped: no advisories to research.",
+      "at": "2026-10-12T09:14:05.100Z",
+      "outcome": null,
+      "tools": []
     }
   },
   {
@@ -69,12 +79,13 @@
     "event": {
       "seq": 6,
       "scan_id": "c3f61a98d2e04b57906ae1b7f45d8c20",
-      "at": "2026-10-12T09:14:05.400Z",
-      "outcome": null,
       "type": "step",
       "step": "analysis",
       "state": "skipped",
-      "message": "Skipped: no advisories, so no code needs indexing."
+      "message": "Skipped: no advisories, so no code needs indexing.",
+      "at": "2026-10-12T09:14:05.400Z",
+      "outcome": null,
+      "tools": []
     }
   },
   {
@@ -82,12 +93,13 @@
     "event": {
       "seq": 7,
       "scan_id": "c3f61a98d2e04b57906ae1b7f45d8c20",
-      "at": "2026-10-12T09:14:05.700Z",
-      "outcome": null,
       "type": "step",
       "step": "reasoning",
       "state": "skipped",
-      "message": "Skipped: no findings to reason over."
+      "message": "Skipped: no findings to reason over.",
+      "at": "2026-10-12T09:14:05.700Z",
+      "outcome": null,
+      "tools": []
     }
   },
   {
@@ -95,12 +107,13 @@
     "event": {
       "seq": 8,
       "scan_id": "c3f61a98d2e04b57906ae1b7f45d8c20",
-      "at": "2026-10-12T09:14:06Z",
-      "outcome": null,
       "type": "step",
       "step": "report",
       "state": "running",
-      "message": "Building the ranked report."
+      "message": "Building the ranked report.",
+      "at": "2026-10-12T09:14:06Z",
+      "outcome": null,
+      "tools": []
     }
   },
   {
@@ -108,12 +121,15 @@
     "event": {
       "seq": 9,
       "scan_id": "c3f61a98d2e04b57906ae1b7f45d8c20",
-      "at": "2026-10-12T09:14:06.600Z",
-      "outcome": null,
       "type": "step",
       "step": "report",
       "state": "done",
-      "message": "Built the report: incomplete, 2 dependencies unresolved."
+      "message": "Built the report: incomplete, 2 dependencies unresolved.",
+      "at": "2026-10-12T09:14:06.600Z",
+      "outcome": null,
+      "tools": [
+        "verdict_gate"
+      ]
     }
   },
   {
@@ -121,12 +137,13 @@
     "event": {
       "seq": 10,
       "scan_id": "c3f61a98d2e04b57906ae1b7f45d8c20",
-      "at": "2026-10-12T09:14:06.900Z",
-      "outcome": "incomplete",
       "type": "done",
       "step": null,
       "state": null,
-      "message": "Report ready."
+      "message": "Report ready.",
+      "at": "2026-10-12T09:14:06.900Z",
+      "outcome": "incomplete",
+      "tools": []
     }
   }
 ]

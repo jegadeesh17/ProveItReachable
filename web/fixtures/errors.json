@@ -60,6 +60,17 @@
       "retry_after_s": 60
     }
   },
+  "too_many_requests": {
+    "status": 429,
+    "error": {
+      "code": "too_many_requests",
+      "message": "Too many requests right now; try again in 5 min.",
+      "details": {
+        "minutes": 5
+      },
+      "retry_after_s": 300
+    }
+  },
   "live_scans_paused": {
     "status": 503,
     "error": {
@@ -74,6 +85,51 @@
     "error": {
       "code": "github_unavailable",
       "message": "GitHub did not respond; try again later.",
+      "details": {},
+      "retry_after_s": null
+    }
+  },
+  "scan_not_found": {
+    "status": 404,
+    "error": {
+      "code": "scan_not_found",
+      "message": "That scan does not exist or has expired.",
+      "details": {},
+      "retry_after_s": null
+    }
+  },
+  "report_not_ready": {
+    "status": 409,
+    "error": {
+      "code": "report_not_ready",
+      "message": "The report is not ready yet; it appears when the scan finishes.",
+      "details": {},
+      "retry_after_s": null
+    }
+  },
+  "demo_not_found": {
+    "status": 404,
+    "error": {
+      "code": "demo_not_found",
+      "message": "That demo does not exist.",
+      "details": {},
+      "retry_after_s": null
+    }
+  },
+  "finding_not_found": {
+    "status": 404,
+    "error": {
+      "code": "finding_not_found",
+      "message": "That finding does not exist in this scan.",
+      "details": {},
+      "retry_after_s": null
+    }
+  },
+  "request_invalid": {
+    "status": 422,
+    "error": {
+      "code": "request_invalid",
+      "message": "The request is not valid: repo_url is too long.",
       "details": {},
       "retry_after_s": null
     }

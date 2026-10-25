@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0-prototype",
+  "version": "0.1.0",
   "live_scans_enabled": true,
   "live_scans_paused_reason": null,
   "features": {
@@ -9,6 +9,9 @@
   },
   "limits": {
     "max_repo_mb": 50,
-    "max_repo_files": 5000
-  }
+    "max_repo_files": 5000,
+    "live_scans_per_client_hour": 3,
+    "live_scans_per_client_day": 10
+  },
+  "eval": null
 }

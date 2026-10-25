@@ -17,6 +17,10 @@
     {
       "name": "resolve",
       "state": "done",
+      "tools": [
+        "sandbox",
+        "lockfile"
+      ],
       "started_at": "2026-10-12T09:14:03Z",
       "finished_at": "2026-10-12T09:14:08Z",
       "message": "Resolved 9 pinned dependencies from poetry.lock."
@@ -24,6 +28,9 @@
     {
       "name": "osv",
       "state": "failed",
+      "tools": [
+        "osv"
+      ],
       "started_at": "2026-10-12T09:14:08Z",
       "finished_at": "2026-10-12T09:14:38Z",
       "message": "OSV did not answer for 1 of 9 packages after 2 retries; that package is listed as not checked."
@@ -31,6 +38,10 @@
     {
       "name": "research",
       "state": "failed",
+      "tools": [
+        "tavily",
+        "nemotron"
+      ],
       "started_at": "2026-10-12T09:14:38Z",
       "finished_at": "2026-10-12T09:15:02Z",
       "message": "Tavily timed out for 1 advisory and Nebius failed for 1 advisory; those findings are uncertain."
@@ -38,6 +49,9 @@
     {
       "name": "analysis",
       "state": "failed",
+      "tools": [
+        "sandbox"
+      ],
       "started_at": "2026-10-12T09:15:02Z",
       "finished_at": "2026-10-12T09:17:02Z",
       "message": "Sandbox analysis timed out after 120 s; every finding without an earlier reason is uncertain."
@@ -45,6 +59,7 @@
     {
       "name": "reasoning",
       "state": "skipped",
+      "tools": [],
       "started_at": null,
       "finished_at": null,
       "message": "Skipped: no analysis index exists to reason over."
@@ -52,6 +67,9 @@
     {
       "name": "report",
       "state": "done",
+      "tools": [
+        "verdict_gate"
+      ],
       "started_at": "2026-10-12T09:17:02Z",
       "finished_at": "2026-10-12T09:17:03Z",
       "message": "Built the report: 5 findings, all uncertain, each with its reason."

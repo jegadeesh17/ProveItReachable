@@ -1,12 +1,10 @@
 # ProveItReachable report: placeholder-demo/tiny-cli
 
-- Repository: https://github.com/placeholder-demo/tiny-cli
-- Commit: 2b779e406a1c38590b5b2175955d7bec42dcc9f1
+- Repository: <https://github.com/placeholder-demo/tiny-cli>
+- Commit: `2b779e406a1c38590b5b2175955d7bec42dcc9f1`
 - Outcome: clean
 - Generated: 2026-10-12T09:14:09Z by ProveItReachable 0.1.0-prototype (model nvidia/nemotron-3-super-120b-a12b)
 - Dependencies: 4 total, 4 checked, 0 unresolved, 0 not checked
-
-> Prototype fixture: the repository, versions and findings are placeholders, not measurements.
 
 ## Summary
 

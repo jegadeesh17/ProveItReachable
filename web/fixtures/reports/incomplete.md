@@ -1,12 +1,10 @@
 # ProveItReachable report: placeholder-demo/legacy-reqs
 
-- Repository: https://github.com/placeholder-demo/legacy-reqs
-- Commit: 141c764abc7e94d70c2810dfe1600a2ebf14ad0f
+- Repository: <https://github.com/placeholder-demo/legacy-reqs>
+- Commit: `141c764abc7e94d70c2810dfe1600a2ebf14ad0f`
 - Outcome: incomplete
 - Generated: 2026-10-12T09:14:18Z by ProveItReachable 0.1.0-prototype (model nvidia/nemotron-3-super-120b-a12b)
 - Dependencies: 7 total, 5 checked, 2 unresolved, 0 not checked
-
-> Prototype fixture: the repository, versions and findings are placeholders, not measurements.
 
 ## Summary
 
@@ -18,8 +16,8 @@ Not a clean result: some dependencies were not examined (see below).
 
 ## Dependencies not examined
 
-- internal-metrics: unresolved. Declared as a git dependency over SSH (git+ssh://); an exact version cannot be pinned without access to that repository.
-- legacy-orm: unresolved. No distribution matches the constraint >=2.0,<2.1 for Python 3.12.
+- internal-metrics: unresolved. Declared as a git dependency over SSH \(git+ssh:&#47;/\); an exact version cannot be pinned without access to that repository.
+- legacy-orm: unresolved. No distribution matches the constraint &gt;=2.0,&lt;2.1 for Python 3.12.
 
 ## Method and limitations
 

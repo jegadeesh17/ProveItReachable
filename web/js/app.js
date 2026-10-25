@@ -34,6 +34,8 @@ import {
 const INVALID_URL_MESSAGE = "Enter a public GitHub repository URL like https://github.com/owner/repo.";
 const INPUT_ERRORS = new Set(["invalid_url", "repo_not_found", "repo_too_large", "not_python_project"]);
 const POLL_MS = 2000;
+const REPORT_RETRIES = 5;
+const REPORT_RETRY_MS = 1000;
 
 const $ = (id) => document.getElementById(id);
 const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -264,7 +266,7 @@ async function begin(kind, payload) {
     runId,
     scanId: accepted.scan_id,
     name,
-    source: kind === "replay" ? `Recorded demo, ${formatDate(payload.recorded_at)}` : "Live scan",
+    source: kind === "replay" ? `Recorded demo, recorded on ${formatDate(payload.recorded_at)}` : "Live scan",
     commit: kind === "replay" ? payload.commit_sha.slice(0, 7) : null,
     delivered: 0,
   };
@@ -303,7 +305,7 @@ function onEvent(runId, event) {
     const index = STAGES.findIndex(([key]) => key === event.step);
     if (event.state === "running") state.stageStart[event.step] = event.at;
     const seconds = event.state === "running" ? null : secondsBetween(state.stageStart[event.step], event.at);
-    setStage(dom.track, event.step, event.state, event.message, seconds, !state.instant);
+    setStage(dom.track, event.step, event.state, event.message, seconds, !state.instant, event.tools);
     refreshRunStatus();
     state.run.delivered += 1;
     announce(`Step ${index + 1} of ${STAGES.length}, ${stageLabel(event.step)}: ${event.state}.`);
@@ -345,6 +347,18 @@ function failRun(runId, error) {
   setBusy(false);
 }
 
+/** The report may land a moment after the `done` event; retry `report_not_ready` a few times. */
+async function fetchReport(scanId) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await api.getReport(scanId);
+    } catch (error) {
+      if (error.code !== "report_not_ready" || attempt >= REPORT_RETRIES) throw error;
+      await new Promise((resolve) => window.setTimeout(resolve, state.instant ? 0 : REPORT_RETRY_MS));
+    }
+  }
+}
+
 async function finish(runId) {
   if (runId !== state.runId) return;
   const scanId = state.run.scanId;
@@ -357,7 +371,7 @@ async function finish(runId) {
 
   let report;
   try {
-    report = await api.getReport(scanId);
+    report = await fetchReport(scanId);
   } catch (error) {
     clear(dom.report);
     dom.report.hidden = true;
@@ -394,7 +408,8 @@ function showReport(report) {
   if (hadFocus) $("scan-h").focus({ preventScroll: true });
   syncTrackFromReport(dom.track, report);
   dom.busy.hidden = true;
-  renderExports(dom.exportSlot, api, report, state.config);
+  // The URLs use the job id from ScanAccepted; for a replay it differs from the recording's report.scan_id.
+  renderExports(dom.exportSlot, api, run.scanId, report, state.config);
 
   const summary = renderSummary(report, { isMock });
   clear(dom.report);
@@ -423,14 +438,25 @@ function showReport(report) {
 /* ------------------------------------------------------------------ startup */
 
 function renderLimits(config) {
+  const { max_repo_mb: mb, max_repo_files: files, live_scans_per_client_hour: perHour, live_scans_per_client_day: perDay } = config.limits;
   clear(dom.limits).append(
     el("p", {
-      text: `Limits: public GitHub repositories only, up to ${config.limits.max_repo_mb} MB and ${config.limits.max_repo_files} files, with a Python dependency manifest.`,
+      text: `Limits: public GitHub repositories only, up to ${mb} MB and ${files} files, with a Python dependency manifest.`,
     }),
     el("p", {
-      text: "Live scans take minutes, are rate limited per visitor, and stop when the spend limit is reached. Demo replays are never limited.",
+      text: `Live scans take minutes. Each visitor can start ${perHour} per hour and ${perDay} per day, and live scans stop when the spend limit is reached. Demo replays do not count toward these limits.`,
     }),
   );
+  // An accuracy figure appears only when the API provides a scored eval run, with what it was measured on.
+  if (config.eval) {
+    const e = config.eval;
+    dom.limits.append(
+      el("p", {
+        class: "eval-figure",
+        text: `Precision of \u201clikely reachable\u201d verdicts: ${Math.round(e.precision * 100)}%, measured on ${e.n} labelled cases (run ${formatDate(e.run_date)}, model ${e.model}).`,
+      }),
+    );
+  }
 }
 
 async function loadStartup() {
@@ -476,8 +502,8 @@ function init() {
   if (isMock) {
     const note = $("mock-notice-text");
     note.append(
-      el("strong", { text: "Prototype on mock data." }),
-      ` Scenario: ${api.mock.scenario}. Figures are placeholders.`,
+      el("strong", { text: "Mock data." }),
+      ` Scenario: ${api.mock.scenario}. Reports are fixtures, not scan results.`,
     );
     $("mock-notice").hidden = false;
   }

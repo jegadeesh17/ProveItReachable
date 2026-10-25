@@ -1,41 +1,41 @@
 [
   {
-    "slug": "placeholder-flask-notes",
-    "title": "placeholder-demo/flask-notes",
-    "description": "A small web app. Shows a likely reachable finding with its call path, next to findings that are uncertain or not reachable.",
-    "repo_url": "https://github.com/placeholder-demo/flask-notes",
-    "commit_sha": "a584296c4268f7536fae191dc01381a0e249dcab",
-    "recorded_at": "2026-10-12T09:15:00Z",
+    "slug": "planesweeppose",
+    "title": "PlaneSweepPose",
+    "description": "3D pose research code that loads YAML configs with FullLoader on PyYAML 5.3.1.",
+    "repo_url": "https://github.com/jiahaoLjh/PlaneSweepPose",
+    "commit_sha": "35d8bc32155dc0488c0a8b37de1afa8a5069117e",
+    "recorded_at": "2026-10-25T22:37:34.456218Z",
     "by_verdict": {
-      "likely reachable": 2,
-      "no reachable path detected": 2,
-      "uncertain": 2
+      "likely reachable": 0,
+      "no reachable path detected": 13,
+      "uncertain": 17
     }
   },
   {
-    "slug": "placeholder-data-pipeline",
-    "title": "placeholder-demo/data-pipeline",
-    "description": "A data job where services fail mid-scan. Shows how uncertain results carry their reasons instead of hiding failures.",
-    "repo_url": "https://github.com/placeholder-demo/data-pipeline",
-    "commit_sha": "15a92e0c32ce027e77af0bcb12f1bc0483b6f849",
-    "recorded_at": "2026-10-12T09:15:00Z",
+    "slug": "pyrl",
+    "title": "PyRL",
+    "description": "Reinforcement-learning research code with many pinned dependencies: a ranked mix of verdicts.",
+    "repo_url": "https://github.com/chaovven/PyRL",
+    "commit_sha": "edbf80db8edb9a40e91f3d97cecc93d4f3133d0c",
+    "recorded_at": "2026-10-25T22:34:27.331535Z",
     "by_verdict": {
       "likely reachable": 0,
-      "no reachable path detected": 0,
-      "uncertain": 5
+      "no reachable path detected": 17,
+      "uncertain": 14
     }
   },
   {
-    "slug": "placeholder-tiny-cli",
-    "title": "placeholder-demo/tiny-cli",
-    "description": "A small command-line tool. Shows a clean result: every dependency checked, no known advisories.",
-    "repo_url": "https://github.com/placeholder-demo/tiny-cli",
-    "commit_sha": "2b779e406a1c38590b5b2175955d7bec42dcc9f1",
-    "recorded_at": "2026-10-12T09:15:00Z",
+    "slug": "co2tools",
+    "title": "co2tools",
+    "description": "Small CLI using PyYAML safely: known advisories, no reachable path.",
+    "repo_url": "https://github.com/Mambix/co2tools",
+    "commit_sha": "9f4a255d399cc1f7202330ecfa3185fc0cd5894e",
+    "recorded_at": "2026-10-25T22:30:48.378744Z",
     "by_verdict": {
       "likely reachable": 0,
-      "no reachable path detected": 0,
-      "uncertain": 0
+      "no reachable path detected": 1,
+      "uncertain": 4
     }
   }
 ]

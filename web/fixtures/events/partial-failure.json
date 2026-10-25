@@ -4,12 +4,13 @@
     "event": {
       "seq": 1,
       "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
-      "at": "2026-10-12T09:14:00.400Z",
-      "outcome": null,
       "type": "step",
       "step": "resolve",
       "state": "running",
-      "message": "Resolving exact dependency versions."
+      "message": "Resolving exact dependency versions.",
+      "at": "2026-10-12T09:14:00.400Z",
+      "outcome": null,
+      "tools": []
     }
   },
   {
@@ -17,12 +18,16 @@
     "event": {
       "seq": 2,
       "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
-      "at": "2026-10-12T09:14:02.400Z",
-      "outcome": null,
       "type": "step",
       "step": "resolve",
       "state": "done",
-      "message": "Resolved 9 pinned dependencies from poetry.lock."
+      "message": "Resolved 9 pinned dependencies from poetry.lock.",
+      "at": "2026-10-12T09:14:02.400Z",
+      "outcome": null,
+      "tools": [
+        "sandbox",
+        "lockfile"
+      ]
     }
   },
   {
@@ -30,12 +35,13 @@
     "event": {
       "seq": 3,
       "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
-      "at": "2026-10-12T09:14:02.700Z",
-      "outcome": null,
       "type": "step",
       "step": "osv",
       "state": "running",
-      "message": "Querying OSV for each exact version."
+      "message": "Querying OSV for each exact version.",
+      "at": "2026-10-12T09:14:02.700Z",
+      "outcome": null,
+      "tools": []
     }
   },
   {
@@ -43,12 +49,15 @@
     "event": {
       "seq": 4,
       "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
-      "at": "2026-10-12T09:14:05.200Z",
-      "outcome": null,
       "type": "step",
       "step": "osv",
       "state": "failed",
-      "message": "OSV did not answer for 1 of 9 packages after 2 retries; that package is listed as not checked."
+      "message": "OSV did not answer for 1 of 9 packages after 2 retries; that package is listed as not checked.",
+      "at": "2026-10-12T09:14:05.200Z",
+      "outcome": null,
+      "tools": [
+        "osv"
+      ]
     }
   },
   {
@@ -56,12 +65,13 @@
     "event": {
       "seq": 5,
       "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
-      "at": "2026-10-12T09:14:05.500Z",
-      "outcome": null,
       "type": "step",
       "step": "research",
       "state": "running",
-      "message": "Researching the vulnerable function and sources for each advisory."
+      "message": "Researching the vulnerable function and sources for each advisory.",
+      "at": "2026-10-12T09:14:05.500Z",
+      "outcome": null,
+      "tools": []
     }
   },
   {
@@ -69,12 +79,16 @@
     "event": {
       "seq": 6,
       "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
-      "at": "2026-10-12T09:14:08.600Z",
-      "outcome": null,
       "type": "step",
       "step": "research",
       "state": "failed",
-      "message": "Tavily timed out for 1 advisory and Nebius failed for 1 advisory; those findings are uncertain."
+      "message": "Tavily timed out for 1 advisory and Nebius failed for 1 advisory; those findings are uncertain.",
+      "at": "2026-10-12T09:14:08.600Z",
+      "outcome": null,
+      "tools": [
+        "tavily",
+        "nemotron"
+      ]
     }
   },
   {
@@ -82,12 +96,13 @@
     "event": {
       "seq": 7,
       "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
-      "at": "2026-10-12T09:14:08.900Z",
-      "outcome": null,
       "type": "step",
       "step": "analysis",
       "state": "running",
-      "message": "Indexing the repository in the sandbox."
+      "message": "Indexing the repository in the sandbox.",
+      "at": "2026-10-12T09:14:08.900Z",
+      "outcome": null,
+      "tools": []
     }
   },
   {
@@ -95,12 +110,15 @@
     "event": {
       "seq": 8,
       "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
-      "at": "2026-10-12T09:14:12.400Z",
-      "outcome": null,
       "type": "step",
       "step": "analysis",
       "state": "failed",
-      "message": "Sandbox analysis timed out after 120 s; every finding without an earlier reason is uncertain."
+      "message": "Sandbox analysis timed out after 120 s; every finding without an earlier reason is uncertain.",
+      "at": "2026-10-12T09:14:12.400Z",
+      "outcome": null,
+      "tools": [
+        "sandbox"
+      ]
     }
   },
   {
@@ -108,12 +126,13 @@
     "event": {
       "seq": 9,
       "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
-      "at": "2026-10-12T09:14:12.800Z",
-      "outcome": null,
       "type": "step",
       "step": "reasoning",
       "state": "skipped",
-      "message": "Skipped: no analysis index exists to reason over."
+      "message": "Skipped: no analysis index exists to reason over.",
+      "at": "2026-10-12T09:14:12.800Z",
+      "outcome": null,
+      "tools": []
     }
   },
   {
@@ -121,12 +140,13 @@
     "event": {
       "seq": 10,
       "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
-      "at": "2026-10-12T09:14:13.100Z",
-      "outcome": null,
       "type": "step",
       "step": "report",
       "state": "running",
-      "message": "Building the ranked report."
+      "message": "Building the ranked report.",
+      "at": "2026-10-12T09:14:13.100Z",
+      "outcome": null,
+      "tools": []
     }
   },
   {
@@ -134,12 +154,15 @@
     "event": {
       "seq": 11,
       "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
-      "at": "2026-10-12T09:14:13.700Z",
-      "outcome": null,
       "type": "step",
       "step": "report",
       "state": "done",
-      "message": "Built the report: 5 findings, all uncertain, each with its reason."
+      "message": "Built the report: 5 findings, all uncertain, each with its reason.",
+      "at": "2026-10-12T09:14:13.700Z",
+      "outcome": null,
+      "tools": [
+        "verdict_gate"
+      ]
     }
   },
   {
@@ -147,12 +170,13 @@
     "event": {
       "seq": 12,
       "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
-      "at": "2026-10-12T09:14:14Z",
-      "outcome": "findings",
       "type": "done",
       "step": null,
       "state": null,
-      "message": "Report ready."
+      "message": "Report ready.",
+      "at": "2026-10-12T09:14:14Z",
+      "outcome": "findings",
+      "tools": []
     }
   }
 ]

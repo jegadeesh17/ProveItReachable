@@ -6,9 +6,6 @@
   <title>ProveItReachable: does your code reach the vulnerable function?</title>
   <meta name="description" content="Reachability triage for public Python repositories. Each known advisory gets a verdict, the call path from your code, and the sources.">
   <meta name="color-scheme" content="light">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/app.css">
   <script type="module" src="js/app.js"></script>
@@ -17,7 +14,7 @@
   <a class="skip" href="#main">Skip to content</a>
 
   <!-- Drawn marks and icons: one stroke weight, one 24px grid. -->
-  <svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+  <svg class="sprite" aria-hidden="true" focusable="false">
     <defs>
       <pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
         <rect width="5" height="5" class="sv-amber"/>
@@ -84,7 +81,7 @@
             <h2 id="demos-h" class="demos__title">Or run a recorded demo</h2>
             <p class="demos__lede">One click. It replays a stored scan in about 20&nbsp;seconds, with no live calls and no cost.</p>
             <ol id="demo-list" class="demo-list" aria-label="Demo repositories" aria-busy="true"></ol>
-            <p class="smallprint">Placeholder repositories: the three real ones are recorded at the end of milestone M1. Every figure here is demo data, not a measurement.</p>
+            <p class="smallprint">Each demo replays a real scan of a public repository, recorded on the date shown. A recording shows what the scanner reported at the time; it is not a measure of accuracy.</p>
           </section>
         </div>
       </div>
@@ -122,7 +119,7 @@
           <li><p class="pipe-list__name">Resolve dependencies</p><p class="pipe-list__desc">Reads exact versions from your lockfile, or compiles them. No version is guessed.</p><span class="tool">Lockfile · uv</span></li>
           <li><p class="pipe-list__name">Find known advisories</p><p class="pipe-list__desc">Looks up each exact version in the open vulnerability database.</p><span class="tool">OSV</span></li>
           <li><p class="pipe-list__name">Research the function</p><p class="pipe-list__desc">Finds which function each advisory affects, and keeps the source links.</p><span class="tool">Tavily</span></li>
-          <li><p class="pipe-list__name">Index your code</p><p class="pipe-list__desc">Builds a static index of imports and calls, inside an isolated sandbox.</p><span class="tool">Static analysis · Sandbox</span></li>
+          <li><p class="pipe-list__name">Index your code</p><p class="pipe-list__desc">Builds a static index of imports and calls from the source text. Your code is read, never run.</p><span class="tool">Static analysis</span></li>
           <li><p class="pipe-list__name">Reason over the evidence</p><p class="pipe-list__desc">The model works through the index with tool calls. A claim with no call path in the index becomes uncertain.</p><span class="tool">Nemotron</span></li>
           <li><p class="pipe-list__name">Rank and write verdicts</p><p class="pipe-list__desc">Likely reachable first, then uncertain, then no reachable path detected.</p><span class="tool">Verdict rules</span></li>
         </ol>
@@ -130,7 +127,7 @@
 
       <div class="explain__side">
           <figure class="sample" aria-hidden="true">
-            <figcaption class="sample__cap">What a finding looks like: an example from the flask-notes demo</figcaption>
+            <figcaption class="sample__cap">What a finding looks like: an illustrative example, not a scan result</figcaption>
             <div class="sample__card">
               <div class="sample__top">
                 <span class="flag flag--reach"><svg class="icon" aria-hidden="true" focusable="false"><use href="#mark-reach"/></svg><span>likely reachable</span></span>
@@ -173,7 +170,7 @@
   <footer class="site-foot">
     <div class="wrap site-foot__inner">
       <p class="powered powered--foot">Powered by Nebius Token Factory · Nemotron · Tavily</p>
-      <p>ProveItReachable prototype. Verdicts are bounded by the evidence shown beside them; nothing on this page is a measured result until the evaluation produces one.</p>
+      <p>Verdicts are bounded by the evidence shown beside them. No accuracy figure is shown until an evaluation run produces one.</p>
     </div>
   </footer>
 </body>

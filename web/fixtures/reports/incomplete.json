@@ -17,6 +17,10 @@
     {
       "name": "resolve",
       "state": "done",
+      "tools": [
+        "sandbox",
+        "uv"
+      ],
       "started_at": "2026-10-12T09:14:03Z",
       "finished_at": "2026-10-12T09:14:14Z",
       "message": "Compiled 5 of 7 dependencies with uv pip compile; 2 could not be resolved."
@@ -24,6 +28,9 @@
     {
       "name": "osv",
       "state": "done",
+      "tools": [
+        "osv"
+      ],
       "started_at": "2026-10-12T09:14:14Z",
       "finished_at": "2026-10-12T09:14:16Z",
       "message": "Queried OSV for the 5 resolved packages: no advisories. The 2 unresolved packages were not queried."
@@ -31,6 +38,7 @@
     {
       "name": "research",
       "state": "skipped",
+      "tools": [],
       "started_at": null,
       "finished_at": null,
       "message": "Skipped: no advisories to research."
@@ -38,6 +46,7 @@
     {
       "name": "analysis",
       "state": "skipped",
+      "tools": [],
       "started_at": null,
       "finished_at": null,
       "message": "Skipped: no advisories, so no code needs indexing."
@@ -45,6 +54,7 @@
     {
       "name": "reasoning",
       "state": "skipped",
+      "tools": [],
       "started_at": null,
       "finished_at": null,
       "message": "Skipped: no findings to reason over."
@@ -52,6 +62,9 @@
     {
       "name": "report",
       "state": "done",
+      "tools": [
+        "verdict_gate"
+      ],
       "started_at": "2026-10-12T09:14:16Z",
       "finished_at": "2026-10-12T09:14:17Z",
       "message": "Built the report: incomplete, 2 dependencies unresolved."
