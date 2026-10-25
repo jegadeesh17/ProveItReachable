@@ -32,6 +32,18 @@ def _run(argv: list[str], handlers: dict) -> tuple[int, str, str]:
     return code, out.getvalue(), err.getvalue()
 
 
+def test_handler_log_lines_reach_the_captured_stderr_not_the_process_one(capsys):  # AC-73
+    def handler(args: dict) -> dict:
+        protocol.log("from the handler")  # no stream: as resolve.py, index.py, fetch.py call it
+        return {"ok": True}
+
+    code, out, err = _run(["x", "--args-b64", _b64({})], {"x": handler})
+
+    assert code == 0 and out.startswith("PIR-RESULT:")
+    assert err == "pir-agent: from the handler\n"
+    assert capsys.readouterr().err == ""
+
+
 def test_result_line_round_trips_through_base64_and_gzip():  # M1-TASK-05 protocol
     payload = {"b": [1, 2, {"z": None}], "a": "café", "commit_sha": "a" * 40}
     line = protocol.encode_result(payload)

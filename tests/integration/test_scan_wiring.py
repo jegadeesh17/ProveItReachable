@@ -396,12 +396,6 @@ def test_the_json_log_lines_of_a_fake_scan_carry_one_scan_id_and_stage_fields(
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(
-    strict=True,
-    reason="product bug: in fake mode the agent handlers in sandbox_agent/resolve.py, index.py "
-    "and fetch.py call log() without the captured stream, so plain 'pir-agent:' lines reach "
-    "the scan's stderr (breaks NFR-12 and AC-73)",
-)
 def test_every_stderr_line_of_a_fake_scan_except_the_spend_summary_is_json(tmp_path, edge, capsys):
     repo = write_repo(tmp_path / "repo")
 

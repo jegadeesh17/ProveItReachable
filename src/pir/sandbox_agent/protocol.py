@@ -6,6 +6,7 @@ Exit codes: 0 ok, 2 bad input, 3 limit exceeded, anything else is a failure.
 
 import argparse
 import base64
+import contextlib
 import gzip
 import json
 import sys
@@ -136,7 +137,10 @@ def run_command(
         if namespace.command not in handlers:
             raise BadInput(f"unknown command {namespace.command!r}")
         args = parse_args_b64(namespace.args_b64)
-        result = handlers[namespace.command](args)
+        # Handlers call log() without a stream; route those lines to `err` too, so an
+        # in-process run (FakeExecutor) captures them like the Sandbox does.
+        with contextlib.redirect_stderr(err):
+            result = handlers[namespace.command](args)
         emit_result(result, out)
     except argparse.ArgumentError as exc:
         log(f"bad arguments: {exc}", err)
