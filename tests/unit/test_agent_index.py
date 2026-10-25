@@ -235,6 +235,16 @@ def test_hostile_files_are_skipped_with_a_reason_and_the_index_completes():  # S
     assert index["stats"]["files_skipped"] == 5
 
 
+def test_nesting_over_the_depth_limit_is_skipped_on_every_platform(tmp_path):  # SEC-1/6
+    # Deterministic: a shallow-for-the-C-stack tree that parses everywhere but exceeds the limit.
+    depth = agent_index.MAX_AST_DEPTH + 100
+    (tmp_path / "deep.py").write_text("x = " + "-" * depth + "1\n")
+    (tmp_path / "shallow.py").write_text("x = " + "-" * 20 + "1\n")
+    index = _build("-", ["yaml"], tmp_path)
+    reasons = {f["path"]: f["skip_reason"] for f in index["files"]}
+    assert reasons == {"deep.py": "nesting too deep", "shallow.py": None}
+
+
 def test_one_megabyte_single_line_is_skipped_with_a_reason(tmp_path):  # SEC-1/6
     under = "x = 1" + " + 1" * 249_000 + "\n"  # a single line just under the size cap
     over = "x = 1" + " + 1" * 251_000 + "\n"  # a single line over MAX_PY_FILE_BYTES

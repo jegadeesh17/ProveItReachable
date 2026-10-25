@@ -24,6 +24,7 @@ from .protocol import PROTOCOL_VERSION, BadInput, log, require_str
 
 REPO_ROOT = "/work/repo"
 MAX_PY_FILE_BYTES = 1_000_000
+MAX_AST_DEPTH = 1_000  # deeper trees are skipped; the same on every platform
 MAX_INDEXED_FILES = 10_000
 MAX_IMPORTS = 20_000
 MAX_DEFS = 20_000
@@ -365,6 +366,17 @@ def _enter_call(node: ast.Call, scope: _Scope, facts: _Facts, stack: list) -> No
     stack.extend((keyword.value, scope) for keyword in node.keywords)
 
 
+def _ast_too_deep(tree: ast.AST) -> bool:
+    """True when the tree nests deeper than `MAX_AST_DEPTH`. Iterative, so it cannot recurse."""
+    pending: list[tuple[ast.AST, int]] = [(tree, 1)]
+    while pending:
+        node, depth = pending.pop()
+        if depth > MAX_AST_DEPTH:
+            return True
+        pending.extend((child, depth + 1) for child in ast.iter_child_nodes(node))
+    return False
+
+
 def _analyze_file(path: str, data: bytes, targets: frozenset[str]) -> _Facts:
     """Parse one file and extract its facts. Raises what `ast.parse` raises; the caller skips."""
     module, is_package = module_name_for(path)
@@ -372,6 +384,8 @@ def _analyze_file(path: str, data: bytes, targets: frozenset[str]) -> _Facts:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         tree = ast.parse(data, filename=path)
+    if _ast_too_deep(tree):
+        raise RecursionError("ast nesting over MAX_AST_DEPTH")
     facts = _Facts(path=path, module=module, lines=lines)
     _collect(tree, facts, is_package)
     module_def = {

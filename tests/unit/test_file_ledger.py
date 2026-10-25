@@ -154,6 +154,18 @@ async def test_ac51_unwritable_location_is_ledger_unavailable(tmp_path, frozen_c
         await ledger.save(state, revision)
 
 
+async def test_ac51_not_a_directory_on_read_means_missing_as_on_linux(
+    tmp_path, frozen_clock, monkeypatch
+):
+    # Linux raises NotADirectoryError where Windows raises FileNotFoundError; both mean "no file".
+    def linux_read_text(self, *args, **kwargs):
+        raise NotADirectoryError(20, "Not a directory")
+
+    monkeypatch.setattr("pathlib.Path.read_text", linux_read_text)
+    state, revision = await _ledger(tmp_path, frozen_clock).load()
+    assert revision == "0" and state == initial_state(CAPS, frozen_clock.now())
+
+
 def test_ac51_from_settings_uses_the_build_caps_and_path(tmp_path, frozen_clock):
     settings = Settings(
         _env_file=None,

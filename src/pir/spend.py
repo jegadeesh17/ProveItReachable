@@ -189,7 +189,9 @@ class FileSpendLedger:
     def _read(self) -> tuple[LedgerState, int]:
         try:
             text = self._path.read_text(encoding="utf-8")
-        except FileNotFoundError:
+        except (FileNotFoundError, NotADirectoryError):
+            # No file there. Linux raises NotADirectoryError when a parent is a plain file,
+            # Windows raises FileNotFoundError; both mean "missing", so `save` is where it fails.
             return initial_state(self._caps, self._clock.now()), 0
         except OSError as exc:
             raise LedgerUnavailable(f"ledger file unreadable: {type(exc).__name__}") from exc
