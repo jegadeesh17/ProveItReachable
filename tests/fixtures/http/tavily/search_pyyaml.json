@@ -1,0 +1,34 @@
+{
+  "query": "pyyaml GHSA-8q59-q68h-6hv4 CVE-2020-14343 vulnerable function",
+  "follow_up_questions": null,
+  "answer": null,
+  "images": [],
+  "results": [
+    {
+      "url": "https://github.com/yaml/pyyaml/issues/420?utm_source=search&ref=a%2Fb",
+      "title": "Arbitrary code execution via full_load",
+      "content": "PyYAML before 5.4 is vulnerable: yaml.full_load and FullLoader can construct arbitrary Python objects from untrusted input.",
+      "score": 0.91,
+      "raw_content": null,
+      "id": "r1"
+    },
+    {
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2020-14343",
+      "title": "NVD CVE-2020-14343",
+      "content": "A vulnerability was discovered in the PyYAML library in versions before 5.4, where it is susceptible to arbitrary code execution when it processes untrusted YAML files through the full_load method or with the FullLoader loader.",
+      "score": 0.88,
+      "raw_content": null,
+      "id": "r2"
+    },
+    {
+      "url": "javascript:alert(1)",
+      "title": "not a web url",
+      "content": "ignored",
+      "score": 0.1,
+      "raw_content": null,
+      "id": "r3"
+    }
+  ],
+  "response_time": 1.2,
+  "request_id": "req-1"
+}
