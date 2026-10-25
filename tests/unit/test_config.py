@@ -28,7 +28,10 @@ def test_defaults_match_the_variable_table():
     assert s.nebius_model == "nvidia/nemotron-3-super-120b-a12b"
     assert (s.nebius_price_input_per_mtok, s.nebius_price_output_per_mtok) == (0.60, 2.40)
     assert s.executor == "sandbox"
-    assert s.sandbox_base_image is None
+    assert s.sandbox_base_image == (
+        "ghcr.io/astral-sh/uv:0.9.30-python3.13-bookworm-slim"
+        "@sha256:531f855bda2c73cd6ef67d56b733b357cea384185b3022bd09f05e002cd144ca"
+    )
     assert (s.sandbox_usd_per_second, s.sandbox_max_concurrent_ops) == (0.001, 4)
     assert (s.tavily_search_depth, s.tavily_max_results) == ("basic", 5)
     assert s.langsmith_tracing is False

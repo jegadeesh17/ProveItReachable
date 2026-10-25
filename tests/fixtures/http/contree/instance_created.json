@@ -1,0 +1,29 @@
+{
+  "command": "python3.13 -c \"print('x'*5000)\"",
+  "args": [],
+  "shell": true,
+  "env": {},
+  "cwd": "",
+  "uid": 65534,
+  "gid": 65534,
+  "stdin": {
+    "value": "",
+    "encoding": "ascii",
+    "close": true
+  },
+  "truncate_output_at": 1000,
+  "image": "6d69d784-bdd9-4973-91ab-e8b6b0888bba",
+  "hostname": "localhost",
+  "preserve_env": false,
+  "disposable": true,
+  "resources_limits": {
+    "max_layer_bytes": 12884901888
+  },
+  "networking": {
+    "enabled": false
+  },
+  "timeout": 20,
+  "files": {},
+  "result": null,
+  "uuid": "01a1739e-145b-7247-9862-e8b4fed0dcc1"
+}

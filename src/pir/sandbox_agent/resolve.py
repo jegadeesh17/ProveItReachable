@@ -32,6 +32,7 @@ TMP_ROOT = "/tmp"
 PIRIN_DIR = "pirin"
 UVWD_DIR = "uvwd"
 INPUT_NAME = "requirements.in"
+OUTPUT_NAME = "requirements.txt"
 UV_BIN = "/usr/local/bin/uv"
 UV_PYTHON = "/usr/local/bin/python3.13"
 UV_INDEX_URL = "https://pypi.org/simple"
@@ -110,8 +111,12 @@ OPTION_LONG_RE = re.compile(r"(?P<flag>--[A-Za-z][A-Za-z0-9-]*)(?:[=\s]+(?P<rest
 OPTION_SHORT_RE = re.compile(r"(?P<flag>-[A-Za-z])\s*=?\s*(?P<rest>.*)")
 PER_REQUIREMENT_OPTION_RE = re.compile(r"\s--[A-Za-z]")
 LOWER_BOUND_RE = re.compile(r">=\s*([0-9]+)\.([0-9]+)")
+# Keys only on the cause and hint sentences that uv 0.9.30 (the Sandbox image, authoritative) and
+# uv 0.13.5 (development) both print; their line wrapping differs, so whitespace is flexible.
 BUILD_NEEDED_RE = re.compile(
-    r"building from source is disabled|no usable wheels|wheels are required for", re.IGNORECASE
+    r"has\s+no\s+usable\s+wheels|wheels\s+are\s+required\s+for"
+    r"|building\s+from\s+source\s+is\s+disabled",
+    re.IGNORECASE,
 )
 UV_OUTPUT_LINE_RE = re.compile(rf"(?P<name>{_NAME})==(?P<version>[A-Za-z0-9.!+_-]+)\s*(?:;.*)?")
 INCLUDE_FLAGS = ("-r", "--requirement")
@@ -719,7 +724,7 @@ def _failed_deps(san: Sanitized, reason: str) -> list[dict[str, Any]]:
     return deps
 
 
-def build_uv_argv(input_path: str, python_version: str) -> list[str]:
+def build_uv_argv(input_path: str, python_version: str, output_path: str) -> list[str]:
     return [
         UV_BIN,
         "pip",
@@ -732,19 +737,24 @@ def build_uv_argv(input_path: str, python_version: str) -> list[str]:
         "--no-annotate",
         "--quiet",
         "--output-file",
-        "-",
+        output_path,
     ]
 
 
-def _compiled_output(stdout: str, uvwd: str) -> str:
-    """uv's output: stdout, or the file uv writes when it takes `--output-file -` literally."""
-    if stdout.strip():
-        return stdout
-    literal = os.path.join(uvwd, "-")
-    if os.path.isfile(literal) and os.path.getsize(literal) <= MAX_COMPILE_OUTPUT_BYTES:
-        with open(literal, encoding="utf-8", errors="replace") as handle:
+def _compiled_output(output_path: str) -> str:
+    """The text of uv's `--output-file`, or "" when it is missing, not a file or over the cap.
+
+    Only this file is read (ADR-0034): stdout is ignored and a file named `-` is never looked at.
+    """
+    try:
+        if not os.path.isfile(output_path) or os.path.islink(output_path):
+            return ""
+        if os.path.getsize(output_path) > MAX_COMPILE_OUTPUT_BYTES:
+            return ""
+        with open(output_path, encoding="utf-8", errors="replace") as handle:
             return handle.read()
-    return ""
+    except OSError:
+        return ""
 
 
 def run_compile(
@@ -772,7 +782,8 @@ def run_compile(
     input_path = os.path.join(pirin, INPUT_NAME)
     with open(input_path, "x", encoding="utf-8", newline="\n") as handle:
         handle.write("\n".join(san.lines) + "\n")
-    argv = build_uv_argv(input_path, python_version)
+    output_path = os.path.join(pirin, OUTPUT_NAME)
+    argv = build_uv_argv(input_path, python_version, output_path)
     try:
         done = runner(
             argv,
@@ -801,7 +812,7 @@ def run_compile(
         return _result("failed", _failed_deps(san, reason), notes + [reason])
     direct = set(san.names)
     deps: list[dict[str, Any]] = []
-    for line in _compiled_output(done.stdout or "", uvwd).splitlines():
+    for line in _compiled_output(output_path).splitlines():
         match = UV_OUTPUT_LINE_RE.fullmatch(line.strip())
         name = normalize_name(match.group("name")) if match else None
         if match and name:
@@ -809,7 +820,7 @@ def run_compile(
                 _dep(name, "uv pip compile", match.group("version"), ["main"], name in direct)
             )
     if not deps:
-        reason = "compile failed: uv produced no usable output"
+        reason = "compile failed: no output"
         return _result("failed", _failed_deps(san, reason), notes + [reason])
     deps += [_unresolved(name, REASON_NON_REGISTRY) for name in san.unresolved]
     return _result(

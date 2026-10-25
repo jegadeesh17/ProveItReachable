@@ -22,7 +22,8 @@ EXIT_BAD_INPUT = 2
 EXIT_LIMIT = 3
 
 MAX_ARGS_B64_BYTES = 64 * 1024
-MAX_RESULT_B64_BYTES = 10 * 1024 * 1024
+MAX_RESULT_B64_BYTES = 8388608  # 8 MiB; the same constant as agent_client.py (ADR-0034)
+MAX_STDERR_BYTES = 1024 * 1024  # later log lines are dropped (ADR-0034)
 MAX_RESULT_JSON_BYTES = 50 * 1024 * 1024
 
 
@@ -51,9 +52,22 @@ class UnsafeArchive(AgentError):
 Handler = Callable[[dict[str, Any]], dict[str, Any]]
 
 
+_stderr_written = 0
+
+
 def log(message: str, stream: TextIO | None = None) -> None:
-    """Write one diagnostic line to stderr (stdout is reserved for the result line)."""
-    (stream or sys.stderr).write(f"pir-agent: {message}\n")
+    """Write one diagnostic line to stderr (stdout is reserved for the result line).
+
+    At most MAX_STDERR_BYTES are written per process; later lines are dropped.
+    """
+    global _stderr_written
+    line = f"pir-agent: {message}\n"
+    size = len(line.encode("utf-8", errors="replace"))
+    if _stderr_written + size > MAX_STDERR_BYTES:
+        _stderr_written = MAX_STDERR_BYTES  # the cap is reached: every later line is dropped
+        return
+    _stderr_written += size
+    (stream or sys.stderr).write(line)
 
 
 def parse_args_b64(value: str) -> dict[str, Any]:
@@ -78,7 +92,7 @@ def encode_result(payload: Any) -> str:
 
 
 def decode_result(line: str) -> Any:
-    """Inverse of `encode_result`, with the host-side caps (10 MiB base64, 50 MiB decompressed)."""
+    """Inverse of `encode_result`, with the host-side caps (8 MiB base64, 50 MiB decompressed)."""
     line = line.strip()
     if not line.startswith(RESULT_PREFIX):
         raise ValueError("not a result line")
@@ -93,7 +107,11 @@ def decode_result(line: str) -> Any:
 
 
 def emit_result(payload: Any, stdout: TextIO) -> None:
+    """Print the result line, or raise LimitExceeded (exit 3) with nothing printed when the
+    encoded body is over MAX_RESULT_B64_BYTES, so the platform can never cut a result off."""
     line = encode_result(payload)
+    if len(line) - len(RESULT_PREFIX) > MAX_RESULT_B64_BYTES:
+        raise LimitExceeded("the encoded result is over the 8 MiB cap")
     stdout.write(line + "\n")
     stdout.flush()
 

@@ -1,0 +1,16 @@
+{
+  "status_code": 400,
+  "body": {
+    "status": 400,
+    "error": [
+      {
+        "type": "value_error",
+        "loc": [
+          "truncate_output_at"
+        ],
+        "msg": "Value error, truncate_output_at must be less than 10MiB",
+        "input": 11534336
+      }
+    ]
+  }
+}

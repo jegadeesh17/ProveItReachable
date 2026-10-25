@@ -32,7 +32,11 @@ class _Recorder:
     def __call__(self, argv, **kwargs):
         self.calls.append((list(argv), kwargs))
         stdout, code, stderr = self._result
-        return subprocess.CompletedProcess(argv, code, stdout, stderr)
+        # uv writes its result to `--output-file` (ADR-0034); stdout stays empty
+        if code == 0 and "--output-file" in argv:
+            with open(argv[argv.index("--output-file") + 1], "w", encoding="utf-8") as handle:
+                handle.write(stdout)
+        return subprocess.CompletedProcess(argv, code, "", stderr)
 
 
 def _run(name: str, mode: str = "lockfile-only", runner=_never_called, tmp_path=None) -> dict:

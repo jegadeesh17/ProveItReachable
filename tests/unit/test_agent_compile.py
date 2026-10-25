@@ -28,14 +28,18 @@ canary = _load_canary()
 
 
 class _Recorder:
-    """Stands in for subprocess.run and records what the agent would have spawned."""
+    """Stands in for subprocess.run and records what the agent would have spawned.
 
-    def __init__(self, stdout="", returncode=0, stderr="", raises=None, writes=None):
+    `output` is what uv writes to its `--output-file` (None: no file); `stdout` is what it prints.
+    """
+
+    def __init__(self, output=None, returncode=0, stderr="", raises=None, writes=None, stdout=""):
         self.calls: list[dict] = []
         self.argvs: list[list[str]] = []
         self._reply = (stdout, returncode, stderr)
         self._raises = raises
         self._writes = writes
+        self._output = output
 
     def __call__(self, argv, **kwargs):
         cwd = kwargs["cwd"]
@@ -49,8 +53,10 @@ class _Recorder:
         )
         if self._raises:
             raise self._raises
-        if self._writes:
+        if self._writes is not None:
             (Path(cwd) / "-").write_text(self._writes, encoding="utf-8")
+        if self._output is not None:
+            Path(argv[argv.index("--output-file") + 1]).write_text(self._output, encoding="utf-8")
         stdout, code, stderr = self._reply
         return subprocess.CompletedProcess(argv, code, stdout, stderr)
 
@@ -100,7 +106,7 @@ def canary_repo(tmp_path):
 
 
 def test_uv_runs_from_a_fresh_empty_directory_outside_the_repo(canary_repo, tmp_path):  # round 2
-    recorder = _Recorder(stdout="requests==2.32.3\npyyaml==6.0.2\n")
+    recorder = _Recorder(output="requests==2.32.3\npyyaml==6.0.2\n")
     _compile(canary_repo, tmp_path, recorder)
     (call,) = recorder.calls
     cwd = Path(call["cwd"])
@@ -110,7 +116,7 @@ def test_uv_runs_from_a_fresh_empty_directory_outside_the_repo(canary_repo, tmp_
 
 def test_a_pre_existing_uvwd_fails_the_step_without_running_uv(canary_repo, tmp_path):  # round 2
     (tmp_path / "tmp" / "uvwd").mkdir(parents=True)
-    recorder = _Recorder(stdout="requests==2.32.3\n")
+    recorder = _Recorder(output="requests==2.32.3\n")
     with pytest.raises(AgentError, match="already exists"):
         _compile(canary_repo, tmp_path, recorder)
     assert recorder.calls == []
@@ -118,14 +124,14 @@ def test_a_pre_existing_uvwd_fails_the_step_without_running_uv(canary_repo, tmp_
 
 def test_a_pre_existing_pirin_fails_the_step_without_running_uv(canary_repo, tmp_path):  # round 2
     (tmp_path / "tmp" / "pirin").mkdir(parents=True)
-    recorder = _Recorder(stdout="requests==2.32.3\n")
+    recorder = _Recorder(output="requests==2.32.3\n")
     with pytest.raises(AgentError, match="already exists"):
         _compile(canary_repo, tmp_path, recorder)
     assert recorder.calls == []
 
 
 def test_uv_argv_has_the_isolation_flags_and_an_input_outside_the_repo(canary_repo, tmp_path):
-    recorder = _Recorder(stdout="requests==2.32.3\n")
+    recorder = _Recorder(output="requests==2.32.3\n")
     _compile(canary_repo, tmp_path, recorder, python_version="3.11")  # round 2, findings 1 and 2
     (argv,) = recorder.argvs
     assert argv[:3] == [resolve.UV_BIN, "pip", "compile"]
@@ -134,7 +140,9 @@ def test_uv_argv_has_the_isolation_flags_and_an_input_outside_the_repo(canary_re
     assert argv[argv.index("--python") + 1] == PYTHON313
     assert argv[argv.index("--index-url") + 1] == "https://pypi.org/simple"
     assert argv[argv.index("--python-version") + 1] == "3.11"
-    assert argv[argv.index("--output-file") + 1] == "-" and "--quiet" in argv
+    out = tmp_path / "tmp" / "pirin" / "requirements.txt"  # ADR-0034: a file in our fresh folder
+    assert argv[-5:] == ["--no-header", "--no-annotate", "--quiet", "--output-file", str(out)][-5:]
+    assert argv[argv.index("--output-file") + 1] == str(out) and "-" not in argv[-2:]
     input_path = Path(argv[3])
     assert input_path.is_absolute() and input_path == tmp_path / "tmp" / "pirin" / "requirements.in"
     assert not str(input_path.resolve()).startswith(str(canary_repo.resolve()))
@@ -145,7 +153,7 @@ def test_uv_env_is_the_fixed_environment_not_os_environ(canary_repo, tmp_path, m
     monkeypatch.setenv("VIRTUAL_ENV", "/repo/.venv")  # round 2
     monkeypatch.setenv("CONDA_PREFIX", "/conda")
     monkeypatch.setenv("UV_INDEX_URL", "https://evil.invalid/simple")
-    recorder = _Recorder(stdout="requests==2.32.3\n")
+    recorder = _Recorder(output="requests==2.32.3\n")
     _compile(canary_repo, tmp_path, recorder)
     env = recorder.calls[0]["env"]
     assert env == resolve.UV_ENV
@@ -156,7 +164,7 @@ def test_uv_env_is_the_fixed_environment_not_os_environ(canary_repo, tmp_path, m
 
 
 def test_sanitized_input_holds_only_allowlisted_lines(canary_repo, tmp_path):  # round 2
-    recorder = _Recorder(stdout="requests==2.32.3\npyyaml==6.0.2\n")
+    recorder = _Recorder(output="requests==2.32.3\npyyaml==6.0.2\n")
     _compile(canary_repo, tmp_path, recorder)
     text = recorder.calls[0]["input_at_call"]
     assert text.splitlines() == canary.SANITIZED_LINES
@@ -167,7 +175,7 @@ def test_sanitized_input_holds_only_allowlisted_lines(canary_repo, tmp_path):  #
 
 
 def test_options_become_notes_and_non_registry_requirements_are_unresolved(canary_repo, tmp_path):
-    result = _compile(canary_repo, tmp_path, _Recorder(stdout="requests==2.32.3\n"))  # round 2
+    result = _compile(canary_repo, tmp_path, _Recorder(output="requests==2.32.3\n"))  # round 2
     for flag in canary.DROPPED_OPTIONS:
         assert f"ignored option {flag}" in result["notes"]
     assert any(n.startswith("ignored option -r") for n in result["notes"])
@@ -179,7 +187,7 @@ def test_options_become_notes_and_non_registry_requirements_are_unresolved(canar
 
 
 def test_nothing_in_the_canary_repo_is_executed_or_read_as_config(canary_repo, tmp_path):  # round 2
-    recorder = _Recorder(stdout="requests==2.32.3\n")
+    recorder = _Recorder(output="requests==2.32.3\n")
     _compile(canary_repo, tmp_path, recorder)
     assert not os.path.exists(canary.CANARY_MARKER)
     assert recorder.calls[0]["cwd"] != str(canary_repo)
@@ -190,7 +198,7 @@ def test_nothing_in_the_canary_repo_is_executed_or_read_as_config(canary_repo, t
 
 
 def test_static_pyproject_is_compiled_with_normalized_names(tmp_path):  # AC-08
-    recorder = _Recorder(stdout="certifi==2024.8.30\npyyaml==6.0.2\nrequests==2.32.3\n")
+    recorder = _Recorder(output="certifi==2024.8.30\npyyaml==6.0.2\nrequests==2.32.3\n")
     result = _compile(LOCKS / "pyproject_static", tmp_path, recorder)
     assert result["method"] == "compiled" and result["compiled_from"] == "pyproject.toml"
     assert result["python_version"] == "3.12"
@@ -207,30 +215,54 @@ def test_static_pyproject_is_compiled_with_normalized_names(tmp_path):  # AC-08
 
 
 def test_requires_python_raises_the_compile_target(tmp_path):  # AC-08
-    recorder = _Recorder(stdout="requests==2.32.3\n")
+    recorder = _Recorder(output="requests==2.32.3\n")
     _compile(LOCKS / "pyproject_static", tmp_path, recorder, python_version="3.9")
     argv = recorder.argvs[0]
     assert argv[argv.index("--python-version") + 1] == "3.12"
 
 
 def test_uv_output_versions_are_validated_and_sorted(tmp_path):  # AC-08
-    recorder = _Recorder(stdout="Zeta_Pkg==2.0\nalpha==1.0\nweird==not.a.version\n# comment\n")
+    recorder = _Recorder(output="Zeta_Pkg==2.0\nalpha==1.0\nweird==not.a.version\n# comment\n")
     result = _compile(LOCKS / "unpinned_reqs", tmp_path, recorder)
     assert [d["name"] for d in result["dependencies"]] == ["alpha", "weird", "zeta-pkg"]
     assert _by_name(result)["weird"]["unresolved_reason"] == "not a PEP 440 version"
 
 
-def test_output_file_dash_written_to_the_uv_directory_is_read(tmp_path):  # AC-08
-    recorder = _Recorder(stdout="", writes="requests==2.32.3\n")
-    result = _compile(LOCKS / "unpinned_reqs", tmp_path, recorder)
+def test_the_result_is_read_from_the_output_file(tmp_path):  # AC-08, ADR-0034
+    result = _compile(LOCKS / "unpinned_reqs", tmp_path, _Recorder(output="requests==2.32.3\n"))
+    assert result["method"] == "compiled"
     assert _by_name(result)["requests"]["version"] == "2.32.3"
 
 
-def test_success_without_any_output_is_a_failed_compile(tmp_path):  # AC-09
-    result = _compile(LOCKS / "unpinned_reqs", tmp_path, _Recorder(stdout=""))
+@pytest.mark.parametrize(
+    "recorder",
+    [
+        _Recorder(),  # exit 0 and nothing written anywhere
+        _Recorder(output=""),  # an empty output file
+        _Recorder(stdout="requests==2.32.3\n"),  # output only on stdout is ignored
+        _Recorder(writes="requests==2.32.3\n"),  # a file named "-" is never read
+        _Recorder(output="  \n# only a comment\n"),
+    ],
+)
+def test_no_output_file_content_is_a_failed_compile_no_output(tmp_path, recorder):  # AC-09
+    result = _compile(LOCKS / "unpinned_reqs", tmp_path, recorder)
     deps = _by_name(result)
     assert result["method"] == "failed"
-    assert deps["flask"]["unresolved_reason"].startswith("compile failed: ")
+    assert deps["flask"]["unresolved_reason"] == "compile failed: no output"
+
+
+def test_an_oversized_output_file_is_a_failed_compile_no_output(tmp_path, monkeypatch):  # ADR-0034
+    monkeypatch.setattr(resolve, "MAX_COMPILE_OUTPUT_BYTES", 10)
+    recorder = _Recorder(output="requests==2.32.3\n" * 3)
+    result = _compile(LOCKS / "unpinned_reqs", tmp_path, recorder)
+    assert _by_name(result)["flask"]["unresolved_reason"] == "compile failed: no output"
+
+
+def test_the_output_file_is_read_even_if_stdout_also_has_text(tmp_path):  # ADR-0034
+    recorder = _Recorder(output="requests==2.32.3\n", stdout="flask==9.9.9\n")
+    result = _compile(LOCKS / "unpinned_reqs", tmp_path, recorder)
+    assert _by_name(result)["requests"]["version"] == "2.32.3"
+    assert "flask" not in {d["name"] for d in result["dependencies"] if d["resolved"]}
 
 
 # --- failures (AC-09) ---
@@ -238,7 +270,7 @@ def test_success_without_any_output_is_a_failed_compile(tmp_path):  # AC-09
 
 def test_a_build_needed_uv_error_discards_output_and_marks_names_dynamic(tmp_path):  # AC-09
     stderr = (LOCKS / "uv_no_build_sdist.stderr.txt").read_text(encoding="utf-8")
-    recorder = _Recorder(stdout="requests==2.32.3\n", returncode=1, stderr=stderr)
+    recorder = _Recorder(output="requests==2.32.3\n", returncode=1, stderr=stderr)
     result = _compile(LOCKS / "unpinned_reqs", tmp_path, recorder)
     assert result["method"] == "failed" and result["lockfile"] is None
     deps = _by_name(result)
@@ -247,11 +279,30 @@ def test_a_build_needed_uv_error_discards_output_and_marks_names_dynamic(tmp_pat
     assert DYNAMIC in result["notes"]
 
 
-def test_the_pinned_uv_fixture_text_is_recognised_as_build_needed():  # AC-09
-    stderr = (LOCKS / "uv_no_build_sdist.stderr.txt").read_text(encoding="utf-8")
+SANDBOX_NO_BUILD = FIXTURES / "http" / "contree" / "uv_no_build_sdist.sandbox.stderr.txt"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        SANDBOX_NO_BUILD,  # uv 0.9.30, the Sandbox image: authoritative (ADR-0034)
+        LOCKS / "uv_no_build_sdist.stderr.txt",  # uv 0.13.5, development
+    ],
+    ids=["sandbox-uv-0.9.30", "dev-uv-0.13.5"],
+)
+def test_both_uv_fixture_texts_are_recognised_as_build_needed(path):  # AC-09, ADR-0034
+    assert resolve.BUILD_NEEDED_RE.search(path.read_text(encoding="utf-8"))
+
+
+def test_other_uv_errors_are_not_build_needed():  # AC-09
     other = (LOCKS / "uv_package_not_found.stderr.txt").read_text(encoding="utf-8")
-    assert resolve.BUILD_NEEDED_RE.search(stderr)
     assert not resolve.BUILD_NEEDED_RE.search(other)
+
+
+def test_the_sandbox_uv_text_marks_names_dynamic(tmp_path):  # AC-09, ADR-0034
+    stderr = SANDBOX_NO_BUILD.read_text(encoding="utf-8")
+    result = _compile(LOCKS / "unpinned_reqs", tmp_path, _Recorder(returncode=1, stderr=stderr))
+    assert {d["unresolved_reason"] for d in _by_name(result).values()} == {DYNAMIC}
 
 
 def test_another_uv_error_is_a_compile_failure_with_the_stderr_tail(tmp_path):  # AC-09
@@ -282,7 +333,7 @@ def test_uv_timeout_and_a_missing_uv_binary_are_compile_failures(tmp_path):  # A
 
 
 def test_compile_on_a_setup_py_fixture_runs_nothing(tmp_path):  # security round 1
-    recorder = _Recorder(stdout="requests==2.32.3\n")
+    recorder = _Recorder(output="requests==2.32.3\n")
     result = _compile(LOCKS / "setup_py_only", tmp_path, recorder)
     assert recorder.argvs == []  # no uv call at all, so no build can happen
     assert all(d["unresolved_reason"] == DYNAMIC for d in result["dependencies"])
@@ -300,7 +351,7 @@ def test_only_non_registry_requirements_need_no_uv_call(tmp_path):  # AC-09
 
 def test_requirements_in_wins_over_an_unpinned_requirements_txt(tmp_path):  # AC-08
     repo = _repo(tmp_path, {"requirements.in": "alpha\n", "requirements.txt": "beta>=1\n"})
-    recorder = _Recorder(stdout="alpha==1.0\n")
+    recorder = _Recorder(output="alpha==1.0\n")
     result = _compile(repo, tmp_path, recorder)
     assert result["compiled_from"] == "requirements.in"
     assert recorder.calls[0]["input_at_call"] == "alpha\n"
@@ -311,7 +362,7 @@ def test_a_pyproject_without_a_project_table_falls_through_to_requirements_in(tm
         tmp_path,
         {"pyproject.toml": "[tool.ruff]\nline-length = 100\n", "requirements.in": "alpha\n"},
     )
-    result = _compile(repo, tmp_path, _Recorder(stdout="alpha==1.0\n"))
+    result = _compile(repo, tmp_path, _Recorder(output="alpha==1.0\n"))
     assert result["compiled_from"] == "requirements.in"
 
 
@@ -322,7 +373,7 @@ def test_a_pyproject_without_a_project_table_falls_through_to_requirements_in(tm
 def test_a_manifest_over_one_mib_is_unreadable(name, tmp_path):  # R3-2
     big = "# " + "x" * (1024 * 1024 + 10) + "\nrequests\n"
     repo = _repo(tmp_path, {name: big})
-    recorder = _Recorder(stdout="requests==2.32.3\n")
+    recorder = _Recorder(output="requests==2.32.3\n")
     result = _compile(repo, tmp_path, recorder)
     assert recorder.argvs == []
     assert result["method"] == "failed" and result["dependencies"] == []

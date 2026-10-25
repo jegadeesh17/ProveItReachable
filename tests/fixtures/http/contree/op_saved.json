@@ -1,0 +1,84 @@
+{
+  "uuid": "01a1739d-87b4-73a1-ac86-b3fa80824744",
+  "kind": "instance",
+  "status": "SUCCESS",
+  "error": null,
+  "created_at": "2026-10-25T15:11:06.181362+00:00",
+  "duration": 0.386,
+  "image_size": 1023,
+  "consumed_cpu": 0.002976,
+  "consumed_memory": 7792,
+  "image_uuid": "c6688282-43ba-472c-b15e-2383d2b99ad0",
+  "result_image_uuid": "1cd3e740-bbc4-42d6-957d-4da1fc3d328f",
+  "metadata": {
+    "command": "env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp sh -c 'touch /work/marker; echo saved'",
+    "args": [],
+    "shell": true,
+    "env": {},
+    "cwd": "/",
+    "uid": 65534,
+    "gid": 65534,
+    "stdin": {
+      "value": "",
+      "encoding": "ascii",
+      "close": true
+    },
+    "truncate_output_at": 10485760,
+    "image": "c6688282-43ba-472c-b15e-2383d2b99ad0",
+    "hostname": "localhost",
+    "preserve_env": false,
+    "disposable": false,
+    "resources_limits": {
+      "max_layer_bytes": 12884901888
+    },
+    "networking": {
+      "enabled": false
+    },
+    "timeout": 20,
+    "files": {},
+    "result": {
+      "resources": {
+        "block_input": 0,
+        "block_output": 0,
+        "cost": 6.872e-05,
+        "elapsed_time": 0.002976,
+        "involuntary_switches": 4,
+        "max_rss": 7792,
+        "monotonic_time": 0.042870835,
+        "page_faults": 34,
+        "page_faults_io": 232,
+        "shared_memory": 0,
+        "signals": 0,
+        "swaps": 0,
+        "system_cpu_time": 0.0,
+        "unshared_memory": 0,
+        "user_cpu_time": 0.002976,
+        "voluntary_switches": 161,
+        "layer_bytes": 1023
+      },
+      "state": {
+        "continued": false,
+        "core_dump": false,
+        "exit_code": 0,
+        "pid": 6,
+        "signal": -1,
+        "stopped": false,
+        "timed_out": false
+      },
+      "stdout": {
+        "value": "saved\n",
+        "encoding": "ascii",
+        "truncated": false
+      },
+      "stderr": {
+        "value": "",
+        "encoding": "ascii",
+        "truncated": false
+      }
+    }
+  },
+  "result": {
+    "image": "1cd3e740-bbc4-42d6-957d-4da1fc3d328f",
+    "tag": null
+  }
+}

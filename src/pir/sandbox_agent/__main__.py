@@ -6,13 +6,14 @@
 import os
 import sys
 
-from . import fetch, index, protocol, resolve
+from . import fetch, index, protocol, resolve, selfcheck
 
 HANDLERS: dict[str, protocol.Handler] = {
     "fetch": fetch.fetch,
     "unpack": fetch.unpack,
     "index": index.index_command,
     "resolve": resolve.resolve_command,
+    "selfcheck": selfcheck.selfcheck_command,
 }
 
 

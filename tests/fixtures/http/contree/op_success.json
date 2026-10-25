@@ -1,0 +1,84 @@
+{
+  "uuid": "01a1739d-82a4-7241-88f2-8d9aefa692d5",
+  "kind": "instance",
+  "status": "SUCCESS",
+  "error": null,
+  "created_at": "2026-10-25T15:11:04.881984+00:00",
+  "duration": 0.355,
+  "image_size": null,
+  "consumed_cpu": 0.002986,
+  "consumed_memory": 7760,
+  "image_uuid": "c6688282-43ba-472c-b15e-2383d2b99ad0",
+  "result_image_uuid": null,
+  "metadata": {
+    "command": "env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp sh -c 'id -u; echo PIR-RESULT:abc'",
+    "args": [],
+    "shell": true,
+    "env": {},
+    "cwd": "/",
+    "uid": 65534,
+    "gid": 65534,
+    "stdin": {
+      "value": "",
+      "encoding": "ascii",
+      "close": true
+    },
+    "truncate_output_at": 10485760,
+    "image": "c6688282-43ba-472c-b15e-2383d2b99ad0",
+    "hostname": "localhost",
+    "preserve_env": false,
+    "disposable": true,
+    "resources_limits": {
+      "max_layer_bytes": 12884901888
+    },
+    "networking": {
+      "enabled": false
+    },
+    "timeout": 20,
+    "files": {},
+    "result": {
+      "resources": {
+        "block_input": 0,
+        "block_output": 0,
+        "cost": 6.866e-05,
+        "elapsed_time": 0.002986,
+        "involuntary_switches": 12,
+        "max_rss": 7760,
+        "monotonic_time": 0.029071417,
+        "page_faults": 38,
+        "page_faults_io": 250,
+        "shared_memory": 0,
+        "signals": 0,
+        "swaps": 0,
+        "system_cpu_time": 0.0,
+        "unshared_memory": 0,
+        "user_cpu_time": 0.002986,
+        "voluntary_switches": 178,
+        "layer_bytes": -1
+      },
+      "state": {
+        "continued": false,
+        "core_dump": false,
+        "exit_code": 0,
+        "pid": 7,
+        "signal": -1,
+        "stopped": false,
+        "timed_out": false
+      },
+      "stdout": {
+        "value": "65534\nPIR-RESULT:abc\n",
+        "encoding": "ascii",
+        "truncated": false
+      },
+      "stderr": {
+        "value": "",
+        "encoding": "ascii",
+        "truncated": false
+      }
+    }
+  },
+  "result": {
+    "image": null,
+    "tag": null
+  }
+}

@@ -36,6 +36,9 @@ pir = "pir.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"pir.executor" = ["base_image_fingerprint.json"]
+
 [tool.ruff]
 target-version = "py313"
 line-length = 100

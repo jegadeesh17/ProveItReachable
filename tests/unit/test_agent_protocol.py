@@ -17,6 +17,11 @@ from pir.sandbox_agent import protocol
 AGENT_DIR = Path(__file__).resolve().parents[2] / "src" / "pir" / "sandbox_agent"
 
 
+@pytest.fixture(autouse=True)
+def _fresh_stderr_budget(monkeypatch):
+    monkeypatch.setattr(protocol, "_stderr_written", 0)
+
+
 def _b64(payload: object) -> str:
     return base64.b64encode(json.dumps(payload).encode()).decode()
 
@@ -47,6 +52,40 @@ def test_decode_result_rejects_non_result_and_oversized_lines():
         protocol.decode_result("hello")
     with pytest.raises(ValueError):
         protocol.decode_result("PIR-RESULT:" + "A" * (protocol.MAX_RESULT_B64_BYTES + 1))
+
+
+def test_the_result_cap_is_8_mib():  # ADR-0034 (the client asserts the same constant)
+    assert protocol.MAX_RESULT_B64_BYTES == 8388608
+
+
+def test_an_encoded_result_over_the_cap_prints_nothing_and_exits_3(monkeypatch):  # ADR-0034
+    monkeypatch.setattr(protocol, "MAX_RESULT_B64_BYTES", 50)
+    big = {"k": os.urandom(200).hex()}
+    assert len(protocol.encode_result(big)) - len("PIR-RESULT:") > 50
+    code, out, err = _run(["x", "--args-b64", _b64({})], {"x": lambda args: big})
+    assert code == protocol.EXIT_LIMIT == 3
+    assert out == ""
+    assert "cap" in err
+
+
+def test_an_encoded_result_exactly_at_the_cap_is_printed(monkeypatch):
+    small = {"k": 1}
+    size = len(protocol.encode_result(small)) - len("PIR-RESULT:")
+    monkeypatch.setattr(protocol, "MAX_RESULT_B64_BYTES", size)
+    code, out, _ = _run(["x", "--args-b64", _b64({})], {"x": lambda args: small})
+    assert code == 0 and protocol.decode_result(out) == small
+
+
+def test_stderr_logging_is_capped_at_1_mib_and_later_lines_are_dropped():  # ADR-0034
+    assert protocol.MAX_STDERR_BYTES == 1024 * 1024
+    err = io.StringIO()
+    for i in range(3000):
+        protocol.log(f"line {i} " + "x" * 1000, err)
+    written = err.getvalue()
+    assert len(written.encode()) <= protocol.MAX_STDERR_BYTES
+    assert "line 0 " in written and "line 2999 " not in written
+    protocol.log("late", err)
+    assert "late" not in err.getvalue()
 
 
 def test_success_prints_exactly_one_result_line_and_exits_0():
@@ -111,7 +150,7 @@ def test_require_int_rejects_bools_strings_and_out_of_range():
 
 
 def test_main_dispatches_the_part_one_and_two_commands():
-    assert set(agent_main.HANDLERS) == {"fetch", "unpack", "index", "resolve"}
+    assert set(agent_main.HANDLERS) == {"fetch", "unpack", "index", "resolve", "selfcheck"}
     code = agent_main.main(["fetch", "--args-b64", _b64({"owner": "../x"})])
     assert code == 2
 
