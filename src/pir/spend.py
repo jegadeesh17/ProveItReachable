@@ -13,6 +13,7 @@ import logging
 import math
 import os
 import random
+import secrets
 import sys
 import tempfile
 import threading
@@ -249,32 +250,83 @@ class FileSpendLedger:
                 time.sleep(self.LOCK_POLL_S)
             except OSError as exc:
                 raise LedgerUnavailable(f"ledger lock not available: {type(exc).__name__}") from exc
+        owner = f"{os.getpid()}:{secrets.token_hex(8)}"
         try:
             try:
-                os.write(fd, str(os.getpid()).encode("ascii"))
+                os.write(fd, owner.encode("ascii"))
             finally:
                 os.close(fd)
+        except OSError as exc:
+            lock_path.unlink(missing_ok=True)  # we just created it and it holds no owner mark
+            raise LedgerUnavailable(f"ledger lock not available: {type(exc).__name__}") from exc
+        try:
             yield
         finally:
-            with contextlib.suppress(FileNotFoundError):
-                lock_path.unlink()
+            self._release(lock_path, owner)
+
+    def _release(self, lock_path: Path, owner: str) -> None:
+        """Delete the lock only if it still holds our owner mark: a holder suspended past
+        `LOCK_STALE_S` may find its lock taken over, and must not remove the new holder's."""
+        try:
+            held = lock_path.read_text(encoding="ascii")
+        except FileNotFoundError:
+            return
+        except (OSError, ValueError) as exc:
+            logger.warning(
+                "could not read the spend ledger lock to release it; leaving it to go stale",
+                extra={"event": "ledger_lock_release_failed", "ledger": self._path.name},
+            )
+            logger.debug("lock read failed: %s", type(exc).__name__)
+            return
+        if held != owner:
+            logger.warning(
+                "the spend ledger lock was taken over while held; not removing it",
+                extra={"event": "ledger_lock_lost", "ledger": self._path.name},
+            )
+            return
+        with contextlib.suppress(FileNotFoundError):
+            lock_path.unlink()
 
     def _drop_if_stale(self, lock_path: Path) -> None:
-        """Remove a lock file left by a process that died (older than `LOCK_STALE_S`)."""
+        """Remove a lock file left by a process that died (older than `LOCK_STALE_S`).
+
+        The lock is claimed by renaming it to a name unique to this process: only one waiter's
+        rename can succeed, and only the renamed file is unlinked, never a lock a faster waiter
+        has since created."""
         try:
-            seen = lock_path.stat().st_mtime
-            if time.time() - seen <= self.LOCK_STALE_S:
+            if time.time() - lock_path.stat().st_mtime <= self.LOCK_STALE_S:
                 return
-            if lock_path.stat().st_mtime == seen:  # still the same file, not a fresh lock
+            claimed = lock_path.with_name(
+                f"{lock_path.name}.stale-{os.getpid()}-{secrets.token_hex(8)}"
+            )
+            os.rename(lock_path, claimed)  # FileNotFoundError: another waiter won the race
+            try:
+                if time.time() - claimed.stat().st_mtime <= self.LOCK_STALE_S:
+                    # We claimed a fresh lock that replaced the stale one: put it back.
+                    self._restore(claimed, lock_path)
+                    return
                 logger.warning(
                     "removing a stale spend ledger lock",
                     extra={"event": "ledger_lock_stale", "ledger": self._path.name},
                 )
-                lock_path.unlink()
+            except FileNotFoundError:
+                return
+            claimed.unlink(missing_ok=True)
         except (FileNotFoundError, PermissionError):
             return  # released meanwhile, or (Windows) being deleted: the caller retries
         except OSError as exc:
             raise LedgerUnavailable(f"ledger lock not available: {type(exc).__name__}") from exc
+
+    def _restore(self, claimed: Path, lock_path: Path) -> None:
+        try:
+            os.link(claimed, lock_path)  # fails if a newer lock exists: never overwrites
+        except OSError as exc:
+            logger.warning(
+                "could not restore a live spend ledger lock claimed by mistake",
+                extra={"event": "ledger_lock_restore_failed", "ledger": self._path.name},
+            )
+            logger.debug("lock restore failed: %s", type(exc).__name__)
+        claimed.unlink(missing_ok=True)
 
     def _save_sync(self, state: LedgerState, parent: str) -> int:
         with self._lock, self._file_lock():

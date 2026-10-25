@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -277,6 +278,114 @@ async def test_ac51_the_lock_is_released_after_a_conflict(tmp_path, frozen_clock
     with pytest.raises(LedgerConflict):
         await ledger.save(state, "7")
     assert not (tmp_path / "spend_ledger.json.lock").exists()
+
+
+def _stale_lock(tmp_path, owner="999:dead") -> Path:
+    lock = tmp_path / "spend_ledger.json.lock"
+    lock.write_text(owner, encoding="ascii")
+    old = time.time() - 3600
+    os.utime(lock, (old, old))
+    return lock
+
+
+def test_ac51_two_concurrent_takeovers_of_one_stale_lock_leave_exactly_one_holder(
+    tmp_path, frozen_clock, monkeypatch
+):
+    """Both waiters see the stale lock and rename it at the same moment: one wins, and the
+    other must not remove the lock the winner then creates."""
+    _stale_lock(tmp_path)
+    lock = tmp_path / "spend_ledger.json.lock"
+    ledgers = [_ledger(tmp_path, frozen_clock), _ledger(tmp_path, frozen_clock)]
+    real_rename = os.rename
+    both_ready = threading.Barrier(2, timeout=10)
+
+    def synced_rename(src, dst):
+        if ".stale-" in str(dst):
+            both_ready.wait()  # neither renames before both have seen the stale lock
+        return real_rename(src, dst)
+
+    monkeypatch.setattr("pir.spend.os.rename", synced_rename)
+    guard = threading.Lock()
+    inside = 0
+    peak = 0
+    entered = 0
+    errors: list[BaseException] = []
+
+    def worker(ledger: FileSpendLedger) -> None:
+        nonlocal inside, peak, entered
+        try:
+            with ledger._file_lock():
+                with guard:
+                    inside += 1
+                    entered += 1
+                    peak = max(peak, inside)
+                time.sleep(0.2)
+                with guard:
+                    inside -= 1
+        except BaseException as exc:  # reported by the assertions below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(ledger,)) for ledger in ledgers]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+
+    assert errors == []
+    assert entered == 2 and peak == 1  # they took the lock one after the other, never together
+    assert not lock.exists()
+    assert [p.name for p in tmp_path.iterdir()] == []  # no renamed stale file is left behind
+
+
+def test_ac51_a_takeover_that_claims_a_fresh_lock_puts_it_back(tmp_path, frozen_clock):
+    ledger = _ledger(tmp_path, frozen_clock)
+    lock = tmp_path / "spend_ledger.json.lock"
+    lock.write_text("1:live", encoding="ascii")  # fresh: not stale
+    ledger._drop_if_stale(lock)
+    assert lock.read_text(encoding="ascii") == "1:live"
+    # the stale-looking stat then a swap to a fresh lock: claim it, see it is fresh, restore it
+    fresh = tmp_path / "x.claimed"
+    fresh.write_text("1:live", encoding="ascii")
+    lock.unlink()
+    ledger._restore(fresh, lock)
+    assert lock.read_text(encoding="ascii") == "1:live" and not fresh.exists()
+
+
+def test_ac51_release_does_not_remove_a_lock_owned_by_someone_else(tmp_path, frozen_clock):
+    ledger = _ledger(tmp_path, frozen_clock)
+    lock = tmp_path / "spend_ledger.json.lock"
+    with ledger._file_lock():
+        mine = lock.read_text(encoding="ascii")
+        assert mine.startswith(f"{os.getpid()}:") and len(mine) > len(f"{os.getpid()}:")
+        # our lock went stale and another process took over: its lock is in place now
+        lock.unlink()
+        lock.write_text("4242:other-token", encoding="ascii")
+    assert lock.read_text(encoding="ascii") == "4242:other-token"
+
+
+def test_ac51_release_removes_the_lock_it_holds_and_tolerates_a_missing_one(tmp_path, frozen_clock):
+    ledger = _ledger(tmp_path, frozen_clock)
+    lock = tmp_path / "spend_ledger.json.lock"
+    with ledger._file_lock():
+        assert lock.exists()
+    assert not lock.exists()
+    with ledger._file_lock():
+        lock.unlink()  # taken over and already removed: release must not raise
+    assert not lock.exists()
+
+
+async def test_ac51_a_lock_held_by_a_live_process_is_still_fail_closed(
+    tmp_path, frozen_clock, monkeypatch
+):
+    ledger = _ledger(tmp_path, frozen_clock)
+    state, revision = await ledger.load()
+    lock = tmp_path / "spend_ledger.json.lock"
+    lock.write_text("1:live", encoding="ascii")
+    monkeypatch.setattr(FileSpendLedger, "LOCK_WAIT_S", 0.1)
+    with pytest.raises(LedgerUnavailable):
+        await ledger.save(state, revision)
+    assert lock.read_text(encoding="ascii") == "1:live"
+    assert [p.name for p in tmp_path.iterdir()] == ["spend_ledger.json.lock"]
 
 
 _WORKER = """

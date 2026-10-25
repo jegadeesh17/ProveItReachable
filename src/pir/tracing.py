@@ -90,9 +90,15 @@ async def run_traced(
     """
     client = client if client is not None else make_client(settings)
     run_id = uuid.uuid4() if client is not None else None
+    # Under eval the scan is a child run, so the trace id (the case root's) differs from run_id.
+    trace_id = (getattr(parent, "trace_id", None) or run_id) if run_id else None
     logger.info(
         "scan started",
-        extra={"event": "scan_started", "run_id": str(run_id) if run_id else None},
+        extra={
+            "event": "scan_started",
+            "run_id": str(run_id) if run_id else None,
+            "trace_id": str(trace_id) if trace_id else None,
+        },
     )
     if client is None:
         with tracing_context(enabled=False):

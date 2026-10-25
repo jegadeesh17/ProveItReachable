@@ -33,6 +33,7 @@ _EXTRA_FIELDS = (
     "client",
     "cost_usd",
     "run_id",
+    "trace_id",
 )
 
 _AUTHORIZATION = re.compile(

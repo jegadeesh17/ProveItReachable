@@ -450,6 +450,7 @@ async def test_ac73_ac74_log_lines_are_json_with_scan_id_and_stage_fields(tmp_pa
     assert root["extra"]["metadata"]["scan_id"] == "b" * 32 == report.scan_id
     started = [line for line in lines if line.get("event") == "scan_started"]
     assert len(started) == 1 and started[0]["run_id"] == root["id"]
+    assert started[0]["trace_id"] == root["trace_id"]  # logged beside the run id
 
 
 async def test_scan_runs_untraced_when_tracing_is_off(tmp_path):
@@ -458,3 +459,4 @@ async def test_scan_runs_untraced_when_tracing_is_off(tmp_path):
         await scan(h, tmp_path)
     started = [json.loads(line) for line in logs.getvalue().splitlines() if "scan_started" in line]
     assert started and started[0]["run_id"] is None
+    assert started[0]["trace_id"] is None

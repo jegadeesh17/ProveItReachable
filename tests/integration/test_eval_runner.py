@@ -433,6 +433,70 @@ async def test_ac36_the_sandbox_selfcheck_failure_stops_the_run_unscored(tmp_pat
     assert not (tmp_path / "r" / "latest.json").exists()
 
 
+def ended_with_error(client: EvalFakeLangSmith) -> dict[str, dict[str, Any]]:
+    """Case root run id -> its last update, for the case roots patched with an error."""
+    roots = {str(r["id"]) for r in client.got_case_runs}
+    return {
+        u["run_id"]: u for u in client.got_case_updates if u["run_id"] in roots and u.get("error")
+    }
+
+
+async def test_ac36_an_aborted_run_ends_the_pending_case_root_with_the_error(tmp_path, monkeypatch):
+    suite = make_suite(tmp_path, [("c1", "repo-a", GHSA, LR), ("c2", "repo-b", GHSA, LR)])
+    h = harness(tmp_path)
+    as_sandbox(h)
+    client = EvalFakeLangSmith()
+
+    async def selfcheck_failed(deps, target, budget, **kw):
+        report = await real(deps, target, budget, **kw)
+        return report.model_copy(
+            update={
+                "limitations": [*report.limitations, "sandbox unavailable: base image check failed"]
+            }
+        )
+
+    real = runner.run_scan
+    monkeypatch.setattr(runner, "run_scan", selfcheck_failed)
+    run = await run_eval(suite, h.deps, client=client, results_dir=tmp_path / "r")
+
+    assert run.aborted and "ADR-0033" in run.aborted
+    (root,) = client.got_case_runs  # only the first repo's case root was posted
+    patched = ended_with_error(client)
+    assert list(patched) == [str(root["id"])]
+    assert "ADR-0033" in patched[str(root["id"])]["error"]
+    assert patched[str(root["id"])].get("end_time") is not None
+
+
+async def test_ac36_a_scoring_error_ends_the_pending_case_root_and_propagates(
+    tmp_path, monkeypatch
+):
+    suite = make_suite(tmp_path, [("c1", "repo-a", GHSA, LR)])
+    h = harness(tmp_path)
+    as_sandbox(h)
+    client = EvalFakeLangSmith()
+
+    def broken(case, scan):
+        raise RuntimeError("secret detail")
+
+    monkeypatch.setattr(runner, "score_case", broken)
+    with pytest.raises(RuntimeError, match="secret detail"):
+        await run_eval(suite, h.deps, client=client, results_dir=tmp_path / "r")
+
+    (root,) = client.got_case_runs
+    patched = ended_with_error(client)
+    assert list(patched) == [str(root["id"])]
+    assert patched[str(root["id"])]["error"] == "eval aborted: RuntimeError"  # no message leaked
+
+
+async def test_ac36_a_completed_run_patches_no_case_root_with_an_error(tmp_path):
+    suite = make_suite(tmp_path, [("c1", "repo-a", GHSA, LR)])
+    h = harness(tmp_path)
+    as_sandbox(h)
+    client = EvalFakeLangSmith()
+    await run_eval(suite, h.deps, client=client, results_dir=tmp_path / "r")
+    assert ended_with_error(client) == {}
+
+
 # ---- AC-37: LangSmith -------------------------------------------------------------------------
 
 
@@ -845,3 +909,18 @@ async def test_a_replayed_run_charges_no_tavily_spend(tmp_path, monkeypatch):
 
     assert "precision 1.00" in replayed.text.lower()  # the Tavily answers were really replayed
     assert tavily_used(second) == 0.0
+
+
+async def test_a_refresh_run_charges_tavily_at_full_cost(tmp_path, monkeypatch):
+    """`--refresh-research` makes real requests, so each search is billed in full."""
+    h = harness(tmp_path)
+    cases = command_env(tmp_path, monkeypatch, h)
+    inner = {"osv": RecordingTransport(osv_routes()), "tavily": RecordingTransport(tavily_routes())}
+
+    await run_command(h.settings, cases, refresh=True, record_inner=inner)
+
+    s = h.settings
+    per_search = (1 if s.tavily_search_depth == "basic" else 2) * s.tavily_price_per_credit_usd
+    searches = [r for r in inner["tavily"].requests if r.url.path.endswith("/search")]
+    assert searches
+    assert tavily_used(h) == pytest.approx(len(searches) * per_search)  # nonzero: billed in full

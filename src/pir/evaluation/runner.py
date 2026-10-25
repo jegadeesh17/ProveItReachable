@@ -606,6 +606,25 @@ def experiment_name(now: datetime, model: str) -> str:
     return f"eval-{now.strftime('%Y%m%dT%H%M%SZ')}-{model.replace('/', '-')}"
 
 
+async def _abandon_root(
+    publisher: "ExperimentPublisher | None", root: RunTree | None, error: str
+) -> None:
+    """End and patch a posted case root that the run abandoned (not already ended), so LangSmith
+    does not show it pending. A failure here is logged: it must not hide the abort."""
+    if publisher is None or root is None or root.end_time is not None:
+        return
+
+    def end() -> None:
+        root.end(error=error)
+        root.patch()
+        publisher.client.flush()
+
+    try:
+        await asyncio.to_thread(end)
+    except Exception:
+        logger.exception("langsmith publish failed for an aborted case")
+
+
 async def run_eval(
     suite: EvalSuite,
     deps: PipelineDeps,
@@ -659,35 +678,42 @@ async def run_eval(
             except Exception:
                 publish_failures += 1
                 logger.exception("langsmith publish failed for a case")
-        scan = await _scan_repo(deps, suite, repo, lead_root)
-        if scan.report is not None and SELFCHECK_FAILED_TEXT in scan.report.model_dump_json():
-            aborted = f"the Sandbox base image check failed (ADR-0033); stopped at repo {repo.id}"
-            break
-        for position, case in enumerate(cases):
-            token = bind_scan(scan.scan_id)
-            try:
-                result = score_case(case, scan)
-                logger.info(
-                    "eval case scored",
-                    extra={
-                        "event": "eval_case",
-                        "outcome": result.status if result.status != "scored" else "ok",
-                    },
+        try:
+            scan = await _scan_repo(deps, suite, repo, lead_root)
+            if scan.report is not None and SELFCHECK_FAILED_TEXT in scan.report.model_dump_json():
+                aborted = (
+                    f"the Sandbox base image check failed (ADR-0033); stopped at repo {repo.id}"
                 )
-                results.append(result)
-                if publisher is not None:
-                    try:
-                        await asyncio.to_thread(
-                            publisher.record_case,
-                            result,
-                            lead_root if position == 0 else None,
-                            lead_root if position > 0 else None,
-                        )
-                    except Exception:
-                        publish_failures += 1
-                        logger.exception("langsmith publish failed for a case")
-            finally:
-                scan_id_var.reset(token)
+                await _abandon_root(publisher, lead_root, aborted)
+                break
+            for position, case in enumerate(cases):
+                token = bind_scan(scan.scan_id)
+                try:
+                    result = score_case(case, scan)
+                    logger.info(
+                        "eval case scored",
+                        extra={
+                            "event": "eval_case",
+                            "outcome": result.status if result.status != "scored" else "ok",
+                        },
+                    )
+                    results.append(result)
+                    if publisher is not None:
+                        try:
+                            await asyncio.to_thread(
+                                publisher.record_case,
+                                result,
+                                lead_root if position == 0 else None,
+                                lead_root if position > 0 else None,
+                            )
+                        except Exception:
+                            publish_failures += 1
+                            logger.exception("langsmith publish failed for a case")
+                finally:
+                    scan_id_var.reset(token)
+        except BaseException as exc:  # an aborted run must not leave its case trace pending
+            await _abandon_root(publisher, lead_root, f"eval aborted: {type(exc).__name__}")
+            raise
 
     metrics = compute(
         [(r.case.label, r.predicted) for r in results],
