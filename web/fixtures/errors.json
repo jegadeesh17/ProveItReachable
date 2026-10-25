@@ -1,0 +1,92 @@
+{
+  "invalid_url": {
+    "status": 400,
+    "error": {
+      "code": "invalid_url",
+      "message": "Enter a public GitHub repository URL like https://github.com/owner/repo.",
+      "details": {},
+      "retry_after_s": null
+    }
+  },
+  "repo_not_found": {
+    "status": 404,
+    "error": {
+      "code": "repo_not_found",
+      "message": "Repository not found or not public.",
+      "details": {},
+      "retry_after_s": null
+    }
+  },
+  "repo_too_large": {
+    "status": 413,
+    "error": {
+      "code": "repo_too_large",
+      "message": "Repository is over the size limit of 50 MB or 5000 files (it has 312 MB in 18420 files).",
+      "details": {
+        "max_mb": 50,
+        "max_files": 5000,
+        "mb": 312,
+        "files": 18420
+      },
+      "retry_after_s": null
+    }
+  },
+  "not_python_project": {
+    "status": 422,
+    "error": {
+      "code": "not_python_project",
+      "message": "Not a Python project: no dependency manifest at the repository root.",
+      "details": {},
+      "retry_after_s": null
+    }
+  },
+  "rate_limited": {
+    "status": 429,
+    "error": {
+      "code": "rate_limited",
+      "message": "Rate limited: you can start another live scan in 40 min. Demo replays still work.",
+      "details": {
+        "minutes": 40
+      },
+      "retry_after_s": 2400
+    }
+  },
+  "server_busy": {
+    "status": 429,
+    "error": {
+      "code": "server_busy",
+      "message": "The scanner is busy; try again in a minute. Demo replays still work.",
+      "details": {},
+      "retry_after_s": 60
+    }
+  },
+  "live_scans_paused": {
+    "status": 503,
+    "error": {
+      "code": "live_scans_paused",
+      "message": "Live scans are paused because the spend limit was reached. Demo replays still work.",
+      "details": {},
+      "retry_after_s": null
+    }
+  },
+  "github_unavailable": {
+    "status": 502,
+    "error": {
+      "code": "github_unavailable",
+      "message": "GitHub did not respond; try again later.",
+      "details": {},
+      "retry_after_s": null
+    }
+  },
+  "internal_error": {
+    "status": 500,
+    "error": {
+      "code": "internal_error",
+      "message": "Something went wrong (error id 7f3a9c).",
+      "details": {
+        "error_id": "7f3a9c"
+      },
+      "retry_after_s": null
+    }
+  }
+}

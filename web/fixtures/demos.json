@@ -1,0 +1,41 @@
+[
+  {
+    "slug": "placeholder-flask-notes",
+    "title": "placeholder-demo/flask-notes",
+    "description": "A small web app. Shows a likely reachable finding with its call path, next to findings that are uncertain or not reachable.",
+    "repo_url": "https://github.com/placeholder-demo/flask-notes",
+    "commit_sha": "a584296c4268f7536fae191dc01381a0e249dcab",
+    "recorded_at": "2026-10-12T09:15:00Z",
+    "by_verdict": {
+      "likely reachable": 2,
+      "no reachable path detected": 2,
+      "uncertain": 2
+    }
+  },
+  {
+    "slug": "placeholder-data-pipeline",
+    "title": "placeholder-demo/data-pipeline",
+    "description": "A data job where services fail mid-scan. Shows how uncertain results carry their reasons instead of hiding failures.",
+    "repo_url": "https://github.com/placeholder-demo/data-pipeline",
+    "commit_sha": "15a92e0c32ce027e77af0bcb12f1bc0483b6f849",
+    "recorded_at": "2026-10-12T09:15:00Z",
+    "by_verdict": {
+      "likely reachable": 0,
+      "no reachable path detected": 0,
+      "uncertain": 5
+    }
+  },
+  {
+    "slug": "placeholder-tiny-cli",
+    "title": "placeholder-demo/tiny-cli",
+    "description": "A small command-line tool. Shows a clean result: every dependency checked, no known advisories.",
+    "repo_url": "https://github.com/placeholder-demo/tiny-cli",
+    "commit_sha": "2b779e406a1c38590b5b2175955d7bec42dcc9f1",
+    "recorded_at": "2026-10-12T09:15:00Z",
+    "by_verdict": {
+      "likely reachable": 0,
+      "no reachable path detected": 0,
+      "uncertain": 0
+    }
+  }
+]

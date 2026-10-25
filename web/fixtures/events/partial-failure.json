@@ -1,0 +1,158 @@
+[
+  {
+    "offset_ms": 400,
+    "event": {
+      "seq": 1,
+      "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
+      "at": "2026-10-12T09:14:00.400Z",
+      "outcome": null,
+      "type": "step",
+      "step": "resolve",
+      "state": "running",
+      "message": "Resolving exact dependency versions."
+    }
+  },
+  {
+    "offset_ms": 2400,
+    "event": {
+      "seq": 2,
+      "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
+      "at": "2026-10-12T09:14:02.400Z",
+      "outcome": null,
+      "type": "step",
+      "step": "resolve",
+      "state": "done",
+      "message": "Resolved 9 pinned dependencies from poetry.lock."
+    }
+  },
+  {
+    "offset_ms": 2700,
+    "event": {
+      "seq": 3,
+      "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
+      "at": "2026-10-12T09:14:02.700Z",
+      "outcome": null,
+      "type": "step",
+      "step": "osv",
+      "state": "running",
+      "message": "Querying OSV for each exact version."
+    }
+  },
+  {
+    "offset_ms": 5200,
+    "event": {
+      "seq": 4,
+      "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
+      "at": "2026-10-12T09:14:05.200Z",
+      "outcome": null,
+      "type": "step",
+      "step": "osv",
+      "state": "failed",
+      "message": "OSV did not answer for 1 of 9 packages after 2 retries; that package is listed as not checked."
+    }
+  },
+  {
+    "offset_ms": 5500,
+    "event": {
+      "seq": 5,
+      "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
+      "at": "2026-10-12T09:14:05.500Z",
+      "outcome": null,
+      "type": "step",
+      "step": "research",
+      "state": "running",
+      "message": "Researching the vulnerable function and sources for each advisory."
+    }
+  },
+  {
+    "offset_ms": 8600,
+    "event": {
+      "seq": 6,
+      "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
+      "at": "2026-10-12T09:14:08.600Z",
+      "outcome": null,
+      "type": "step",
+      "step": "research",
+      "state": "failed",
+      "message": "Tavily timed out for 1 advisory and Nebius failed for 1 advisory; those findings are uncertain."
+    }
+  },
+  {
+    "offset_ms": 8900,
+    "event": {
+      "seq": 7,
+      "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
+      "at": "2026-10-12T09:14:08.900Z",
+      "outcome": null,
+      "type": "step",
+      "step": "analysis",
+      "state": "running",
+      "message": "Indexing the repository in the sandbox."
+    }
+  },
+  {
+    "offset_ms": 12400,
+    "event": {
+      "seq": 8,
+      "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
+      "at": "2026-10-12T09:14:12.400Z",
+      "outcome": null,
+      "type": "step",
+      "step": "analysis",
+      "state": "failed",
+      "message": "Sandbox analysis timed out after 120 s; every finding without an earlier reason is uncertain."
+    }
+  },
+  {
+    "offset_ms": 12800,
+    "event": {
+      "seq": 9,
+      "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
+      "at": "2026-10-12T09:14:12.800Z",
+      "outcome": null,
+      "type": "step",
+      "step": "reasoning",
+      "state": "skipped",
+      "message": "Skipped: no analysis index exists to reason over."
+    }
+  },
+  {
+    "offset_ms": 13100,
+    "event": {
+      "seq": 10,
+      "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
+      "at": "2026-10-12T09:14:13.100Z",
+      "outcome": null,
+      "type": "step",
+      "step": "report",
+      "state": "running",
+      "message": "Building the ranked report."
+    }
+  },
+  {
+    "offset_ms": 13700,
+    "event": {
+      "seq": 11,
+      "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
+      "at": "2026-10-12T09:14:13.700Z",
+      "outcome": null,
+      "type": "step",
+      "step": "report",
+      "state": "done",
+      "message": "Built the report: 5 findings, all uncertain, each with its reason."
+    }
+  },
+  {
+    "offset_ms": 14000,
+    "event": {
+      "seq": 12,
+      "scan_id": "2d7b90e4c51f4a63b8e0f7a1c4d93e65",
+      "at": "2026-10-12T09:14:14Z",
+      "outcome": "findings",
+      "type": "done",
+      "step": null,
+      "state": null,
+      "message": "Report ready."
+    }
+  }
+]

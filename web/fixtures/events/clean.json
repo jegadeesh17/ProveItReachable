@@ -1,0 +1,132 @@
+[
+  {
+    "offset_ms": 400,
+    "event": {
+      "seq": 1,
+      "scan_id": "5a08e3b1f7c94d20a1b6d4e9c8f03b72",
+      "at": "2026-10-12T09:14:00.400Z",
+      "outcome": null,
+      "type": "step",
+      "step": "resolve",
+      "state": "running",
+      "message": "Resolving exact dependency versions."
+    }
+  },
+  {
+    "offset_ms": 1800,
+    "event": {
+      "seq": 2,
+      "scan_id": "5a08e3b1f7c94d20a1b6d4e9c8f03b72",
+      "at": "2026-10-12T09:14:01.800Z",
+      "outcome": null,
+      "type": "step",
+      "step": "resolve",
+      "state": "done",
+      "message": "Resolved 4 pinned dependencies from uv.lock."
+    }
+  },
+  {
+    "offset_ms": 2100,
+    "event": {
+      "seq": 3,
+      "scan_id": "5a08e3b1f7c94d20a1b6d4e9c8f03b72",
+      "at": "2026-10-12T09:14:02.100Z",
+      "outcome": null,
+      "type": "step",
+      "step": "osv",
+      "state": "running",
+      "message": "Querying OSV for each exact version."
+    }
+  },
+  {
+    "offset_ms": 3200,
+    "event": {
+      "seq": 4,
+      "scan_id": "5a08e3b1f7c94d20a1b6d4e9c8f03b72",
+      "at": "2026-10-12T09:14:03.200Z",
+      "outcome": null,
+      "type": "step",
+      "step": "osv",
+      "state": "done",
+      "message": "Queried OSV for 4 packages at exact versions: no advisories."
+    }
+  },
+  {
+    "offset_ms": 3500,
+    "event": {
+      "seq": 5,
+      "scan_id": "5a08e3b1f7c94d20a1b6d4e9c8f03b72",
+      "at": "2026-10-12T09:14:03.500Z",
+      "outcome": null,
+      "type": "step",
+      "step": "research",
+      "state": "skipped",
+      "message": "Skipped: no advisories to research."
+    }
+  },
+  {
+    "offset_ms": 3800,
+    "event": {
+      "seq": 6,
+      "scan_id": "5a08e3b1f7c94d20a1b6d4e9c8f03b72",
+      "at": "2026-10-12T09:14:03.800Z",
+      "outcome": null,
+      "type": "step",
+      "step": "analysis",
+      "state": "skipped",
+      "message": "Skipped: no advisories, so no code needs indexing."
+    }
+  },
+  {
+    "offset_ms": 4100,
+    "event": {
+      "seq": 7,
+      "scan_id": "5a08e3b1f7c94d20a1b6d4e9c8f03b72",
+      "at": "2026-10-12T09:14:04.100Z",
+      "outcome": null,
+      "type": "step",
+      "step": "reasoning",
+      "state": "skipped",
+      "message": "Skipped: no findings to reason over."
+    }
+  },
+  {
+    "offset_ms": 4400,
+    "event": {
+      "seq": 8,
+      "scan_id": "5a08e3b1f7c94d20a1b6d4e9c8f03b72",
+      "at": "2026-10-12T09:14:04.400Z",
+      "outcome": null,
+      "type": "step",
+      "step": "report",
+      "state": "running",
+      "message": "Building the ranked report."
+    }
+  },
+  {
+    "offset_ms": 5000,
+    "event": {
+      "seq": 9,
+      "scan_id": "5a08e3b1f7c94d20a1b6d4e9c8f03b72",
+      "at": "2026-10-12T09:14:05Z",
+      "outcome": null,
+      "type": "step",
+      "step": "report",
+      "state": "done",
+      "message": "Built the report: clean, 4 of 4 dependencies checked."
+    }
+  },
+  {
+    "offset_ms": 5300,
+    "event": {
+      "seq": 10,
+      "scan_id": "5a08e3b1f7c94d20a1b6d4e9c8f03b72",
+      "at": "2026-10-12T09:14:05.300Z",
+      "outcome": "clean",
+      "type": "done",
+      "step": null,
+      "state": null,
+      "message": "Report ready."
+    }
+  }
+]

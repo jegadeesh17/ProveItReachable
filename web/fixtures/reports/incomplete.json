@@ -1,0 +1,181 @@
+{
+  "schema_version": "1.0",
+  "scan_id": "c3f61a98d2e04b57906ae1b7f45d8c20",
+  "tool_version": "0.1.0-prototype",
+  "model": "nvidia/nemotron-3-super-120b-a12b",
+  "generated_at": "2026-10-12T09:14:18Z",
+  "repo": {
+    "url": "https://github.com/placeholder-demo/legacy-reqs",
+    "owner": "placeholder-demo",
+    "name": "legacy-reqs",
+    "ref_requested": null,
+    "default_branch": "main",
+    "commit_sha": "141c764abc7e94d70c2810dfe1600a2ebf14ad0f"
+  },
+  "outcome": "incomplete",
+  "steps": [
+    {
+      "name": "resolve",
+      "state": "done",
+      "started_at": "2026-10-12T09:14:03Z",
+      "finished_at": "2026-10-12T09:14:14Z",
+      "message": "Compiled 5 of 7 dependencies with uv pip compile; 2 could not be resolved."
+    },
+    {
+      "name": "osv",
+      "state": "done",
+      "started_at": "2026-10-12T09:14:14Z",
+      "finished_at": "2026-10-12T09:14:16Z",
+      "message": "Queried OSV for the 5 resolved packages: no advisories. The 2 unresolved packages were not queried."
+    },
+    {
+      "name": "research",
+      "state": "skipped",
+      "started_at": null,
+      "finished_at": null,
+      "message": "Skipped: no advisories to research."
+    },
+    {
+      "name": "analysis",
+      "state": "skipped",
+      "started_at": null,
+      "finished_at": null,
+      "message": "Skipped: no advisories, so no code needs indexing."
+    },
+    {
+      "name": "reasoning",
+      "state": "skipped",
+      "started_at": null,
+      "finished_at": null,
+      "message": "Skipped: no findings to reason over."
+    },
+    {
+      "name": "report",
+      "state": "done",
+      "started_at": "2026-10-12T09:14:16Z",
+      "finished_at": "2026-10-12T09:14:17Z",
+      "message": "Built the report: incomplete, 2 dependencies unresolved."
+    }
+  ],
+  "resolution": {
+    "method": "compiled",
+    "lockfile": null,
+    "compiled_from": "pyproject.toml",
+    "python_version": "3.12",
+    "notes": [
+      "Versions were compiled with uv pip compile, not locked."
+    ]
+  },
+  "dependencies": [
+    {
+      "name": "arrow",
+      "version": "1.3.0",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv pip compile",
+      "direct": true,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "internal-metrics",
+      "version": null,
+      "resolved": false,
+      "unresolved_reason": "Declared as a git dependency over SSH (git+ssh://); an exact version cannot be pinned without access to that repository.",
+      "source": "manifest",
+      "direct": true,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "not_queried",
+      "osv_error": null
+    },
+    {
+      "name": "legacy-orm",
+      "version": null,
+      "resolved": false,
+      "unresolved_reason": "No distribution matches the constraint >=2.0,<2.1 for Python 3.12.",
+      "source": "manifest",
+      "direct": true,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "not_queried",
+      "osv_error": null
+    },
+    {
+      "name": "python-dateutil",
+      "version": "2.9.0",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv pip compile",
+      "direct": false,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "requests",
+      "version": "2.31.0",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv pip compile",
+      "direct": true,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "six",
+      "version": "1.16.0",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv pip compile",
+      "direct": false,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "types-python-dateutil",
+      "version": "2.9.0",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv pip compile",
+      "direct": false,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    }
+  ],
+  "findings": [],
+  "summary": {
+    "dependencies_total": 7,
+    "dependencies_checked": 5,
+    "dependencies_unresolved": 2,
+    "dependencies_not_checked": 0,
+    "findings_total": 0,
+    "by_verdict": {
+      "likely reachable": 0,
+      "no reachable path detected": 0,
+      "uncertain": 0
+    }
+  },
+  "limitations": [
+    "Prototype fixture: the repository, versions, locations and findings are placeholders, not measurements. Advisory identifiers are real; the code evidence is invented for the demo.",
+    "Only public Python repositories are examined. Code is read and indexed, never run.",
+    "Advisories come from OSV for the exact resolved versions; a vulnerability OSV does not list cannot be found.",
+    "Reachability is judged by static analysis of the repository’s own code. Dynamic imports, reflection and runtime configuration are not examined."
+  ]
+}

@@ -1,0 +1,142 @@
+{
+  "schema_version": "1.0",
+  "scan_id": "5a08e3b1f7c94d20a1b6d4e9c8f03b72",
+  "tool_version": "0.1.0-prototype",
+  "model": "nvidia/nemotron-3-super-120b-a12b",
+  "generated_at": "2026-10-12T09:14:09Z",
+  "repo": {
+    "url": "https://github.com/placeholder-demo/tiny-cli",
+    "owner": "placeholder-demo",
+    "name": "tiny-cli",
+    "ref_requested": null,
+    "default_branch": "main",
+    "commit_sha": "2b779e406a1c38590b5b2175955d7bec42dcc9f1"
+  },
+  "outcome": "clean",
+  "steps": [
+    {
+      "name": "resolve",
+      "state": "done",
+      "started_at": "2026-10-12T09:14:02Z",
+      "finished_at": "2026-10-12T09:14:05Z",
+      "message": "Resolved 4 pinned dependencies from uv.lock."
+    },
+    {
+      "name": "osv",
+      "state": "done",
+      "started_at": "2026-10-12T09:14:05Z",
+      "finished_at": "2026-10-12T09:14:07Z",
+      "message": "Queried OSV for 4 packages at exact versions: no advisories."
+    },
+    {
+      "name": "research",
+      "state": "skipped",
+      "started_at": null,
+      "finished_at": null,
+      "message": "Skipped: no advisories to research."
+    },
+    {
+      "name": "analysis",
+      "state": "skipped",
+      "started_at": null,
+      "finished_at": null,
+      "message": "Skipped: no advisories, so no code needs indexing."
+    },
+    {
+      "name": "reasoning",
+      "state": "skipped",
+      "started_at": null,
+      "finished_at": null,
+      "message": "Skipped: no findings to reason over."
+    },
+    {
+      "name": "report",
+      "state": "done",
+      "started_at": "2026-10-12T09:14:07Z",
+      "finished_at": "2026-10-12T09:14:08Z",
+      "message": "Built the report: clean, 4 of 4 dependencies checked."
+    }
+  ],
+  "resolution": {
+    "method": "lockfile",
+    "lockfile": "uv.lock",
+    "compiled_from": null,
+    "python_version": null,
+    "notes": [
+      "Resolved from uv.lock; 4 packages pinned."
+    ]
+  },
+  "dependencies": [
+    {
+      "name": "click",
+      "version": "8.1.7",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": true,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "colorama",
+      "version": "0.4.6",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": false,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "markdown-it-py",
+      "version": "3.0.0",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": true,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "mdurl",
+      "version": "0.1.2",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": false,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    }
+  ],
+  "findings": [],
+  "summary": {
+    "dependencies_total": 4,
+    "dependencies_checked": 4,
+    "dependencies_unresolved": 0,
+    "dependencies_not_checked": 0,
+    "findings_total": 0,
+    "by_verdict": {
+      "likely reachable": 0,
+      "no reachable path detected": 0,
+      "uncertain": 0
+    }
+  },
+  "limitations": [
+    "Prototype fixture: the repository, versions, locations and findings are placeholders, not measurements. Advisory identifiers are real; the code evidence is invented for the demo.",
+    "Only public Python repositories are examined. Code is read and indexed, never run.",
+    "Advisories come from OSV for the exact resolved versions; a vulnerability OSV does not list cannot be found.",
+    "Reachability is judged by static analysis of the repository’s own code. Dynamic imports, reflection and runtime configuration are not examined."
+  ]
+}

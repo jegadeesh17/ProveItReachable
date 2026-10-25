@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ProveItReachable: does your code reach the vulnerable function?</title>
+  <meta name="description" content="Evidence-backed reachability triage for public Python repositories. Each advisory gets a verdict, the call path and the sources.">
+  <meta name="color-scheme" content="light">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Public+Sans:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="css/app.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to the assay</a>
+
+  <!-- Drawn mark and icon set: one stroke weight, one viewBox grid. -->
+  <svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <rect width="5" height="5" class="sv-amber"/>
+        <line x1="0" y1="0" x2="0" y2="5" class="sv-hatch-line"/>
+      </pattern>
+    </defs>
+    <symbol id="mark-reach" viewBox="0 0 24 24"><path d="M12 3.5 22 20.5H2Z" class="sv-reach"/></symbol>
+    <symbol id="mark-uncertain" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" fill="url(#hatch)" class="sv-uncertain"/></symbol>
+    <symbol id="mark-none" viewBox="0 0 24 24"><rect x="2.75" y="9" width="18.5" height="6" rx="3" class="sv-soft-stroke"/></symbol>
+    <symbol id="stamp-done" viewBox="0 0 24 24"><path d="M5 12.5 9.5 17 19 7" class="sv-current"/></symbol>
+    <symbol id="stamp-failed" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" class="sv-current"/></symbol>
+    <symbol id="stamp-skipped" viewBox="0 0 24 24"><path d="M6 12h12" class="sv-current"/></symbol>
+    <symbol id="stamp-running" viewBox="0 0 24 24"><path d="M5 12h13m-5-6 6 6-6 6" class="sv-current"/></symbol>
+    <symbol id="icon-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" class="sv-current"/></symbol>
+    <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" class="sv-current"/></symbol>
+    <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" class="sv-current"/></symbol>
+    <symbol id="icon-alert" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" class="sv-current"/><path d="M12 8v5M12 16v.5" class="sv-current"/></symbol>
+    <symbol id="icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" class="sv-current"/><path d="M12 11v5.5M12 7.5v.5" class="sv-current"/></symbol>
+    <symbol id="icon-arrow" viewBox="0 0 52 24"><path d="M2 12h46m-9-8 9 8-9 8" class="sv-current"/></symbol>
+  </svg>
+
+  <div id="announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <header class="letterhead">
+    <div class="wrap letterhead__inner">
+      <h1 class="wordmark">ProveIt<span>Reachable</span></h1>
+      <p class="purpose">Your scanner says a package is vulnerable. This shows whether your code reaches the vulnerable function, with the call path and the sources printed beside each verdict.</p>
+    </div>
+  </header>
+
+  <div id="mock-notice" class="mock-notice" hidden>
+    <div class="wrap"><p id="mock-notice-text"></p></div>
+  </div>
+
+  <main id="main" class="wrap" tabindex="-1">
+    <noscript><p>This page needs JavaScript to run an assay.</p></noscript>
+
+    <div id="banner" hidden></div>
+
+    <div class="stack">
+
+      <section id="order" class="order" aria-label="Start an assay" data-collapsed="false">
+        <div id="order-bar" class="order__bar" hidden>
+          <p id="order-status" class="order__status"></p>
+          <button id="order-toggle" class="btn btn--quiet" type="button" aria-expanded="false" aria-controls="order-grid">Order another assay</button>
+        </div>
+
+        <div id="order-grid" class="order__grid">
+          <section class="panel-demos" aria-labelledby="demos-h">
+            <h2 id="demos-h" class="panel-title">Order an assay</h2>
+            <p class="panel-lede">Pick a recorded demo. It replays a stored scan, makes no live calls, spends nothing, and reaches a full report in about 20&nbsp;seconds.</p>
+            <ol id="demo-list" class="demo-list" aria-label="Demo repositories" aria-busy="true"></ol>
+            <p class="smallprint demo-note">Placeholder demos: the three real repositories are recorded at the end of milestone M1. Every figure in a report is demo data, not a measurement.</p>
+
+            <section class="key" aria-labelledby="key-h">
+              <h3 id="key-h" class="key__title">Key to the three flags</h3>
+              <dl class="key__list">
+                <div class="key__item">
+                  <dt><span class="flag"><svg class="icon" aria-hidden="true" focusable="false"><use href="#mark-reach"/></svg>likely reachable</span></dt>
+                  <dd>A call path from the repository&rsquo;s own code to the vulnerable function was found, with file and line.</dd>
+                </div>
+                <div class="key__item">
+                  <dt><span class="flag"><svg class="icon" aria-hidden="true" focusable="false"><use href="#mark-uncertain"/></svg>uncertain</span></dt>
+                  <dd>The evidence was missing or a step failed. It is a printed result, never a pass.</dd>
+                </div>
+                <div class="key__item">
+                  <dt><span class="flag"><svg class="icon" aria-hidden="true" focusable="false"><use href="#mark-none"/></svg>no reachable path detected</span></dt>
+                  <dd>No path was found within the scope stated for that finding. It is not proof of safety.</dd>
+                </div>
+              </dl>
+            </section>
+          </section>
+
+          <section class="panel-live" aria-labelledby="live-h">
+            <h2 id="live-h" class="panel-title">Test your own public repo</h2>
+            <p class="panel-lede">Paste a GitHub URL to run a live scan.</p>
+            <form id="scan-form" class="live-form" novalidate>
+              <div class="field">
+                <label for="repo-url">GitHub repository URL</label>
+                <input class="input" id="repo-url" name="repo_url" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://github.com/owner/repo" aria-describedby="repo-url-hint">
+                <p id="repo-url-hint" class="hint">Public repositories only. A branch address such as /tree/main is accepted.</p>
+              </div>
+              <div id="live-notice" class="live-form__notice" hidden></div>
+              <button id="scan-submit" class="btn" type="submit">Run live assay</button>
+            </form>
+            <div id="limits" class="limits smallprint"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="specimen" class="specimen" aria-labelledby="specimen-h" hidden>
+        <dl id="specimen-fields" class="specimen__fields"></dl>
+        <ol id="track" class="track" aria-label="Processing stages"></ol>
+        <div id="busy-box" class="busy-box" hidden>
+          <p><strong>Scanning.</strong> This view updates when the report is ready.</p>
+          <p class="hint">The step-by-step feed is switched off, so progress is checked every few seconds.</p>
+        </div>
+      </section>
+
+      <div id="report" hidden></div>
+    </div>
+  </main>
+
+  <footer class="pagefoot">
+    <div class="wrap">
+      <p>ProveItReachable prototype. Verdicts are bounded by the evidence printed beside them; nothing on this page is a measured result until the evaluation produces one.</p>
+    </div>
+  </footer>
+</body>
+</html>

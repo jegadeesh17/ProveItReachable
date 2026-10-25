@@ -1,0 +1,651 @@
+{
+  "schema_version": "1.0",
+  "scan_id": "9c1e5f0a7b3d4e28a6f1c0d9e8b72a41",
+  "tool_version": "0.1.0-prototype",
+  "model": "nvidia/nemotron-3-super-120b-a12b",
+  "generated_at": "2026-10-12T09:14:52Z",
+  "repo": {
+    "url": "https://github.com/placeholder-demo/flask-notes",
+    "owner": "placeholder-demo",
+    "name": "flask-notes",
+    "ref_requested": null,
+    "default_branch": "main",
+    "commit_sha": "a584296c4268f7536fae191dc01381a0e249dcab"
+  },
+  "outcome": "findings",
+  "steps": [
+    {
+      "name": "resolve",
+      "state": "done",
+      "started_at": "2026-10-12T09:14:03Z",
+      "finished_at": "2026-10-12T09:14:09Z",
+      "message": "Resolved 12 pinned dependencies from uv.lock."
+    },
+    {
+      "name": "osv",
+      "state": "done",
+      "started_at": "2026-10-12T09:14:09Z",
+      "finished_at": "2026-10-12T09:14:11Z",
+      "message": "Queried OSV for 12 packages at exact versions: 6 advisories."
+    },
+    {
+      "name": "research",
+      "state": "done",
+      "started_at": "2026-10-12T09:14:11Z",
+      "finished_at": "2026-10-12T09:14:23Z",
+      "message": "Researched 6 advisories with Tavily; a vulnerable function was identified for 5."
+    },
+    {
+      "name": "analysis",
+      "state": "done",
+      "started_at": "2026-10-12T09:14:23Z",
+      "finished_at": "2026-10-12T09:14:31Z",
+      "message": "Indexed 15 Python files in the sandbox; 14 parsed, 1 skipped (syntax error)."
+    },
+    {
+      "name": "reasoning",
+      "state": "done",
+      "started_at": "2026-10-12T09:14:31Z",
+      "finished_at": "2026-10-12T09:14:49Z",
+      "message": "Nemotron reasoned over 5 findings using 23 analysis tool calls."
+    },
+    {
+      "name": "report",
+      "state": "done",
+      "started_at": "2026-10-12T09:14:49Z",
+      "finished_at": "2026-10-12T09:14:50Z",
+      "message": "Built the ranked report: 2 likely reachable, 2 uncertain, 2 no reachable path detected."
+    }
+  ],
+  "resolution": {
+    "method": "lockfile",
+    "lockfile": "uv.lock",
+    "compiled_from": null,
+    "python_version": null,
+    "notes": [
+      "Resolved from uv.lock; 12 packages pinned."
+    ]
+  },
+  "dependencies": [
+    {
+      "name": "certifi",
+      "version": "2020.12.5",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": false,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "click",
+      "version": "7.1.2",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": false,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "cryptography",
+      "version": "3.3.1",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": false,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "flask",
+      "version": "1.1.2",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": true,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "idna",
+      "version": "2.10",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": false,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "itsdangerous",
+      "version": "1.1.0",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": false,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "jinja2",
+      "version": "2.11.2",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": true,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "markupsafe",
+      "version": "1.1.1",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": false,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "pyyaml",
+      "version": "5.3.1",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": true,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "requests",
+      "version": "2.25.0",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": true,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "urllib3",
+      "version": "1.26.4",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": false,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    },
+    {
+      "name": "werkzeug",
+      "version": "1.0.1",
+      "resolved": true,
+      "unresolved_reason": null,
+      "source": "uv.lock",
+      "direct": false,
+      "groups": [
+        "main"
+      ],
+      "osv_status": "checked",
+      "osv_error": null
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "f4509c8a78e1169b",
+      "kind": "advisory",
+      "verdict": "likely reachable",
+      "confidence": "high",
+      "package": "pyyaml",
+      "version": "5.3.1",
+      "advisory": {
+        "id": "GHSA-8q59-q68h-6hv4",
+        "aliases": [
+          "CVE-2020-14343"
+        ],
+        "summary": "PyYAML before 5.4 can execute arbitrary code when it loads untrusted YAML with the full loader.",
+        "severity": "critical",
+        "fixed_versions": [
+          "5.4"
+        ],
+        "published": null,
+        "modified": null
+      },
+      "vulnerable_symbol": {
+        "identified": true,
+        "symbols": [
+          "yaml.load"
+        ],
+        "not_identified_reason": null,
+        "evidence_urls": [
+          "https://osv.dev/vulnerability/GHSA-8q59-q68h-6hv4"
+        ]
+      },
+      "advisory_links": [
+        {
+          "url": "https://osv.dev/vulnerability/GHSA-8q59-q68h-6hv4",
+          "source": "osv",
+          "title": "OSV record GHSA-8q59-q68h-6hv4"
+        },
+        {
+          "url": "https://github.com/advisories/GHSA-8q59-q68h-6hv4",
+          "source": "osv",
+          "title": "GitHub Advisory Database: GHSA-8q59-q68h-6hv4"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2020-14343",
+          "source": "tavily",
+          "title": "NVD: CVE-2020-14343"
+        }
+      ],
+      "source_locations": [
+        {
+          "file": "app/config.py",
+          "line": 3,
+          "kind": "import",
+          "snippet": "import yaml as y"
+        },
+        {
+          "file": "app/config.py",
+          "line": 12,
+          "kind": "call",
+          "snippet": "cfg = y.load(fh)"
+        }
+      ],
+      "call_path": [
+        {
+          "file": "app/main.py",
+          "line": 40,
+          "symbol": "app.main:cli",
+          "edge": "entry"
+        },
+        {
+          "file": "app/main.py",
+          "line": 44,
+          "symbol": "app.config:read_config",
+          "edge": "call"
+        },
+        {
+          "file": "app/config.py",
+          "line": 12,
+          "symbol": "yaml.load",
+          "edge": "vulnerable_call"
+        }
+      ],
+      "explanation": "The command-line entry point cli calls read_config, which passes an open file to yaml.load without naming a safe loader. The call goes through the alias y, so a plain text search for yaml.load would have missed it. The file path is read from a command-line option at app/main.py:42, so a crafted YAML file given to the tool reaches the vulnerable loader.",
+      "limitations": [
+        "Static analysis of 14 of 15 Python files (1 skipped: syntax error). Dynamic imports, getattr and reflection were not examined.",
+        "The path was found statically and was not run."
+      ],
+      "reason_code": null,
+      "reason": null,
+      "proof": null
+    },
+    {
+      "finding_id": "a0246c3e801fb5de",
+      "kind": "advisory",
+      "verdict": "likely reachable",
+      "confidence": "medium",
+      "package": "jinja2",
+      "version": "2.11.2",
+      "advisory": {
+        "id": "GHSA-g3rq-g295-4j3m",
+        "aliases": [
+          "CVE-2020-28493"
+        ],
+        "summary": "Regular expression denial of service in the urlize filter when it is given crafted input.",
+        "severity": "moderate",
+        "fixed_versions": [
+          "2.11.3"
+        ],
+        "published": null,
+        "modified": null
+      },
+      "vulnerable_symbol": {
+        "identified": true,
+        "symbols": [
+          "jinja2.utils.urlize"
+        ],
+        "not_identified_reason": null,
+        "evidence_urls": [
+          "https://osv.dev/vulnerability/GHSA-g3rq-g295-4j3m"
+        ]
+      },
+      "advisory_links": [
+        {
+          "url": "https://osv.dev/vulnerability/GHSA-g3rq-g295-4j3m",
+          "source": "osv",
+          "title": "OSV record GHSA-g3rq-g295-4j3m"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2020-28493",
+          "source": "tavily",
+          "title": "NVD: CVE-2020-28493"
+        }
+      ],
+      "source_locations": [
+        {
+          "file": "app/render.py",
+          "line": 4,
+          "kind": "import",
+          "snippet": "from jinja2.utils import urlize"
+        },
+        {
+          "file": "app/render.py",
+          "line": 33,
+          "kind": "call",
+          "snippet": "body_html = '<p class=\"note\">' + urlize(note.body) + '</p>'"
+        }
+      ],
+      "call_path": [
+        {
+          "file": "app/web.py",
+          "line": 52,
+          "symbol": "app.web:show_note",
+          "edge": "entry"
+        },
+        {
+          "file": "app/web.py",
+          "line": 56,
+          "symbol": "app.render:render_note",
+          "edge": "heuristic_call"
+        },
+        {
+          "file": "app/render.py",
+          "line": 33,
+          "symbol": "jinja2.utils.urlize",
+          "edge": "vulnerable_call"
+        }
+      ],
+      "explanation": "The route show_note renders each note through render_note, which calls urlize on the note body. The note body is user-written text, so a crafted note can feed the slow pattern. The step from show_note to render_note was matched by method name, not by type, so it is marked heuristic and confidence stops at medium.",
+      "limitations": [
+        "Static analysis of 14 of 15 Python files (1 skipped: syntax error). Dynamic imports, getattr and reflection were not examined.",
+        "The path was found statically and was not run.",
+        "One edge in the call path is heuristic (matched by name)."
+      ],
+      "reason_code": null,
+      "reason": null,
+      "proof": null
+    },
+    {
+      "finding_id": "decfa40da06d6bb8",
+      "kind": "advisory",
+      "verdict": "uncertain",
+      "confidence": "low",
+      "package": "flask",
+      "version": "1.1.2",
+      "advisory": {
+        "id": "GHSA-m2qf-hxjv-5gpq",
+        "aliases": [
+          "CVE-2023-30861"
+        ],
+        "summary": "Behind some caching proxies, a response that sets a session cookie can be cached and served to other clients.",
+        "severity": "high",
+        "fixed_versions": [
+          "2.2.5",
+          "2.3.2"
+        ],
+        "published": null,
+        "modified": null
+      },
+      "vulnerable_symbol": {
+        "identified": false,
+        "symbols": [],
+        "not_identified_reason": "vulnerable function not identified: the advisory describes a caching condition and names no function or API.",
+        "evidence_urls": []
+      },
+      "advisory_links": [
+        {
+          "url": "https://osv.dev/vulnerability/GHSA-m2qf-hxjv-5gpq",
+          "source": "osv",
+          "title": "OSV record GHSA-m2qf-hxjv-5gpq"
+        }
+      ],
+      "source_locations": [
+        {
+          "file": "app/__init__.py",
+          "line": 2,
+          "kind": "import",
+          "snippet": "from flask import Flask"
+        },
+        {
+          "file": "app/__init__.py",
+          "line": 9,
+          "kind": "call",
+          "snippet": "app = Flask(__name__)"
+        }
+      ],
+      "call_path": null,
+      "explanation": "The advisory describes a condition that depends on a caching proxy in front of the app and on how sessions are used, not on a function the code calls. Flask is imported and the app object is created, but without a named function there is no call to trace. This needs a human reading of the deployment.",
+      "limitations": [
+        "No vulnerable function was identified, so no call-path analysis was run for this advisory."
+      ],
+      "reason_code": "vulnerable_function_not_identified",
+      "reason": "vulnerable function not identified: the advisory names no function or API to search for.",
+      "proof": null
+    },
+    {
+      "finding_id": "a1bf91f34f89c323",
+      "kind": "advisory",
+      "verdict": "uncertain",
+      "confidence": "low",
+      "package": "urllib3",
+      "version": "1.26.4",
+      "advisory": {
+        "id": "GHSA-q2q7-5pp4-w6pg",
+        "aliases": [
+          "CVE-2021-33503"
+        ],
+        "summary": "A URL with a very long run of @ characters makes URL parsing extremely slow.",
+        "severity": "high",
+        "fixed_versions": [
+          "1.26.5"
+        ],
+        "published": null,
+        "modified": null
+      },
+      "vulnerable_symbol": {
+        "identified": true,
+        "symbols": [
+          "urllib3.util.url.parse_url"
+        ],
+        "not_identified_reason": null,
+        "evidence_urls": [
+          "https://osv.dev/vulnerability/GHSA-q2q7-5pp4-w6pg"
+        ]
+      },
+      "advisory_links": [
+        {
+          "url": "https://osv.dev/vulnerability/GHSA-q2q7-5pp4-w6pg",
+          "source": "osv",
+          "title": "OSV record GHSA-q2q7-5pp4-w6pg"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-33503",
+          "source": "tavily",
+          "title": "NVD: CVE-2021-33503"
+        }
+      ],
+      "source_locations": [],
+      "call_path": null,
+      "explanation": "The model first answered likely reachable through the requests library, but the call path it gave included app/fetch.py:19, which did not appear in any analysis tool result. The claim was not grounded, so the verdict was lowered to uncertain. Repository code never imports urllib3 directly.",
+      "limitations": [
+        "No import or call site of urllib3 was found in repository code; it is used only through requests.",
+        "Static analysis of 14 of 15 Python files (1 skipped: syntax error). Dynamic imports, getattr and reflection were not examined."
+      ],
+      "reason_code": "unsupported_reachability_claim",
+      "reason": "The model answered likely reachable, but its call path failed the check: app/fetch.py:19 did not appear in any analysis tool result.",
+      "proof": null
+    },
+    {
+      "finding_id": "2f551dce05bc5087",
+      "kind": "advisory",
+      "verdict": "no reachable path detected",
+      "confidence": "medium",
+      "package": "requests",
+      "version": "2.25.0",
+      "advisory": {
+        "id": "GHSA-j8r2-6x86-q33q",
+        "aliases": [
+          "CVE-2023-32681"
+        ],
+        "summary": "Requests can send a Proxy-Authorization header to the destination server after a redirect from HTTPS to HTTP.",
+        "severity": "moderate",
+        "fixed_versions": [
+          "2.31.0"
+        ],
+        "published": null,
+        "modified": null
+      },
+      "vulnerable_symbol": {
+        "identified": true,
+        "symbols": [
+          "requests.sessions.SessionRedirectMixin.rebuild_proxies"
+        ],
+        "not_identified_reason": null,
+        "evidence_urls": [
+          "https://osv.dev/vulnerability/GHSA-j8r2-6x86-q33q"
+        ]
+      },
+      "advisory_links": [
+        {
+          "url": "https://osv.dev/vulnerability/GHSA-j8r2-6x86-q33q",
+          "source": "osv",
+          "title": "OSV record GHSA-j8r2-6x86-q33q"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2023-32681",
+          "source": "tavily",
+          "title": "NVD: CVE-2023-32681"
+        }
+      ],
+      "source_locations": [
+        {
+          "file": "app/fetch.py",
+          "line": 4,
+          "kind": "import",
+          "snippet": "import requests"
+        },
+        {
+          "file": "app/fetch.py",
+          "line": 17,
+          "kind": "call",
+          "snippet": "resp = requests.get(url, timeout=5)"
+        }
+      ],
+      "call_path": null,
+      "explanation": "Repository code calls requests.get once. The vulnerable function, rebuild_proxies, is internal to requests and no repository code names it. Whether the vulnerable branch runs depends on proxy settings and redirects at run time, which static analysis cannot see. Within that limit, no reachable path was detected.",
+      "limitations": [
+        "Scope: 14 of 15 Python files parsed (1 skipped: syntax error); examined imports, calls and references of requests in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration."
+      ],
+      "reason_code": null,
+      "reason": null,
+      "proof": null
+    },
+    {
+      "finding_id": "b2dbfe64ce02f98c",
+      "kind": "advisory",
+      "verdict": "no reachable path detected",
+      "confidence": "low",
+      "package": "cryptography",
+      "version": "3.3.1",
+      "advisory": {
+        "id": "GHSA-rhm9-p9w5-fwm7",
+        "aliases": [
+          "CVE-2020-36242"
+        ],
+        "summary": "Encrypting very large inputs with Fernet can overflow an integer and corrupt memory.",
+        "severity": "critical",
+        "fixed_versions": [
+          "3.3.2"
+        ],
+        "published": null,
+        "modified": null
+      },
+      "vulnerable_symbol": {
+        "identified": true,
+        "symbols": [
+          "cryptography.fernet.Fernet.encrypt"
+        ],
+        "not_identified_reason": null,
+        "evidence_urls": [
+          "https://osv.dev/vulnerability/GHSA-rhm9-p9w5-fwm7"
+        ]
+      },
+      "advisory_links": [
+        {
+          "url": "https://osv.dev/vulnerability/GHSA-rhm9-p9w5-fwm7",
+          "source": "osv",
+          "title": "OSV record GHSA-rhm9-p9w5-fwm7"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2020-36242",
+          "source": "tavily",
+          "title": "NVD: CVE-2020-36242"
+        }
+      ],
+      "source_locations": [],
+      "call_path": null,
+      "explanation": "No repository file imports cryptography or Fernet. The package is present only as a dependency of another package, so confidence is capped at low.",
+      "limitations": [
+        "No import or call site found in repository code.",
+        "Scope: 14 of 15 Python files parsed (1 skipped: syntax error); examined imports, calls and references of cryptography in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies (this is a transitive dependency), C extensions, runtime configuration."
+      ],
+      "reason_code": null,
+      "reason": null,
+      "proof": null
+    }
+  ],
+  "summary": {
+    "dependencies_total": 12,
+    "dependencies_checked": 12,
+    "dependencies_unresolved": 0,
+    "dependencies_not_checked": 0,
+    "findings_total": 6,
+    "by_verdict": {
+      "likely reachable": 2,
+      "no reachable path detected": 2,
+      "uncertain": 2
+    }
+  },
+  "limitations": [
+    "Prototype fixture: the repository, versions, locations and findings are placeholders, not measurements. Advisory identifiers are real; the code evidence is invented for the demo.",
+    "Only public Python repositories are examined. Code is read and indexed, never run.",
+    "Advisories come from OSV for the exact resolved versions; a vulnerability OSV does not list cannot be found.",
+    "Reachability is judged by static analysis of the repository’s own code. Dynamic imports, reflection and runtime configuration are not examined."
+  ]
+}

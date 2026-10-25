@@ -1,0 +1,171 @@
+[
+  {
+    "offset_ms": 400,
+    "event": {
+      "seq": 1,
+      "scan_id": "9c1e5f0a7b3d4e28a6f1c0d9e8b72a41",
+      "at": "2026-10-12T09:14:00.400Z",
+      "outcome": null,
+      "type": "step",
+      "step": "resolve",
+      "state": "running",
+      "message": "Resolving exact dependency versions."
+    }
+  },
+  {
+    "offset_ms": 2600,
+    "event": {
+      "seq": 2,
+      "scan_id": "9c1e5f0a7b3d4e28a6f1c0d9e8b72a41",
+      "at": "2026-10-12T09:14:02.600Z",
+      "outcome": null,
+      "type": "step",
+      "step": "resolve",
+      "state": "done",
+      "message": "Resolved 12 pinned dependencies from uv.lock."
+    }
+  },
+  {
+    "offset_ms": 2900,
+    "event": {
+      "seq": 3,
+      "scan_id": "9c1e5f0a7b3d4e28a6f1c0d9e8b72a41",
+      "at": "2026-10-12T09:14:02.900Z",
+      "outcome": null,
+      "type": "step",
+      "step": "osv",
+      "state": "running",
+      "message": "Querying OSV for each exact version."
+    }
+  },
+  {
+    "offset_ms": 4300,
+    "event": {
+      "seq": 4,
+      "scan_id": "9c1e5f0a7b3d4e28a6f1c0d9e8b72a41",
+      "at": "2026-10-12T09:14:04.300Z",
+      "outcome": null,
+      "type": "step",
+      "step": "osv",
+      "state": "done",
+      "message": "Queried OSV for 12 packages at exact versions: 6 advisories."
+    }
+  },
+  {
+    "offset_ms": 4600,
+    "event": {
+      "seq": 5,
+      "scan_id": "9c1e5f0a7b3d4e28a6f1c0d9e8b72a41",
+      "at": "2026-10-12T09:14:04.600Z",
+      "outcome": null,
+      "type": "step",
+      "step": "research",
+      "state": "running",
+      "message": "Researching the vulnerable function and sources for each advisory."
+    }
+  },
+  {
+    "offset_ms": 8800,
+    "event": {
+      "seq": 6,
+      "scan_id": "9c1e5f0a7b3d4e28a6f1c0d9e8b72a41",
+      "at": "2026-10-12T09:14:08.800Z",
+      "outcome": null,
+      "type": "step",
+      "step": "research",
+      "state": "done",
+      "message": "Researched 6 advisories with Tavily; a vulnerable function was identified for 5."
+    }
+  },
+  {
+    "offset_ms": 9100,
+    "event": {
+      "seq": 7,
+      "scan_id": "9c1e5f0a7b3d4e28a6f1c0d9e8b72a41",
+      "at": "2026-10-12T09:14:09.100Z",
+      "outcome": null,
+      "type": "step",
+      "step": "analysis",
+      "state": "running",
+      "message": "Indexing the repository in the sandbox."
+    }
+  },
+  {
+    "offset_ms": 12000,
+    "event": {
+      "seq": 8,
+      "scan_id": "9c1e5f0a7b3d4e28a6f1c0d9e8b72a41",
+      "at": "2026-10-12T09:14:12Z",
+      "outcome": null,
+      "type": "step",
+      "step": "analysis",
+      "state": "done",
+      "message": "Indexed 15 Python files in the sandbox; 14 parsed, 1 skipped (syntax error)."
+    }
+  },
+  {
+    "offset_ms": 12300,
+    "event": {
+      "seq": 9,
+      "scan_id": "9c1e5f0a7b3d4e28a6f1c0d9e8b72a41",
+      "at": "2026-10-12T09:14:12.300Z",
+      "outcome": null,
+      "type": "step",
+      "step": "reasoning",
+      "state": "running",
+      "message": "Reasoning over the evidence with analysis tool calls."
+    }
+  },
+  {
+    "offset_ms": 16200,
+    "event": {
+      "seq": 10,
+      "scan_id": "9c1e5f0a7b3d4e28a6f1c0d9e8b72a41",
+      "at": "2026-10-12T09:14:16.200Z",
+      "outcome": null,
+      "type": "step",
+      "step": "reasoning",
+      "state": "done",
+      "message": "Nemotron reasoned over 5 findings using 23 analysis tool calls."
+    }
+  },
+  {
+    "offset_ms": 16500,
+    "event": {
+      "seq": 11,
+      "scan_id": "9c1e5f0a7b3d4e28a6f1c0d9e8b72a41",
+      "at": "2026-10-12T09:14:16.500Z",
+      "outcome": null,
+      "type": "step",
+      "step": "report",
+      "state": "running",
+      "message": "Building the ranked report."
+    }
+  },
+  {
+    "offset_ms": 17300,
+    "event": {
+      "seq": 12,
+      "scan_id": "9c1e5f0a7b3d4e28a6f1c0d9e8b72a41",
+      "at": "2026-10-12T09:14:17.300Z",
+      "outcome": null,
+      "type": "step",
+      "step": "report",
+      "state": "done",
+      "message": "Built the ranked report: 2 likely reachable, 2 uncertain, 2 no reachable path detected."
+    }
+  },
+  {
+    "offset_ms": 17600,
+    "event": {
+      "seq": 13,
+      "scan_id": "9c1e5f0a7b3d4e28a6f1c0d9e8b72a41",
+      "at": "2026-10-12T09:14:17.600Z",
+      "outcome": "findings",
+      "type": "done",
+      "step": null,
+      "state": null,
+      "message": "Report ready."
+    }
+  }
+]
