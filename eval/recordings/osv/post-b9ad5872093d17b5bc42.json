@@ -1,0 +1,7 @@
+{
+  "body": "{\"results\":[{\"vulns\":[{\"id\":\"GHSA-8q59-q68h-6hv4\",\"modified\":\"2026-02-04T03:33:10.792778Z\"},{\"id\":\"PYSEC-2021-142\",\"modified\":\"2023-11-08T04:02:26.414885Z\"}]}]}",
+  "content_type": "application/json",
+  "method": "POST",
+  "status": 200,
+  "url": "https://api.osv.dev/v1/querybatch"
+}
