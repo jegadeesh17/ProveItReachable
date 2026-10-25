@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "base_image": "ghcr.io/astral-sh/uv:0.9.30-python3.13-bookworm-slim@sha256:531f855bda2c73cd6ef67d56b733b357cea384185b3022bd09f05e002cd144ca",
+  "measured_on": "2026-10-25",
+  "selfcheck": {
+    "files": {
+      "/lib/x86_64-linux-gnu/libc.so.6": "bff8750fe719e6000791b88b11747dce8772c37118d0b2348044b70819d13835",
+      "/lib64/ld-linux-x86-64.so.2": "593bb1d5355658e645f36e6b1f49832691b24e177209765914e4cce51499dbb4",
+      "/usr/local/bin/python3.13": "73b68fc2dac176af16098180a2c98a03ee9f1f1b02db25d42d44d782e79e2330",
+      "/usr/local/bin/uv": "76ac78b7ea8c7a18b3b106aca804db1646f92174613d45a750d08a7312dc3f8b",
+      "/usr/local/bin/uvx": "65ae0ddba6e27292ce71cfad2b1bfaeac72d59dcf02138eb998e40b65df0b2ef",
+      "/usr/local/lib/libpython3.13.so.1.0": "d243a8c0e37f1317eb432e0b6e812215f805d418ea6291d2bc0cd8feb67db404"
+    },
+    "python_version": "3.13.11",
+    "stdlib_tree_sha256": "24b31d16c7673cd194e16d2b1be562268c91143522585f6264980f3c5d7b9333",
+    "uv_version": "uv 0.9.30"
+  }
+}
