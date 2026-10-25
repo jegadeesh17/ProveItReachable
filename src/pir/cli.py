@@ -178,6 +178,34 @@ def _scan(args: argparse.Namespace) -> int:
     return asyncio.run(_scan_async(settings, coords, args))
 
 
+def _eval(args: argparse.Namespace) -> int:
+    """Run the evaluation suite: exit 0 bar met, 1 not met, 2 could not run (section 15)."""
+    from pir.evaluation.runner import run_eval_command  # imports this module; keep it lazy
+
+    try:
+        settings = load_settings()
+    except ValidationError as exc:
+        names = sorted({str(err["loc"][0]).upper() for err in exc.errors() if err["loc"]})
+        print(
+            "Invalid configuration: " + (", ".join(names) or "see variable rules"), file=sys.stderr
+        )
+        return 2
+    configure_logging(settings)
+    cases_path = Path(args.cases)
+    result = asyncio.run(
+        run_eval_command(
+            settings,
+            cases_path=cases_path,
+            refresh=args.refresh_research,
+            use_langsmith=not args.no_langsmith,
+            results_dir=cases_path.resolve().parent / "results",
+            recordings_dir=cases_path.resolve().parent / "recordings",
+        )
+    )
+    sys.stdout.write(result.text)
+    return result.exit_code
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pir", description="ProveItReachable")
     sub = parser.add_subparsers(dest="command")
@@ -191,6 +219,14 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--format", choices=["json"], default="json", help="report format")
     scan.add_argument("--executor", choices=["sandbox", "fake"], help="override EXECUTOR")
     scan.add_argument("--local", help="scan a trusted local fixture directory (fake or sandbox)")
+    evaluation = sub.add_parser("eval", help="run the evaluation suite (spends credits)")
+    evaluation.add_argument("--cases", default="eval/cases.toml", help="the cases file")
+    evaluation.add_argument(
+        "--refresh-research", action="store_true", help="re-record the OSV and Tavily answers"
+    )
+    evaluation.add_argument(
+        "--no-langsmith", action="store_true", help="offline debugging; the run is not scored"
+    )
     return parser
 
 
@@ -204,5 +240,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "scan":
         return _scan(args)
+    if args.command == "eval":
+        return _eval(args)
     parser.print_help(sys.stderr)
     return 2

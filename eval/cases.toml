@@ -1,0 +1,172 @@
+# Labelled evaluation cases (ARCHITECTURE section 15, ADR-0017).
+#
+# [[repo]]  id; source = "local:eval/fixtures/<dir>" or "github:<owner>/<repo>@<40-hex sha>".
+# [[case]]  id; repo = a [[repo]] id; package; advisory = OSV ID; label = the verdict a careful
+#           reviewer gives; rationale = why. The pinned version of every fixture really carries
+#           the advisory (checked against OSV when the fixtures were written).
+
+# ---- local synthetic repositories (uploaded to the Sandbox, never run) -----------------------
+
+[[repo]]
+id = "yaml-direct"
+source = "local:eval/fixtures/yaml_direct"
+
+[[repo]]
+id = "yaml-import-as"
+source = "local:eval/fixtures/yaml_import_as"
+
+[[repo]]
+id = "yaml-from-import-as"
+source = "local:eval/fixtures/yaml_from_import_as"
+
+[[repo]]
+id = "yaml-call-chain"
+source = "local:eval/fixtures/yaml_call_chain"
+
+[[repo]]
+id = "yaml-import-unused"
+source = "local:eval/fixtures/yaml_import_unused"
+
+[[repo]]
+id = "yaml-not-imported"
+source = "local:eval/fixtures/yaml_not_imported"
+
+[[repo]]
+id = "yaml-dynamic"
+source = "local:eval/fixtures/yaml_dynamic"
+
+[[repo]]
+id = "requests-mixed"
+source = "local:eval/fixtures/requests_mixed"
+
+[[repo]]
+id = "wheel-no-function"
+source = "local:eval/fixtures/wheel_no_function"
+
+# ---- pinned real repositories (permissive licence, small) ------------------------------------
+
+[[repo]]
+id = "co2tools"
+source = "github:Mambix/co2tools@9f4a255d399cc1f7202330ecfa3185fc0cd5894e"
+
+[[repo]]
+id = "pyrl"
+source = "github:chaovven/PyRL@edbf80db8edb9a40e91f3d97cecc93d4f3133d0c"
+
+# ---- likely reachable ------------------------------------------------------------------------
+
+[[case]]
+id = "yaml-direct-call"
+repo = "yaml-direct"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "likely reachable"
+rationale = "load_config calls yaml.full_load directly and the __main__ block reaches it."
+
+[[case]]
+id = "yaml-import-as-alias"
+repo = "yaml-import-as"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "likely reachable"
+rationale = "import yaml as y; y.full_load(text) is the vulnerable call under an alias."
+
+[[case]]
+id = "yaml-from-import-as-alias"
+repo = "yaml-from-import-as"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "likely reachable"
+rationale = "from yaml import full_load as parse_settings; load_config calls parse_settings."
+
+[[case]]
+id = "yaml-call-chain-cli"
+repo = "yaml-call-chain"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "likely reachable"
+rationale = "cli.main -> service.read_settings -> parser.parse_document -> yaml.full_load."
+
+[[case]]
+id = "requests-session-verify-false"
+repo = "requests-mixed"
+package = "requests"
+advisory = "GHSA-9wx4-h78v-vm56"
+label = "likely reachable"
+rationale = "fetch builds a requests.Session and makes its first request with verify=False."
+
+[[case]]
+id = "pyrl-yaml-load-default-loader-14343"
+repo = "pyrl"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "likely reachable"
+rationale = "main.py calls yaml.load(f) without a Loader; PyYAML 5.3 then uses FullLoader."
+
+[[case]]
+id = "pyrl-yaml-load-default-loader-1747"
+repo = "pyrl"
+package = "pyyaml"
+advisory = "GHSA-6757-jp84-gxfx"
+label = "likely reachable"
+rationale = "Same yaml.load(f) call in main.py; FullLoader in PyYAML 5.3 is the vulnerable loader."
+
+# ---- no reachable path detected --------------------------------------------------------------
+
+[[case]]
+id = "yaml-imported-never-called"
+repo = "yaml-import-unused"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "no reachable path detected"
+rationale = "yaml is imported but only yaml.safe_dump is called; full_load and FullLoader are not."
+
+[[case]]
+id = "yaml-never-imported"
+repo = "yaml-not-imported"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "no reachable path detected"
+rationale = "PyYAML is pinned but no file imports yaml."
+
+[[case]]
+id = "requests-extract-zipped-paths-unused"
+repo = "requests-mixed"
+package = "requests"
+advisory = "GHSA-gc5v-m9x4-r6x2"
+label = "no reachable path detected"
+rationale = "The advisory names requests.utils.extract_zipped_paths(); the repo never calls it."
+
+[[case]]
+id = "co2tools-yaml-safeloader"
+repo = "co2tools"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "no reachable path detected"
+rationale = "co2tools calls yaml.load(f, Loader=SafeLoader); the advisory needs full_load or FullLoader."
+
+# ---- uncertain -------------------------------------------------------------------------------
+
+[[case]]
+id = "yaml-dynamic-getattr"
+repo = "yaml-dynamic"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "uncertain"
+rationale = "The loader is chosen with getattr(yaml, os.environ[...]); static analysis cannot tell."
+
+[[case]]
+id = "requests-netrc-no-function"
+repo = "requests-mixed"
+package = "requests"
+advisory = "GHSA-9hjg-9r4m-mvj7"
+label = "uncertain"
+rationale = "The advisory (.netrc credential leak via crafted URLs) names no vulnerable function."
+
+[[case]]
+id = "wheel-no-function"
+repo = "wheel-no-function"
+package = "wheel"
+advisory = "GHSA-qwmp-2cf2-g9g6"
+label = "uncertain"
+rationale = "The ReDoS advisory points at the wheel CLI file-name regex, not a callable API."

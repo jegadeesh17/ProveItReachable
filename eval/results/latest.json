@@ -1,0 +1,13 @@
+{
+  "scored": false,
+  "run_date": "2026-10-26",
+  "model": "nvidia/nemotron-3-super-120b-a12b",
+  "experiment": null,
+  "n": 0,
+  "errored": 0,
+  "precision": null,
+  "recall": null,
+  "abstention_rate": 0.0,
+  "bar": 0.8,
+  "bar_met": false
+}
