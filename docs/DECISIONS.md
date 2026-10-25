@@ -36,7 +36,7 @@ Each significant technical decision for ProveItReachable, with its reasons, the 
 | [ADR-0030](#adr-0030-images-pinned-by-digest-and-hash-checked-installs) | Images pinned by digest and hash-checked installs | Accepted, amended by ADR-0033 (Sandbox image) | 2026-10-25 |
 | [ADR-0031](#adr-0031-tavily-research-with-exact-source-urls-and-a-7-day-cache) | Tavily research with exact source URLs and a 7-day cache | Accepted | 2026-10-25 |
 | [ADR-0032](#adr-0032-no-repository-file-influences-a-network-on-step) | No repository file influences a network-on step | Accepted | 2026-10-25 |
-| [ADR-0033](#adr-0033-sandbox-base-image-imported-by-version-tag-and-checked-against-a-reviewed-fingerprint) | Sandbox base image imported by version tag and checked against a reviewed fingerprint | Accepted | 2026-10-25 |
+| [ADR-0033](#adr-0033-sandbox-base-image-imported-by-version-tag-and-checked-against-a-reviewed-fingerprint) | Sandbox base image imported by version tag and checked against a reviewed fingerprint | Accepted (amended 2026-10-25: measured on GitHub Actions) | 2026-10-25 |
 | [ADR-0034](#adr-0034-sandbox-contract-corrections-from-the-live-platform-checks) | Sandbox contract corrections from the live platform checks | Accepted | 2026-10-25 |
 
 ## ADR-0001: Python and FastAPI service with typed schemas
@@ -871,6 +871,7 @@ uv can no longer be steered by anything inside a repository, and the guarantee i
 
 Date: 2026-10-25
 Status: Accepted (approved by the user on 2026-10-25; amends ADR-0030 for the Sandbox image only, and the Space image stays pinned by digest). Open item: the version tag `ghcr.io/astral-sh/uv:0.9.30-python3.13-bookworm-slim` must be confirmed and its index digest recorded during the M1-TASK-08 rework. The contract details are in ARCHITECTURE sections 7.1 and 7.2.
+Amended 2026-10-25 (approved by the user): the fingerprint and the tag's digest are measured on a GitHub Actions runner instead of with Docker on the developer's machine. This changes only where the measurement runs, not what is checked; see "Amendment 2026-10-25" below and ARCHITECTURE sections 7.2 and 19.1.
 
 ### Context
 
@@ -881,8 +882,8 @@ What a swapped image could do: it runs only inside the Sandbox, which holds no s
 ### Decision
 
 - **Import by a version tag.** The Sandbox imports `ghcr.io/astral-sh/uv:0.9.30-python3.13-bookworm-slim` (astral publishes one tag per uv release; the floating `python3.13-bookworm-slim` tag moves with every release and would trip the check below every week), always with the `tag=` override `pir-base/sha256-<digest hex>`.
-- **Configuration keeps the digest.** `SANDBOX_BASE_IMAGE` stays `<tag>@sha256:<digest>` and the settings check is unchanged: the digest records which reviewed build the tag must deliver. The executor imports only the part before `@`. The developer first confirms with `docker buildx imagetools inspect` that the version tag exists and records its index digest (expected to equal `531f855b...44ca`; if not, the version tag's digest is used).
-- **A reviewed fingerprint, measured outside the Sandbox.** A new agent command `selfcheck` (network off, no arguments) prints: the Python version, the output of `uv --version`, the sha256 of `/usr/local/bin/python3.13`, `/usr/local/lib/libpython3.13.so.1.0`, `/usr/local/bin/uv`, `/usr/local/bin/uvx`, `/lib64/ld-linux-x86-64.so.2` and `/lib/x86_64-linux-gnu/libc.so.6` (a missing file is recorded as `"missing"`), and one hash over every file and link under `/usr/local/lib/python3.13` (sorted relative paths with their content hashes). The developer runs it once with Docker on the laptop, where pulling by digest works: `docker run --rm --platform linux/amd64 --network none --user 65534:65534 -v <dir with agent.pyz>:/opt/pir:ro <SANDBOX_BASE_IMAGE> /usr/local/bin/python3.13 -I -S /opt/pir/agent.pyz selfcheck --args-b64 e30=`. The decoded result, plus the digest it came from, is committed as `src/pir/executor/base_image_fingerprint.json`.
+- **Configuration keeps the digest.** `SANDBOX_BASE_IMAGE` stays `<tag>@sha256:<digest>` and the settings check is unchanged: the digest records which reviewed build the tag must deliver. The executor imports only the part before `@`. The developer first confirms with `docker buildx imagetools inspect` that the version tag exists and records its index digest (expected to equal `531f855b...44ca`; if not, the version tag's digest is used). (Amended 2026-10-25: the fingerprint workflow does this check; see below.)
+- **A reviewed fingerprint, measured outside the Sandbox.** A new agent command `selfcheck` (network off, no arguments) prints: the Python version, the output of `uv --version`, the sha256 of `/usr/local/bin/python3.13`, `/usr/local/lib/libpython3.13.so.1.0`, `/usr/local/bin/uv`, `/usr/local/bin/uvx`, `/lib64/ld-linux-x86-64.so.2` and `/lib/x86_64-linux-gnu/libc.so.6` (a missing file is recorded as `"missing"`), and one hash over every file and link under `/usr/local/lib/python3.13` (sorted relative paths with their content hashes). The developer runs it once with Docker on the laptop, where pulling by digest works: `docker run --rm --platform linux/amd64 --network none --user 65534:65534 -v <dir with agent.pyz>:/opt/pir:ro <SANDBOX_BASE_IMAGE> /usr/local/bin/python3.13 -I -S /opt/pir/agent.pyz selfcheck --args-b64 e30=`. The decoded result, plus the digest it came from, is committed as `src/pir/executor/base_image_fingerprint.json`. (Amended 2026-10-25: the same command runs on a GitHub Actions runner; see below.)
 - **Checked on the image actually used.** In every process, right after `prepare` and before the first `fetch` or `unpack`, `SandboxAgentClient` runs `selfcheck` with network off from the prepared image (cached with `prepare`, so once per process) and requires the result to equal the committed fingerprint exactly, and the fingerprint's digest to equal the digest in `SANDBOX_BASE_IMAGE`. Any difference raises `SandboxFailed("selfcheck", "base image does not match the reviewed fingerprint")`: the scan reports the Sandbox as unavailable and nothing else runs (fail closed). `FakeExecutor` skips the check.
 - The live test `test_images_oci_accepts_digest` is replaced by `test_base_image_fingerprint_matches` (import by tag, `selfcheck` equals the committed fingerprint).
 - Changing the image (new uv or Python) is a deliberate edit, as under ADR-0030: new tag and digest, a re-measured fingerprint, a re-run of the live gates and a re-recorded Sandbox uv error-text fixture (ADR-0034).
@@ -902,6 +903,32 @@ What a swapped image could do: it runs only inside the Sandbox, which holds no s
 - **Security:** the files that run our network-on steps are proven equal to those of the reviewed build, on the very image every scan uses, so there is no gap between check and use. Limit: the check runs on the image's own Python, so a deliberately crafted malicious image could lie about its own files. That would need a compromise of astral's publishing aimed at this check, and the harm stays bounded as described above. This is weaker than a working digest import and much stronger than a bare tag.
 - **Cost and time:** one Sandbox run of a few seconds per process (well under $0.01, metered); about half a day to one day of development; fits the 2026-10-30 demo.
 - **Availability:** if astral re-publishes the version tag with different contents, live scans stop with "Sandbox unavailable" until the image is re-pinned; demo replays keep working.
+
+### Amendment 2026-10-25: fingerprint measured on GitHub Actions
+
+Approved by the user on 2026-10-25. Everything above stays in force except where the measurement runs.
+
+**Context.** The developer's laptop has CPU virtualization turned off in its firmware, so Docker Desktop cannot run there (and neither can WSL2 or Podman, which need the same feature). The fingerprint still has to be measured outside the Sandbox, from the image pulled by its exact digest.
+
+**Decision.**
+- A new workflow `.github/workflows/fingerprint.yml` measures the fingerprint on a GitHub-hosted Ubuntu runner, where Docker is available and pulling by digest works. It starts only when someone presses "Run" (`workflow_dispatch`, no inputs), can only read the repository (`permissions: contents: read`), uses no secrets, pins every action to a full commit SHA, and puts no `${{ }}` expression inside any shell command.
+- The image is always the default `SANDBOX_BASE_IMAGE` written in the code (`Settings`), never a value typed in when starting the run, so the workflow cannot be used to measure an arbitrary image. Before measuring, it confirms that the version tag still points to the recorded digest and stops if not.
+- It runs the same `docker run ... selfcheck` command as above (network off, unprivileged user, agent mounted read-only), decodes the result with the project's own decoder, writes the fingerprint file in the committed shape and uploads it as a download named `base-image-fingerprint`.
+- The workflow never commits or pushes. The developer downloads the file (`gh run download`), reviews it and commits it as `src/pir/executor/base_image_fingerprint.json`.
+- The automated workflow checks for continuous integration (AC-71, AC-72: runs on every push and pull request) apply to `ci.yml` only; `fingerprint.yml` has its own checks (manual only, read-only, SHA-pinned, no secrets, no `${{` in commands).
+- Docker is no longer a tool the developer's machine needs.
+
+**Alternatives considered.**
+- Turn virtualization on in the firmware: a change to the user's own machine that may not be possible, and the measurement would still depend on one laptop; the workflow can be re-run by anyone with access.
+- Measure inside the Sandbox: circular, because the Sandbox cannot import by digest, so nothing would prove the measured image is the reviewed build.
+- Download the image layers by digest and hash the files on the laptop without running them: no Docker needed, but the Python and uv versions require running the image, and a second hashing implementation could drift from `selfcheck`.
+- Let the workflow commit the file itself: needs write access and skips the human review.
+- Let the person starting the run type the image name: the workflow could then be pointed at any image.
+- A rented cloud machine with Docker: needs another account and is harder to reproduce.
+
+**Consequences.**
+- **Security:** the measurement is now trusted to a GitHub-hosted runner and the pinned actions instead of the laptop. The image is still pulled by its digest, so its contents cannot be swapped; the run has no secrets and cannot write to the repository, so a faulty step can at worst produce a wrong file, which the developer reviews and which the live test then compares with the Sandbox (a mismatch stops live scans).
+- **Cost and time:** a few runner minutes per image change, within GitHub's free allowance; the repository must be on GitHub with Actions enabled, and the workflow must be on the default branch before it can be started.
 
 ## ADR-0034: Sandbox contract corrections from the live platform checks
 
