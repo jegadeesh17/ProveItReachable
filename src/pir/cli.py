@@ -210,6 +210,42 @@ def _eval(args: argparse.Namespace) -> int:
     return result.exit_code
 
 
+def _serve(args: argparse.Namespace) -> int:
+    """Run the API and UI with one uvicorn worker, JSON logs and no access log (section 18)."""
+    import uvicorn  # lazy: only `serve` needs the server
+
+    from pir.api.app import create_app  # lazy: imports this module's siblings
+
+    try:
+        settings = load_settings()
+    except ValidationError as exc:
+        names = sorted({str(err["loc"][0]).upper() for err in exc.errors() if err["loc"]})
+        print(
+            "Invalid configuration: " + (", ".join(names) or "see variable rules"), file=sys.stderr
+        )
+        return 1
+    try:
+        require(settings, required_for(settings, "serve"))  # nothing is needed when live is off
+    except ConfigError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    configure_logging(settings)
+    try:
+        app = create_app(settings=settings)
+    except ConfigError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    uvicorn.run(
+        app,
+        host=args.host,
+        port=args.port if args.port is not None else settings.port,
+        workers=1,
+        log_config=None,  # uvicorn's loggers propagate to the JSON handler on the root logger
+        access_log=False,
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pir", description="ProveItReachable")
     sub = parser.add_subparsers(dest="command")
@@ -231,6 +267,9 @@ def build_parser() -> argparse.ArgumentParser:
     evaluation.add_argument(
         "--no-langsmith", action="store_true", help="offline debugging; the run is not scored"
     )
+    serve = sub.add_parser("serve", help="run the API and the web UI")
+    serve.add_argument("--host", default="127.0.0.1", help="interface to bind")
+    serve.add_argument("--port", type=int, help="port (default: PORT, else 8000)")
     return parser
 
 
@@ -246,5 +285,7 @@ def main(argv: list[str] | None = None) -> int:
         return _scan(args)
     if args.command == "eval":
         return _eval(args)
+    if args.command == "serve":
+        return _serve(args)
     parser.print_help(sys.stderr)
     return 2

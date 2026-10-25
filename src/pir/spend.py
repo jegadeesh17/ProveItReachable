@@ -538,6 +538,19 @@ class SpendMeter:
             return ["spend: ledger not read"]
         return spend_summary_lines(self._state, self._spender)
 
+    async def refresh(self) -> None:
+        """Read the ledger so `status()` and `remaining_fractions()` reflect it (at `serve` start).
+        A failure pauses the meter and is logged, not raised."""
+        async with self._lock:
+            try:
+                state, _ = await self._ledger.load()
+            except LedgerUnavailable as exc:
+                self._ledger_failed = True
+                logger.error("spend ledger unavailable on refresh: %s", exc)
+                return
+            self._state = _expire_stale(state, self._clock.now(), 2 * self._scan_timeout_s)
+            self._ledger_failed = False
+
     async def reserve(self, scan_id: str) -> ScanBudget | Refused:
         if not scan_id:
             raise ValueError("scan_id must not be empty")
