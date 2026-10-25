@@ -1,5 +1,7 @@
 # ProveItReachable
 
+[![CI](https://github.com/jegadeesh17/ProveItReachable/actions/workflows/ci.yml/badge.svg)](https://github.com/jegadeesh17/ProveItReachable/actions/workflows/ci.yml)
+
 Decides whether a known vulnerability in a Python repository's pinned dependencies is actually reachable from its code.
 
 ## Development setup
