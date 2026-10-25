@@ -1,0 +1,911 @@
+{
+  "schema_version": "1.0",
+  "slug": "co2tools",
+  "title": "co2tools",
+  "description": "Small CLI using PyYAML safely: known advisories, no reachable path.",
+  "recorded_at": "2026-10-25T22:30:48.378744Z",
+  "model": "nvidia/nemotron-3-super-120b-a12b",
+  "events": [
+    {
+      "offset_ms": 301,
+      "event": {
+        "seq": 1,
+        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "type": "step",
+        "step": "resolve",
+        "state": "running",
+        "message": null,
+        "at": "2026-10-25T22:29:56.064211Z",
+        "outcome": null,
+        "tools": []
+      }
+    },
+    {
+      "offset_ms": 18886,
+      "event": {
+        "seq": 2,
+        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "type": "step",
+        "step": "resolve",
+        "state": "done",
+        "message": null,
+        "at": "2026-10-25T22:30:14.650196Z",
+        "outcome": null,
+        "tools": [
+          "sandbox",
+          "lockfile"
+        ]
+      }
+    },
+    {
+      "offset_ms": 18886,
+      "event": {
+        "seq": 3,
+        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "type": "step",
+        "step": "osv",
+        "state": "running",
+        "message": null,
+        "at": "2026-10-25T22:30:14.650291Z",
+        "outcome": null,
+        "tools": []
+      }
+    },
+    {
+      "offset_ms": 27139,
+      "event": {
+        "seq": 4,
+        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "type": "step",
+        "step": "osv",
+        "state": "done",
+        "message": null,
+        "at": "2026-10-25T22:30:22.902847Z",
+        "outcome": null,
+        "tools": [
+          "osv"
+        ]
+      }
+    },
+    {
+      "offset_ms": 27139,
+      "event": {
+        "seq": 5,
+        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "type": "step",
+        "step": "research",
+        "state": "running",
+        "message": null,
+        "at": "2026-10-25T22:30:22.902941Z",
+        "outcome": null,
+        "tools": []
+      }
+    },
+    {
+      "offset_ms": 40958,
+      "event": {
+        "seq": 6,
+        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "type": "step",
+        "step": "research",
+        "state": "done",
+        "message": null,
+        "at": "2026-10-25T22:30:36.722073Z",
+        "outcome": null,
+        "tools": [
+          "tavily",
+          "nemotron"
+        ]
+      }
+    },
+    {
+      "offset_ms": 40958,
+      "event": {
+        "seq": 7,
+        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "type": "step",
+        "step": "analysis",
+        "state": "running",
+        "message": null,
+        "at": "2026-10-25T22:30:36.722207Z",
+        "outcome": null,
+        "tools": []
+      }
+    },
+    {
+      "offset_ms": 44854,
+      "event": {
+        "seq": 8,
+        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "type": "step",
+        "step": "analysis",
+        "state": "done",
+        "message": null,
+        "at": "2026-10-25T22:30:40.618583Z",
+        "outcome": null,
+        "tools": [
+          "sandbox",
+          "ast"
+        ]
+      }
+    },
+    {
+      "offset_ms": 44854,
+      "event": {
+        "seq": 9,
+        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "type": "step",
+        "step": "reasoning",
+        "state": "running",
+        "message": null,
+        "at": "2026-10-25T22:30:40.618693Z",
+        "outcome": null,
+        "tools": []
+      }
+    },
+    {
+      "offset_ms": 50953,
+      "event": {
+        "seq": 10,
+        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "type": "step",
+        "step": "reasoning",
+        "state": "done",
+        "message": null,
+        "at": "2026-10-25T22:30:46.717921Z",
+        "outcome": null,
+        "tools": [
+          "nemotron",
+          "ast"
+        ]
+      }
+    },
+    {
+      "offset_ms": 50953,
+      "event": {
+        "seq": 11,
+        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "type": "step",
+        "step": "report",
+        "state": "running",
+        "message": null,
+        "at": "2026-10-25T22:30:46.718004Z",
+        "outcome": null,
+        "tools": []
+      }
+    },
+    {
+      "offset_ms": 50955,
+      "event": {
+        "seq": 12,
+        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "type": "step",
+        "step": "report",
+        "state": "done",
+        "message": null,
+        "at": "2026-10-25T22:30:46.719975Z",
+        "outcome": null,
+        "tools": [
+          "verdict_gate"
+        ]
+      }
+    },
+    {
+      "offset_ms": 50955,
+      "event": {
+        "seq": 13,
+        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "type": "done",
+        "step": null,
+        "state": null,
+        "message": null,
+        "at": "2026-10-25T22:30:46.720029Z",
+        "outcome": "findings",
+        "tools": []
+      }
+    }
+  ],
+  "report": {
+    "schema_version": "1.0",
+    "scan_id": "27ceb65e648542e08f1538ab713e957b",
+    "tool_version": "0.1.0",
+    "model": "nvidia/nemotron-3-super-120b-a12b",
+    "generated_at": "2026-10-25T22:30:46.719066Z",
+    "repo": {
+      "url": "https://github.com/Mambix/co2tools",
+      "owner": "Mambix",
+      "name": "co2tools",
+      "ref_requested": "9f4a255d399cc1f7202330ecfa3185fc0cd5894e",
+      "default_branch": "master",
+      "commit_sha": "9f4a255d399cc1f7202330ecfa3185fc0cd5894e"
+    },
+    "outcome": "findings",
+    "resolution": {
+      "method": "lockfile",
+      "python_version": null,
+      "lockfile": "requirements.txt",
+      "compiled_from": null,
+      "notes": [
+        "requirements.txt pins only the listed packages; transitive dependencies are not included."
+      ]
+    },
+    "steps": [
+      {
+        "name": "resolve",
+        "state": "done",
+        "tools": [
+          "sandbox",
+          "lockfile"
+        ],
+        "started_at": "2026-10-25T22:29:56.064195Z",
+        "finished_at": "2026-10-25T22:30:14.650167Z",
+        "message": null
+      },
+      {
+        "name": "osv",
+        "state": "done",
+        "tools": [
+          "osv"
+        ],
+        "started_at": "2026-10-25T22:30:14.650285Z",
+        "finished_at": "2026-10-25T22:30:22.902827Z",
+        "message": null
+      },
+      {
+        "name": "research",
+        "state": "done",
+        "tools": [
+          "tavily",
+          "nemotron"
+        ],
+        "started_at": "2026-10-25T22:30:22.902935Z",
+        "finished_at": "2026-10-25T22:30:36.722052Z",
+        "message": null
+      },
+      {
+        "name": "analysis",
+        "state": "done",
+        "tools": [
+          "sandbox",
+          "ast"
+        ],
+        "started_at": "2026-10-25T22:30:36.722199Z",
+        "finished_at": "2026-10-25T22:30:40.618561Z",
+        "message": null
+      },
+      {
+        "name": "reasoning",
+        "state": "done",
+        "tools": [
+          "nemotron",
+          "ast"
+        ],
+        "started_at": "2026-10-25T22:30:40.618686Z",
+        "finished_at": "2026-10-25T22:30:46.717903Z",
+        "message": null
+      },
+      {
+        "name": "report",
+        "state": "done",
+        "tools": [
+          "verdict_gate"
+        ],
+        "started_at": "2026-10-25T22:30:46.718000Z",
+        "finished_at": "2026-10-25T22:30:46.719038Z",
+        "message": null
+      }
+    ],
+    "dependencies": [
+      {
+        "name": "ezdxf",
+        "source": "requirements.txt",
+        "groups": [
+          "main"
+        ],
+        "version": "0.14.2",
+        "resolved": true,
+        "unresolved_reason": null,
+        "direct": true,
+        "osv_status": "checked",
+        "osv_error": null
+      },
+      {
+        "name": "networkx",
+        "source": "requirements.txt",
+        "groups": [
+          "main"
+        ],
+        "version": "2.5",
+        "resolved": true,
+        "unresolved_reason": null,
+        "direct": true,
+        "osv_status": "checked",
+        "osv_error": null
+      },
+      {
+        "name": "numpy",
+        "source": "requirements.txt",
+        "groups": [
+          "main"
+        ],
+        "version": "1.19.4",
+        "resolved": true,
+        "unresolved_reason": null,
+        "direct": true,
+        "osv_status": "checked",
+        "osv_error": null
+      },
+      {
+        "name": "pyyaml",
+        "source": "requirements.txt",
+        "groups": [
+          "main"
+        ],
+        "version": "5.3.1",
+        "resolved": true,
+        "unresolved_reason": null,
+        "direct": true,
+        "osv_status": "checked",
+        "osv_error": null
+      },
+      {
+        "name": "scipy",
+        "source": "requirements.txt",
+        "groups": [
+          "main"
+        ],
+        "version": "1.4.1",
+        "resolved": true,
+        "unresolved_reason": null,
+        "direct": true,
+        "osv_status": "checked",
+        "osv_error": null
+      },
+      {
+        "name": "triangle",
+        "source": "requirements.txt",
+        "groups": [
+          "main"
+        ],
+        "version": "20200424",
+        "resolved": true,
+        "unresolved_reason": null,
+        "direct": true,
+        "osv_status": "checked",
+        "osv_error": null
+      },
+      {
+        "name": "trimesh",
+        "source": "requirements.txt",
+        "groups": [
+          "main"
+        ],
+        "version": "3.8.19",
+        "resolved": true,
+        "unresolved_reason": null,
+        "direct": true,
+        "osv_status": "checked",
+        "osv_error": null
+      }
+    ],
+    "findings": [
+      {
+        "finding_id": "4037345789461997",
+        "kind": "advisory",
+        "verdict": "uncertain",
+        "confidence": "low",
+        "package": "numpy",
+        "version": "1.19.4",
+        "advisory": {
+          "id": "GHSA-6p56-wp2h-9hxr",
+          "aliases": [
+            "CVE-2021-33430",
+            "PYSEC-2021-854"
+          ],
+          "summary": "NumPy Buffer Overflow (Disputed)",
+          "severity": "moderate",
+          "fixed_versions": [
+            "1.21"
+          ],
+          "published": "2022-01-07T00:09:39Z",
+          "modified": "2024-09-26T15:01:21.525444Z"
+        },
+        "vulnerable_symbol": {
+          "identified": false,
+          "symbols": [],
+          "not_identified_reason": "vulnerable function not identified in the advisory text or search results",
+          "evidence_urls": []
+        },
+        "advisory_links": [
+          {
+            "url": "https://osv.dev/vulnerability/GHSA-6p56-wp2h-9hxr",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-33430",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/numpy/numpy/issues/18939",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/numpy/numpy/commit/ae317fd9ff3e79c0eac357d723bfc29cbd625f2e",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/numpy/numpy",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pypa/advisory-database/tree/main/vulns/numpy/PYSEC-2021-854.yaml",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/advisories/GHSA-6p56-wp2h-9hxr",
+            "source": "tavily",
+            "title": "NumPy Buffer Overflow (Disputed) · CVE-2021-33430 · GitHub Advisory Database · GitHub"
+          },
+          {
+            "url": "https://rufimelo99.github.io/preprints/2026_ICST_preprint.pdf",
+            "source": "tavily",
+            "title": "Do Language Models Prefer Vulnerable Code? A Probabilistic ..."
+          },
+          {
+            "url": "https://github.com/advisories/GHSA-fpx3-f8x9-6hqm",
+            "source": "tavily",
+            "title": "A vulnerability was discovered in MongoDB Server where... · CVE-2026-13078 · GitHub Advisory Database · GitHub"
+          },
+          {
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-33570",
+            "source": "tavily",
+            "title": "NVD-CVE-2021-33570"
+          },
+          {
+            "url": "https://github.com/advisories/GHSA-f96f-54rq-c385",
+            "source": "tavily",
+            "title": "An issue in MongoDB Server's Atlas Vector Search feature... · CVE-2026-18705 · GitHub Advisory Database · GitHub"
+          }
+        ],
+        "source_locations": [],
+        "call_path": null,
+        "explanation": "No reachability verdict was established: vulnerable function not identified in the advisory text or search results",
+        "limitations": [
+          "No verdict: vulnerable function not identified in the advisory text or search results"
+        ],
+        "reason_code": "vulnerable_function_not_identified",
+        "reason": "vulnerable function not identified in the advisory text or search results",
+        "proof": null
+      },
+      {
+        "finding_id": "0a072cb7f1d2616f",
+        "kind": "advisory",
+        "verdict": "uncertain",
+        "confidence": "low",
+        "package": "numpy",
+        "version": "1.19.4",
+        "advisory": {
+          "id": "GHSA-fpfv-jqm9-f5jm",
+          "aliases": [
+            "CVE-2021-34141",
+            "PYSEC-2021-855"
+          ],
+          "summary": "Incorrect Comparison in NumPy",
+          "severity": "moderate",
+          "fixed_versions": [
+            "1.22"
+          ],
+          "published": "2021-12-18T00:00:41Z",
+          "modified": "2023-11-08T04:06:07.388275Z"
+        },
+        "vulnerable_symbol": {
+          "identified": false,
+          "symbols": [],
+          "not_identified_reason": "vulnerable function not identified in the advisory text or search results",
+          "evidence_urls": []
+        },
+        "advisory_links": [
+          {
+            "url": "https://osv.dev/vulnerability/GHSA-fpfv-jqm9-f5jm",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-34141",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/numpy/numpy/issues/18993",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/numpy/numpy/issues/18993#issuecomment-1010735102",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/advisories/GHSA-fpfv-jqm9-f5jm",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/numpy/numpy",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pypa/advisory-database/tree/main/vulns/numpy/PYSEC-2021-855.yaml",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://www.oracle.com/security-alerts/cpujul2022.html",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://test.osv.dev/vulnerability/GHSA-fpfv-jqm9-f5jm",
+            "source": "tavily",
+            "title": "OSV - Open Source Vulnerabilities"
+          },
+          {
+            "url": "https://www.tenable.com/plugins/nessus/210055",
+            "source": "tavily",
+            "title": "NumPy < 1.22.0 Vulnerability - CVE-2021-34141<!-- --> | Tenable®"
+          },
+          {
+            "url": "https://access.redhat.com/security/cve/cve-2021-34141",
+            "source": "tavily",
+            "title": "CVE-2021-34141 - Red Hat Customer Portal"
+          },
+          {
+            "url": "https://www.miggo.io/vulnerability-database/cve/CVE-2021-34141",
+            "source": "tavily",
+            "title": "CVE-2021-34141: NumPy String Comparison DoS | Miggo"
+          }
+        ],
+        "source_locations": [],
+        "call_path": null,
+        "explanation": "No reachability verdict was established: vulnerable function not identified in the advisory text or search results",
+        "limitations": [
+          "No verdict: vulnerable function not identified in the advisory text or search results"
+        ],
+        "reason_code": "vulnerable_function_not_identified",
+        "reason": "vulnerable function not identified in the advisory text or search results",
+        "proof": null
+      },
+      {
+        "finding_id": "e80fce5b68c120a8",
+        "kind": "advisory",
+        "verdict": "uncertain",
+        "confidence": "low",
+        "package": "scipy",
+        "version": "1.4.1",
+        "advisory": {
+          "id": "PYSEC-2023-102",
+          "aliases": [
+            "CVE-2023-25399",
+            "GHSA-9jx5-6pgf-crrp"
+          ],
+          "summary": null,
+          "severity": "unknown",
+          "fixed_versions": [
+            "1.10.0"
+          ],
+          "published": "2023-07-05T17:15:00Z",
+          "modified": "2026-06-10T17:11:23.230726Z"
+        },
+        "vulnerable_symbol": {
+          "identified": false,
+          "symbols": [],
+          "not_identified_reason": "vulnerable function not identified in the advisory text or search results",
+          "evidence_urls": []
+        },
+        "advisory_links": [
+          {
+            "url": "https://osv.dev/vulnerability/PYSEC-2023-102",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/scipy/scipy/issues/16235",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/scipy/scipy/pull/16397",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "http://www.square16.org/achievement/cve-2023-25399/",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/advisories/GHSA-9jx5-6pgf-crrp",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://www.sentinelone.com/vulnerability-database/cve-2023-25399",
+            "source": "tavily",
+            "title": "CVE-2023-25399: Scipy Memory Leak Vulnerability"
+          },
+          {
+            "url": "https://ubuntu.com/security/CVE-2023-25399",
+            "source": "tavily",
+            "title": "CVE-2023-25399 | Ubuntu"
+          },
+          {
+            "url": "https://finance.yahoo.com/news/cenovus-cve-gives-production-guidance-164604775.html",
+            "source": "tavily",
+            "title": "Cenovus (CVE) Gives Production Guidance for 2023, Hikes Capex"
+          },
+          {
+            "url": "https://finance.yahoo.com/news/silent-signal-discovered-critical-vulnerability-132300723.html",
+            "source": "tavily",
+            "title": "Silent Signal Discovered a Critical Vulnerability in IBM i System – CVE-2023-30990"
+          }
+        ],
+        "source_locations": [],
+        "call_path": null,
+        "explanation": "No reachability verdict was established: vulnerable function not identified in the advisory text or search results",
+        "limitations": [
+          "No verdict: vulnerable function not identified in the advisory text or search results"
+        ],
+        "reason_code": "vulnerable_function_not_identified",
+        "reason": "vulnerable function not identified in the advisory text or search results",
+        "proof": null
+      },
+      {
+        "finding_id": "a0d5f7a0a711b4a9",
+        "kind": "advisory",
+        "verdict": "uncertain",
+        "confidence": "low",
+        "package": "scipy",
+        "version": "1.4.1",
+        "advisory": {
+          "id": "PYSEC-2023-114",
+          "aliases": [
+            "CVE-2023-29824",
+            "GHSA-jrfm-2h82-xg28"
+          ],
+          "summary": null,
+          "severity": "unknown",
+          "fixed_versions": [
+            "1.8.0"
+          ],
+          "published": "2023-07-06T21:15:00Z",
+          "modified": "2026-06-10T17:11:12.706043Z"
+        },
+        "vulnerable_symbol": {
+          "identified": false,
+          "symbols": [],
+          "not_identified_reason": "vulnerable function not identified in the advisory text or search results",
+          "evidence_urls": []
+        },
+        "advisory_links": [
+          {
+            "url": "https://osv.dev/vulnerability/PYSEC-2023-114",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/scipy/scipy/issues/14713",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "http://www.square16.org/achievement/cve-2023-29824/",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/scipy/scipy/pull/15013",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/scipy/scipy/issues/14713#issuecomment-1629468565",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/advisories/GHSA-jrfm-2h82-xg28",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://www.sentinelone.com/vulnerability-database/cve-2023-29824",
+            "source": "tavily",
+            "title": "CVE-2023-29824: SciPy Use-After-Free Vulnerability"
+          },
+          {
+            "url": "https://access.redhat.com/security/cve/cve-2023-29824",
+            "source": "tavily",
+            "title": "CVE-2023-29824 - Red Hat Customer Portal"
+          },
+          {
+            "url": "https://mondoo.com/vulnerability-intelligence/vulnerability/CVE-2023-29824",
+            "source": "tavily",
+            "title": "CVE-2023-29824 | Mondoo Vulnerability Intelligence"
+          },
+          {
+            "url": "https://www.miggo.io/vulnerability-database/cve/CVE-2023-29824",
+            "source": "tavily",
+            "title": "CVE-2023-29824: SciPy Py_FindObjects UAF Bug | Miggo"
+          },
+          {
+            "url": "https://ubuntu.com/security/CVE-2023-29824",
+            "source": "tavily",
+            "title": "CVE-2023-29824 | Ubuntu"
+          }
+        ],
+        "source_locations": [],
+        "call_path": null,
+        "explanation": "No reachability verdict was established: vulnerable function not identified in the advisory text or search results",
+        "limitations": [
+          "No verdict: vulnerable function not identified in the advisory text or search results"
+        ],
+        "reason_code": "vulnerable_function_not_identified",
+        "reason": "vulnerable function not identified in the advisory text or search results",
+        "proof": null
+      },
+      {
+        "finding_id": "f4509c8a78e1169b",
+        "kind": "advisory",
+        "verdict": "no reachable path detected",
+        "confidence": "high",
+        "package": "pyyaml",
+        "version": "5.3.1",
+        "advisory": {
+          "id": "GHSA-8q59-q68h-6hv4",
+          "aliases": [
+            "CVE-2020-14343",
+            "PYSEC-2021-142"
+          ],
+          "summary": "Improper Input Validation in PyYAML",
+          "severity": "critical",
+          "fixed_versions": [
+            "5.4"
+          ],
+          "published": "2021-03-25T21:26:26Z",
+          "modified": "2026-02-04T03:33:10.792778Z"
+        },
+        "vulnerable_symbol": {
+          "identified": true,
+          "symbols": [
+            "yaml.full_load",
+            "yaml.FullLoader"
+          ],
+          "not_identified_reason": null,
+          "evidence_urls": [
+            "https://explore.alas.aws.amazon.com/CVE-2020-14343.html",
+            "https://access.redhat.com/security/cve/cve-2020-14343",
+            "https://github.com/advisories/GHSA-8q59-q68h-6hv4",
+            "https://www.miggo.io/vulnerability-database/cve/CVE-2020-14343"
+          ]
+        },
+        "advisory_links": [
+          {
+            "url": "https://osv.dev/vulnerability/GHSA-8q59-q68h-6hv4",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2020-14343",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/SeldonIO/seldon-core/issues/2252",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/yaml/pyyaml/issues/420",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/yaml/pyyaml/issues/420#issuecomment-663673966",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/yaml/pyyaml/commit/a001f2782501ad2d24986959f0239a354675f9dc",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://bugzilla.redhat.com/show_bug.cgi?id=1860466",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/advisories/GHSA-8q59-q68h-6hv4",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pypa/advisory-database/tree/main/vulns/pyyaml/PYSEC-2021-142.yaml",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/yaml/pyyaml",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://pypi.org/project/PyYAML",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://www.oracle.com/security-alerts/cpuapr2022.html",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://www.oracle.com/security-alerts/cpujul2022.html",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://explore.alas.aws.amazon.com/CVE-2020-14343.html",
+            "source": "tavily",
+            "title": "CVE-2020-14343"
+          },
+          {
+            "url": "https://access.redhat.com/security/cve/cve-2020-14343",
+            "source": "tavily",
+            "title": "CVE-2020-14343 - Red Hat Customer Portal"
+          },
+          {
+            "url": "https://www.miggo.io/vulnerability-database/cve/CVE-2020-14343",
+            "source": "tavily",
+            "title": "CVE-2020-14343: CVE-2020-14343: PyYAML Code Execution - CVE Database | Miggo | Miggo"
+          }
+        ],
+        "source_locations": [],
+        "call_path": null,
+        "explanation": "No calls or references to yaml.full_load or yaml.FullLoader were found in the repository code via find_call_sites. Therefore there is no reachable path from entry points to the vulnerable symbols.",
+        "limitations": [
+          "Static analysis cannot detect dynamic imports, getattr, or reflection that might resolve the vulnerable symbol at runtime.",
+          "Code inside transitive dependencies is not examined.",
+          "Scope: 9 of 9 Python files parsed; examined imports, calls and references of `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration.",
+          "No import or call site found."
+        ],
+        "reason_code": null,
+        "reason": null,
+        "proof": null
+      }
+    ],
+    "summary": {
+      "dependencies_total": 7,
+      "dependencies_checked": 7,
+      "dependencies_unresolved": 0,
+      "dependencies_not_checked": 0,
+      "findings_total": 5,
+      "by_verdict": {
+        "likely reachable": 0,
+        "no reachable path detected": 1,
+        "uncertain": 4
+      }
+    },
+    "limitations": [
+      "Reachability is judged by static analysis of the repository's own code (imports, calls and references found with ast); dynamic imports, reflection and runtime configuration are not examined.",
+      "Only dependency manifests at the repository root are examined."
+    ]
+  }
+}
