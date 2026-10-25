@@ -16,7 +16,8 @@ from pir.api.security_headers import BodyLimitMiddleware, SecurityHeadersMiddlew
 from pir.config import Settings, load_settings
 from pir.deps import PipelineDeps, build_deps
 from pir.jobs import JobManager
-from pir.ratelimit import ClientHasher, RateLimiter
+from pir.ratelimit import ClientHasher, RateLimiter, ReplayLimiter
+from pir.replay import ReplayStore
 from pir.spend import SystemClock
 
 logger = logging.getLogger("pir.api")
@@ -43,12 +44,14 @@ def create_app(
     *,
     web_dir: Path | None = None,
     eval_path: Path | None = None,
+    replay_store: ReplayStore | None = None,
 ) -> FastAPI:
     """Build the API and UI app.
 
     `deps` is what live scans use; with none given they are built from `settings` when
     LIVE_SCANS_ENABLED is true, and nothing is built when it is false (replays need no keys).
-    `web_dir` and `eval_path` default to `web/` and `eval/results/latest.json`.
+    `web_dir` and `eval_path` default to `web/` and `eval/results/latest.json`; the recordings
+    are loaded from REPLAY_DIR unless a `replay_store` is given.
     """
     if settings is None:
         settings = deps.settings if deps is not None else load_settings()
@@ -65,6 +68,8 @@ def create_app(
         hasher=ClientHasher(),
         clock=clock,
         eval_path=eval_path or _project_path("eval/results/latest.json"),
+        replays=replay_store or ReplayStore(_project_path(settings.replay_dir)),
+        replay_limiter=ReplayLimiter.from_settings(settings),
     )
 
     @asynccontextmanager

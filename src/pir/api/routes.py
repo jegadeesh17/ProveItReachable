@@ -1,6 +1,6 @@
 """API routes of ARCHITECTURE section 8: scans, status, report, config, health, schema.
 
-The events (SSE), `report.md`, demos/replay and proof routes belong to later tasks; they get the
+The events (SSE), `report.md` and proof routes belong to later tasks; they get the
 same `ApiContext` through `request.app.state.ctx` (see `get_context`).
 """
 
@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi import APIRouter, Request, Response
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
+from starlette.convertors import Convertor, register_url_convertor
 
 from pir import __version__, messages
 from pir.api.errors import (
@@ -30,19 +31,38 @@ from pir.jobs import JobManager, ScanNotFound
 from pir.logs import bind_scan, scan_id_var
 from pir.models.api import (
     AppConfigResponse,
+    DemoSummary,
     HealthResponse,
     ScanAccepted,
     ScanRequest,
 )
 from pir.models.report import ScanReport
-from pir.pipeline import EventSink, github_repo_ref, run_scan
-from pir.ratelimit import ClientHasher, Limited, RateLimiter, client_key
+from pir.pipeline import github_repo_ref, run_scan
+from pir.ratelimit import ClientHasher, Limited, RateLimiter, ReplayLimiter, client_key
+from pir.replay import DemoNotFound, EventSink, ReplayStore
 from pir.spend import Clock, Refused
 
 logger = logging.getLogger("pir.api")
 
 _FILENAME_CHARS = re.compile(r"[^A-Za-z0-9._-]")
 _SCAN_FIELDS = ("repo_url", "ref")
+_DEMO_LIST = TypeAdapter(list[DemoSummary])
+
+
+class _AnySlug(Convertor[str]):
+    """Matches anything, slashes and newlines included, so that no demo path reaches the static
+    mount and every non-allowlisted slug is a `demo_not_found`."""
+
+    regex = r"(?s:.*)"
+
+    def convert(self, value: str) -> str:
+        return value
+
+    def to_string(self, value: str) -> str:
+        return value
+
+
+register_url_convertor("anyslug", _AnySlug())
 
 
 @dataclass
@@ -56,6 +76,8 @@ class ApiContext:
     hasher: ClientHasher
     clock: Clock
     eval_path: Path
+    replays: ReplayStore
+    replay_limiter: ReplayLimiter
     live_in_flight: int = 0
 
     def acquire_live_slot(self) -> bool:
@@ -217,6 +239,53 @@ def create_router() -> APIRouter:
             media_type="application/json",
             headers=headers,
         )
+
+    @router.get("/demos")
+    async def list_demos(request: Request) -> Response:
+        return Response(
+            content=_DEMO_LIST.dump_json(get_context(request).replays.list()),
+            media_type="application/json",
+        )
+
+    @router.post("/demos/{slug:anyslug}/replay", status_code=202)
+    async def start_replay(slug: str, request: Request) -> Response:
+        """Replay a recording. Counted only against the replay caps: never against the live-scan
+        rate limits or the spend meter, and it needs no keys, so it works while live scans are
+        paused."""
+        ctx = get_context(request)
+        try:
+            rec = ctx.replays.get(slug)  # a dict lookup; the slug never reaches the filesystem
+        except DemoNotFound:
+            raise ApiError("demo_not_found") from None
+        key = ctx.client_key(request)
+        client = ctx.hasher.hash(key)
+        verdict = ctx.replay_limiter.acquire(key, ctx.clock.now())
+        if isinstance(verdict, Limited):
+            logger.info(
+                "replay refused",
+                extra={"event": "replay_refused", "outcome": verdict.scope, "client": client},
+            )
+            raise ApiError(
+                "too_many_requests",
+                messages.too_many_requests(minutes_for(verdict.retry_after_s)),
+                retry_after_s=verdict.retry_after_s,
+            )
+
+        async def runner(sink: EventSink) -> ScanReport:
+            try:
+                return await ctx.replays.play(
+                    rec, sink, max_seconds=ctx.settings.replay_max_seconds
+                )
+            finally:
+                ctx.replay_limiter.release(key)
+
+        try:
+            job = ctx.jobs.create("replay", runner)
+        except BaseException:
+            ctx.replay_limiter.release(key)
+            raise
+        logger.info("replay admitted", extra={"event": "replay_admitted", "client": client})
+        return json_response(_accepted(job.scan_id, "replay"), 202)
 
     @router.get("/config")
     async def app_config(request: Request) -> Response:

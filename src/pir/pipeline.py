@@ -16,7 +16,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol
 
 from langsmith.run_trees import RunTree
 
@@ -57,6 +56,7 @@ from pir.models.research import AdvisoryResearch
 from pir.osv import OsvFailure
 from pir.reasoning.ast_tool import AstTool
 from pir.reasoning.strategy import FindingContext
+from pir.replay import EventSink
 from pir.report_builder import Candidate, ScanContext, build_finding, build_report, step_tools
 from pir.spend import ScanBudget, SpendDenied
 from pir.tracing import run_traced
@@ -82,10 +82,6 @@ _SCAN_LIMITATIONS = [
 ]
 
 Forced = tuple[ReasonCode, str]
-
-
-class EventSink(Protocol):
-    async def emit(self, event: ProgressEvent) -> None: ...
 
 
 class _ScanTimeout(TimeoutError):

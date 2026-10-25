@@ -17,7 +17,8 @@ from pir.logs import bind_scan
 from pir.models import Mode, StepName
 from pir.models.api import ProgressEvent, ScanStatusResponse
 from pir.models.report import ScanReport, StepStatus
-from pir.pipeline import STEP_ORDER, EventSink
+from pir.pipeline import STEP_ORDER
+from pir.replay import EventSink
 from pir.spend import Clock
 
 logger = logging.getLogger("pir.jobs")

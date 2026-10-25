@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import math
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -30,6 +31,7 @@ from pir.logs import bind_scan, configure_logging, scan_id_var
 from pir.models.api import check_ref
 from pir.models.report import ScanReport
 from pir.pipeline import github_repo_ref, local_repo_ref, run_scan
+from pir.replay import Recorder, summary, write_recording
 from pir.spend import (
     HEADROOM_MIN_USD,
     CapsRefused,
@@ -45,6 +47,8 @@ from pir.spend import (
 )
 
 logger = logging.getLogger("pir.cli")
+
+_SLUG_RE = re.compile(r"[a-z0-9-]{1,40}")
 
 
 def _check_config(command: str) -> int:
@@ -192,6 +196,108 @@ def _scan(args: argparse.Namespace) -> int:
         return 1
     configure_logging(settings)
     return asyncio.run(_scan_async(settings, coords, args))
+
+
+def _recording_problem(report: ScanReport) -> str | None:
+    """Why this scan must not become a demo, or None. A demo of a scan the Sandbox did not serve
+    (the base-image selfcheck failed, resolve or analysis did not run) would mislead."""
+    states = {step.name: step.state for step in report.steps}
+    for name in ("resolve", "analysis"):
+        if states.get(name) != "done":
+            return f"the {name} step did not finish ({states.get(name)})"
+    if report.resolution.method == "failed":
+        return "dependency resolution failed"
+    return None
+
+
+async def _record_async(
+    settings: Settings, coords: RepoCoordinates, args: argparse.Namespace
+) -> int:
+    deps = build_deps(settings)
+    try:
+        try:
+            target = await deps.validate(coords, args.ref)
+        except (
+            InvalidRepoUrl,
+            RepoNotFound,
+            RepoTooLarge,
+            NotPythonProject,
+            GitHubUnavailable,
+        ) as exc:
+            print(_admission_message(exc), file=sys.stderr)
+            return 2
+        scan_id = uuid.uuid4().hex
+        token = bind_scan(scan_id)
+        try:
+            budget = await deps.meter.reserve(scan_id)
+        finally:
+            scan_id_var.reset(token)
+        if isinstance(budget, Refused):
+            print(_refusal_message(budget), file=sys.stderr)
+            return 2
+        recorder = Recorder()
+        try:
+            report = await run_scan(
+                deps, target, budget, repo=github_repo_ref(target), scan_id=scan_id, sink=recorder
+            )
+        except Exception:
+            error_id = uuid.uuid4().hex[:12]
+            logger.exception("recording failed", extra={"error_id": error_id})
+            print(messages.internal_error(error_id), file=sys.stderr)
+            return 1
+        finally:
+            await deps.meter.settle(budget)
+            print_spend_summary(deps.meter)
+        problem = _recording_problem(report)
+        if problem is not None:
+            print(f"Not recorded: {problem}. Nothing was written.", file=sys.stderr)
+            return 1
+        recording = recorder.to_recording(args.slug, args.title, args.description, report)
+        path = write_recording(Path(settings.replay_dir), recording)
+        info = summary(recording)
+        print(
+            f"Recorded {path} ({len(recording.events)} events, {info.by_verdict})", file=sys.stderr
+        )
+        return 0
+    finally:
+        await deps.aclose()
+
+
+def _record(args: argparse.Namespace) -> int:
+    """`record`: run one real scan and save it as a demo replay. Spends credits (section 14)."""
+    try:
+        settings = load_settings()
+    except ValidationError as exc:
+        names = sorted({str(err["loc"][0]).upper() for err in exc.errors() if err["loc"]})
+        print(
+            "Invalid configuration: " + (", ".join(names) or "see variable rules"), file=sys.stderr
+        )
+        return 1
+    if not _SLUG_RE.fullmatch(args.slug):
+        print("--slug must match ^[a-z0-9-]{1,40}$.", file=sys.stderr)
+        return 2
+    if not args.title.strip() or not args.description.strip():
+        print("--title and --description must not be empty.", file=sys.stderr)
+        return 2
+    try:
+        coords = parse_repo_url(args.repo_url)
+    except InvalidRepoUrl:
+        print(messages.message("invalid_url"), file=sys.stderr)
+        return 2
+    if args.ref:
+        try:
+            check_ref(args.ref)
+        except ValueError:
+            print(messages.request_invalid("the ref is not valid"), file=sys.stderr)
+            return 2
+    settings = settings.model_copy(update={"executor": "sandbox"})  # a demo is a real scan
+    try:
+        require(settings, required_for(settings, "scan"))
+    except ConfigError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    configure_logging(settings)
+    return asyncio.run(_record_async(settings, coords, args))
 
 
 def _eval(args: argparse.Namespace) -> int:
@@ -344,6 +450,12 @@ def build_parser() -> argparse.ArgumentParser:
     evaluation.add_argument(
         "--no-langsmith", action="store_true", help="offline debugging; the run is not scored"
     )
+    record = sub.add_parser("record", help="record a real scan as a demo replay (spends credits)")
+    record.add_argument("repo_url", help="https://github.com/owner/repo")
+    record.add_argument("--slug", required=True, help="^[a-z0-9-]{1,40}$; the file name")
+    record.add_argument("--title", required=True, help="shown in the demo picker")
+    record.add_argument("--description", required=True, help="shown in the demo picker")
+    record.add_argument("--ref", help="branch, tag or commit SHA to pin (default: default branch)")
     serve = sub.add_parser("serve", help="run the API and the web UI")
     serve.add_argument("--host", default="127.0.0.1", help="interface to bind")
     serve.add_argument("--port", type=int, help="port (default: PORT, else 8000)")
@@ -379,6 +491,8 @@ def main(argv: list[str] | None = None) -> int:
         return _scan(args)
     if args.command == "eval":
         return _eval(args)
+    if args.command == "record":
+        return _record(args)
     if args.command == "serve":
         return _serve(args)
     if args.command == "ledger" and args.ledger_command == "set-caps":

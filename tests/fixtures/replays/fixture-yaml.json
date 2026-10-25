@@ -1,0 +1,411 @@
+{
+  "schema_version": "1.0",
+  "slug": "fixture-yaml",
+  "title": "Fixture: fake-built recording",
+  "description": "Built from the fake pipeline for tests; not a real demo.",
+  "recorded_at": "2026-10-26T12:00:00Z",
+  "model": "nvidia/nemotron-fake",
+  "events": [
+    {
+      "offset_ms": 2000,
+      "event": {
+        "seq": 1,
+        "scan_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "type": "step",
+        "step": "resolve",
+        "state": "running",
+        "message": null,
+        "at": "2026-10-25T22:18:57.933373Z",
+        "outcome": null,
+        "tools": []
+      }
+    },
+    {
+      "offset_ms": 4000,
+      "event": {
+        "seq": 2,
+        "scan_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "type": "step",
+        "step": "resolve",
+        "state": "done",
+        "message": null,
+        "at": "2026-10-25T22:18:58.035074Z",
+        "outcome": null,
+        "tools": [
+          "lockfile"
+        ]
+      }
+    },
+    {
+      "offset_ms": 6000,
+      "event": {
+        "seq": 3,
+        "scan_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "type": "step",
+        "step": "osv",
+        "state": "running",
+        "message": null,
+        "at": "2026-10-25T22:18:58.035156Z",
+        "outcome": null,
+        "tools": []
+      }
+    },
+    {
+      "offset_ms": 8000,
+      "event": {
+        "seq": 4,
+        "scan_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "type": "step",
+        "step": "osv",
+        "state": "done",
+        "message": null,
+        "at": "2026-10-25T22:18:58.075634Z",
+        "outcome": null,
+        "tools": [
+          "osv"
+        ]
+      }
+    },
+    {
+      "offset_ms": 10000,
+      "event": {
+        "seq": 5,
+        "scan_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "type": "step",
+        "step": "research",
+        "state": "running",
+        "message": null,
+        "at": "2026-10-25T22:18:58.075703Z",
+        "outcome": null,
+        "tools": []
+      }
+    },
+    {
+      "offset_ms": 12000,
+      "event": {
+        "seq": 6,
+        "scan_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "type": "step",
+        "step": "research",
+        "state": "done",
+        "message": null,
+        "at": "2026-10-25T22:18:58.082185Z",
+        "outcome": null,
+        "tools": [
+          "tavily",
+          "nemotron"
+        ]
+      }
+    },
+    {
+      "offset_ms": 14000,
+      "event": {
+        "seq": 7,
+        "scan_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "type": "step",
+        "step": "analysis",
+        "state": "running",
+        "message": null,
+        "at": "2026-10-25T22:18:58.082278Z",
+        "outcome": null,
+        "tools": []
+      }
+    },
+    {
+      "offset_ms": 16000,
+      "event": {
+        "seq": 8,
+        "scan_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "type": "step",
+        "step": "analysis",
+        "state": "done",
+        "message": null,
+        "at": "2026-10-25T22:18:58.116500Z",
+        "outcome": null,
+        "tools": [
+          "ast"
+        ]
+      }
+    },
+    {
+      "offset_ms": 18000,
+      "event": {
+        "seq": 9,
+        "scan_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "type": "step",
+        "step": "reasoning",
+        "state": "running",
+        "message": null,
+        "at": "2026-10-25T22:18:58.116570Z",
+        "outcome": null,
+        "tools": []
+      }
+    },
+    {
+      "offset_ms": 20000,
+      "event": {
+        "seq": 10,
+        "scan_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "type": "step",
+        "step": "reasoning",
+        "state": "done",
+        "message": null,
+        "at": "2026-10-25T22:18:58.117812Z",
+        "outcome": null,
+        "tools": [
+          "nemotron",
+          "ast"
+        ]
+      }
+    },
+    {
+      "offset_ms": 22000,
+      "event": {
+        "seq": 11,
+        "scan_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "type": "step",
+        "step": "report",
+        "state": "running",
+        "message": null,
+        "at": "2026-10-25T22:18:58.117865Z",
+        "outcome": null,
+        "tools": []
+      }
+    },
+    {
+      "offset_ms": 24000,
+      "event": {
+        "seq": 12,
+        "scan_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "type": "step",
+        "step": "report",
+        "state": "done",
+        "message": null,
+        "at": "2026-10-25T22:18:58.118806Z",
+        "outcome": null,
+        "tools": [
+          "verdict_gate"
+        ]
+      }
+    },
+    {
+      "offset_ms": 26000,
+      "event": {
+        "seq": 13,
+        "scan_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "type": "done",
+        "step": null,
+        "state": null,
+        "message": null,
+        "at": "2026-10-25T22:18:58.118849Z",
+        "outcome": "findings",
+        "tools": []
+      }
+    }
+  ],
+  "report": {
+    "schema_version": "1.0",
+    "scan_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tool_version": "0.1.0",
+    "model": "nvidia/nemotron-fake",
+    "generated_at": "2026-10-25T22:18:58.118301Z",
+    "repo": {
+      "url": "https://github.com/local/repo",
+      "owner": "local",
+      "name": "repo",
+      "ref_requested": null,
+      "default_branch": "local",
+      "commit_sha": "dddddddddddddddddddddddddddddddddddddddd"
+    },
+    "outcome": "findings",
+    "resolution": {
+      "method": "lockfile",
+      "python_version": null,
+      "lockfile": "requirements.txt",
+      "compiled_from": null,
+      "notes": [
+        "requirements.txt pins only the listed packages; transitive dependencies are not included."
+      ]
+    },
+    "steps": [
+      {
+        "name": "resolve",
+        "state": "done",
+        "tools": [
+          "lockfile"
+        ],
+        "started_at": "2026-10-25T22:18:57.933357Z",
+        "finished_at": "2026-10-25T22:18:58.035046Z",
+        "message": null
+      },
+      {
+        "name": "osv",
+        "state": "done",
+        "tools": [
+          "osv"
+        ],
+        "started_at": "2026-10-25T22:18:58.035150Z",
+        "finished_at": "2026-10-25T22:18:58.075612Z",
+        "message": null
+      },
+      {
+        "name": "research",
+        "state": "done",
+        "tools": [
+          "tavily",
+          "nemotron"
+        ],
+        "started_at": "2026-10-25T22:18:58.075698Z",
+        "finished_at": "2026-10-25T22:18:58.082166Z",
+        "message": null
+      },
+      {
+        "name": "analysis",
+        "state": "done",
+        "tools": [
+          "ast"
+        ],
+        "started_at": "2026-10-25T22:18:58.082274Z",
+        "finished_at": "2026-10-25T22:18:58.116479Z",
+        "message": null
+      },
+      {
+        "name": "reasoning",
+        "state": "done",
+        "tools": [
+          "nemotron",
+          "ast"
+        ],
+        "started_at": "2026-10-25T22:18:58.116565Z",
+        "finished_at": "2026-10-25T22:18:58.117798Z",
+        "message": null
+      },
+      {
+        "name": "report",
+        "state": "done",
+        "tools": [
+          "verdict_gate"
+        ],
+        "started_at": "2026-10-25T22:18:58.117861Z",
+        "finished_at": "2026-10-25T22:18:58.118279Z",
+        "message": null
+      }
+    ],
+    "dependencies": [
+      {
+        "name": "pyyaml",
+        "source": "requirements.txt",
+        "groups": [
+          "main"
+        ],
+        "version": "5.3.1",
+        "resolved": true,
+        "unresolved_reason": null,
+        "direct": true,
+        "osv_status": "checked",
+        "osv_error": null
+      }
+    ],
+    "findings": [
+      {
+        "finding_id": "f4509c8a78e1169b",
+        "kind": "advisory",
+        "verdict": "likely reachable",
+        "confidence": "medium",
+        "package": "pyyaml",
+        "version": "5.3.1",
+        "advisory": {
+          "id": "GHSA-8q59-q68h-6hv4",
+          "aliases": [
+            "CVE-2020-14343",
+            "PYSEC-2021-142"
+          ],
+          "summary": "Improper Input Validation in PyYAML",
+          "severity": "critical",
+          "fixed_versions": [
+            "5.4"
+          ],
+          "published": "2020-07-21T20:00:00Z",
+          "modified": "2024-05-20T10:00:00Z"
+        },
+        "vulnerable_symbol": {
+          "identified": true,
+          "symbols": [
+            "yaml.full_load"
+          ],
+          "not_identified_reason": null,
+          "evidence_urls": [
+            "https://nvd.nist.gov/vuln/detail/CVE-2020-14343"
+          ]
+        },
+        "advisory_links": [
+          {
+            "url": "https://osv.dev/vulnerability/GHSA-8q59-q68h-6hv4",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2020-14343",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/yaml/pyyaml/issues/420?x=1&y=%20z",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://pypi.org/project/PyYAML",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/yaml/pyyaml/issues/420?utm_source=search&ref=a%2Fb",
+            "source": "tavily",
+            "title": "Arbitrary code execution via full_load"
+          }
+        ],
+        "source_locations": [
+          {
+            "file": "app.py",
+            "line": 5,
+            "kind": "call",
+            "snippet": "return yaml.full_load(text)"
+          }
+        ],
+        "call_path": [
+          {
+            "file": "app.py",
+            "line": 5,
+            "edge": "vulnerable_call",
+            "symbol": "yaml.full_load"
+          }
+        ],
+        "explanation": "load_config passes its argument to yaml.full_load.",
+        "limitations": [
+          "Static analysis only."
+        ],
+        "reason_code": null,
+        "reason": null,
+        "proof": null
+      }
+    ],
+    "summary": {
+      "dependencies_total": 1,
+      "dependencies_checked": 1,
+      "dependencies_unresolved": 0,
+      "dependencies_not_checked": 0,
+      "findings_total": 1,
+      "by_verdict": {
+        "likely reachable": 1,
+        "no reachable path detected": 0,
+        "uncertain": 0
+      }
+    },
+    "limitations": [
+      "Reachability is judged by static analysis of the repository's own code (imports, calls and references found with ast); dynamic imports, reflection and runtime configuration are not examined.",
+      "Only dependency manifests at the repository root are examined.",
+      "local fixture, not fetched from GitHub"
+    ]
+  }
+}

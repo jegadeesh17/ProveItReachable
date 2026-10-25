@@ -87,6 +87,63 @@ class RateLimiter:
                 del self._hits[key]
 
 
+class ReplayLimiter:
+    """Replay caps (section 8): running replays in total and per client, and starts per client per
+    hour. Separate from `RateLimiter`, so live-scan limits never touch replays. Only a start that
+    passes is stored; `release` must follow every successful `acquire`."""
+
+    def __init__(
+        self, *, max_running: int = 10, per_client_running: int = 2, per_client_hour: int = 30
+    ) -> None:
+        self._max_running = max_running
+        self._per_client_running = per_client_running
+        self._per_client_hour = per_client_hour
+        self._running: dict[str, int] = {}
+        self._starts: dict[str, deque[datetime]] = {}
+
+    @classmethod
+    def from_settings(cls, settings: "Settings") -> "ReplayLimiter":
+        return cls(
+            max_running=settings.max_concurrent_replays,
+            per_client_running=2,
+            per_client_hour=settings.rate_limit_replays_per_client_hour,
+        )
+
+    @property
+    def running(self) -> int:
+        return sum(self._running.values())
+
+    def acquire(self, client_key: str, now: datetime) -> Allowed | Limited:
+        now = now.astimezone(UTC)
+        self._prune(now)
+        if self.running >= self._max_running:
+            return Limited(60, "global")
+        if self._running.get(client_key, 0) >= self._per_client_running:
+            return Limited(60, "hour")
+        starts = self._starts.get(client_key, deque())
+        if self._per_client_hour <= 0 or len(starts) >= self._per_client_hour:
+            wait = _HOUR if not starts else starts[0] + _HOUR - now
+            return Limited(_seconds(wait), "hour")
+        self._starts.setdefault(client_key, deque()).append(now)
+        self._running[client_key] = self._running.get(client_key, 0) + 1
+        return Allowed()
+
+    def release(self, client_key: str) -> None:
+        left = self._running.get(client_key, 0) - 1
+        if left > 0:
+            self._running[client_key] = left
+        else:
+            self._running.pop(client_key, None)
+
+    def _prune(self, now: datetime) -> None:
+        for key in list(self._starts):
+            starts = self._starts[key]
+            while starts and now - starts[0] >= _HOUR:
+                starts.popleft()
+            if not starts:
+                del self._starts[key]
+
+
 def client_key(connection_host: str | None, forwarded_for: str | None, trusted_hops: int) -> str:
     """The key a request is limited by (finding 8).
 
