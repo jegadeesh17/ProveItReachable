@@ -33,10 +33,10 @@ Each significant technical decision for ProveItReachable, with its reasons, the 
 | [ADR-0027](#adr-0027-sandbox-steps-with-network-on-never-run-repository-code) | Sandbox steps with network on never run repository code | Superseded by ADR-0032 | 2026-10-25 |
 | [ADR-0028](#adr-0028-dependency-resolution-order-compiled-without-builds) | Dependency resolution order, compiled without builds | Accepted, amended by ADR-0032 and ADR-0034 | 2026-10-25 |
 | [ADR-0029](#adr-0029-one-spend-ledger-for-every-spender-with-allowances-and-a-daily-ceiling) | One spend ledger for every spender, with allowances and a daily ceiling | Accepted | 2026-10-25 |
-| [ADR-0030](#adr-0030-images-pinned-by-digest-and-hash-checked-installs) | Images pinned by digest and hash-checked installs | Accepted | 2026-10-25 |
+| [ADR-0030](#adr-0030-images-pinned-by-digest-and-hash-checked-installs) | Images pinned by digest and hash-checked installs | Accepted, amended by ADR-0033 (Sandbox image) | 2026-10-25 |
 | [ADR-0031](#adr-0031-tavily-research-with-exact-source-urls-and-a-7-day-cache) | Tavily research with exact source URLs and a 7-day cache | Accepted | 2026-10-25 |
 | [ADR-0032](#adr-0032-no-repository-file-influences-a-network-on-step) | No repository file influences a network-on step | Accepted | 2026-10-25 |
-| [ADR-0033](#adr-0033-sandbox-base-image-imported-by-version-tag-and-checked-against-a-reviewed-fingerprint) | Sandbox base image imported by version tag and checked against a reviewed fingerprint | Proposed | 2026-10-25 |
+| [ADR-0033](#adr-0033-sandbox-base-image-imported-by-version-tag-and-checked-against-a-reviewed-fingerprint) | Sandbox base image imported by version tag and checked against a reviewed fingerprint | Accepted | 2026-10-25 |
 | [ADR-0034](#adr-0034-sandbox-contract-corrections-from-the-live-platform-checks) | Sandbox contract corrections from the live platform checks | Accepted | 2026-10-25 |
 
 ## ADR-0001: Python and FastAPI service with typed schemas
@@ -787,7 +787,7 @@ Spending stays within the real balance whoever spends it, and the hosted budget 
 ## ADR-0030: Images pinned by digest and hash-checked installs
 
 Date: 2026-10-25
-Status: Accepted
+Status: Accepted (amended by ADR-0033 for the Sandbox base image only)
 
 ### Context
 
@@ -870,7 +870,7 @@ uv can no longer be steered by anything inside a repository, and the guarantee i
 ## ADR-0033: Sandbox base image imported by version tag and checked against a reviewed fingerprint
 
 Date: 2026-10-25
-Status: Proposed (needs the user's approval; once accepted it amends ADR-0030 for the Sandbox image only, and the Space image stays pinned by digest)
+Status: Accepted (approved by the user on 2026-10-25; amends ADR-0030 for the Sandbox image only, and the Space image stays pinned by digest). Open item: the version tag `ghcr.io/astral-sh/uv:0.9.30-python3.13-bookworm-slim` must be confirmed and its index digest recorded during the M1-TASK-08 rework. The contract details are in ARCHITECTURE sections 7.1 and 7.2.
 
 ### Context
 
@@ -878,7 +878,7 @@ ADR-0030 says the Sandbox's starting image must be named by its exact fingerprin
 
 What a swapped image could do: it runs only inside the Sandbox, which holds no secrets, so it cannot steal keys. It could falsify every scan's report, and its Python and uv run our network-on steps (ADR-0032), so it could use those steps (each capped at 120 to 300 seconds and metered) to send traffic from our account. The Python and uv in the image are therefore part of what ADR-0032's guarantee relies on.
 
-### Decision (proposed)
+### Decision
 
 - **Import by a version tag.** The Sandbox imports `ghcr.io/astral-sh/uv:0.9.30-python3.13-bookworm-slim` (astral publishes one tag per uv release; the floating `python3.13-bookworm-slim` tag moves with every release and would trip the check below every week), always with the `tag=` override `pir-base/sha256-<digest hex>`.
 - **Configuration keeps the digest.** `SANDBOX_BASE_IMAGE` stays `<tag>@sha256:<digest>` and the settings check is unchanged: the digest records which reviewed build the tag must deliver. The executor imports only the part before `@`. The developer first confirms with `docker buildx imagetools inspect` that the version tag exists and records its index digest (expected to equal `531f855b...44ca`; if not, the version tag's digest is used).

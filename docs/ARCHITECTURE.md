@@ -1,7 +1,7 @@
 # Architecture
 
 Status: FROZEN (2026-10-25)
-Amended 2026-10-25 after security design review rounds 1 (ADR-0027 to ADR-0031) and 2 (ADR-0032); see [SECURITY_REVIEW](SECURITY_REVIEW.md). Amended 2026-10-25 after the M1-TASK-08 live Sandbox checks: platform corrections in ADR-0034 (sections 7.1, 7.2, 13, 22.1); the base-image import is blocked pending ADR-0033 (Proposed).
+Amended 2026-10-25 after security design review rounds 1 (ADR-0027 to ADR-0031) and 2 (ADR-0032); see [SECURITY_REVIEW](SECURITY_REVIEW.md). Amended 2026-10-25 after the M1-TASK-08 live Sandbox checks: platform corrections in ADR-0034 (sections 7.1, 7.2, 13, 22.1); base image imported by version tag and checked against a reviewed fingerprint in ADR-0033 (accepted 2026-10-25; sections 7.1, 7.2, 13, 22.1).
 
 The technical design of ProveItReachable: stack, components, contracts, safety boundaries, operations, test commands and setup requirements. Requirements: [SPEC](SPEC.md) and the [project mental model](PROJECT_MENTAL_MODEL.md); lasting decisions: [DECISIONS](DECISIONS.md). Drafted 2026-10-24; frozen 2026-10-25 after the prototype review ([FEEDBACK](FEEDBACK.md)) and the platform spike ([PLATFORM_FEEDBACK](PLATFORM_FEEDBACK.md)); it now changes only through a change request with a superseding ADR. Open questions OQ-1 to OQ-16 are answered in the sections tagged with their IDs (OQ-16: there is no fallback executor, ADR-0032).
 
@@ -262,7 +262,7 @@ All I/O interfaces are `typing.Protocol`s injected through `pir/deps.py` (`build
 
 ### 7.1 Executor (`pir/executor/`)
 
-Amended 2026-10-25 by ADR-0034 (spend denial, `prepare` call, output cap); base-image import pending ADR-0033 (Proposed).
+Amended 2026-10-25 by ADR-0034 (spend denial, `prepare` call, output cap) and ADR-0033 (base-image import by version tag, fingerprint check).
 
 ```python
 class ImageRef(Strict): kind: Literal["sandbox", "fake"]; ref: str   # sandbox: image UUID; fake: temp dir
@@ -283,7 +283,7 @@ class ExecutorSpendDenied(Exception):   # executor/base.py; raised by run() befo
 
 | Method | Platform call | Rules |
 |---|---|---|
-| base image (internal) | SDK `await client.images.oci(SANDBOX_BASE_IMAGE)` | `SANDBOX_BASE_IMAGE` must end in `@sha256:<64 hex>` (settings refuse a tag-only ref; ADR-0030). **Blocked (live check 2026-10-25):** contree-sdk 0.3.6 `images.oci` returns `HTTP 404 page not found` for every `@sha256:` reference (index or manifest digest, with or without tag, ghcr.io or docker.io); plain tags import; without a `tag=` override the SDK derives a local tag containing `@` and lookup returns 400. Live scans cannot start until ADR-0033 (Proposed: import by version tag with a `tag=` override, then a fingerprint check of the image in use) is decided. Imports on first use (about 12.5 s), reuses after (about 2 s); cached per process. `images.pull` (deprecated) is not used. |
+| base image (internal) | SDK `await client.images.oci(<SANDBOX_BASE_IMAGE before "@">, tag="pir-base/sha256-<hex>")` | `SANDBOX_BASE_IMAGE` is `<version tag>@sha256:<64 hex>` (settings refuse a ref without a digest; ADR-0030). The executor imports only the part before `@` (the version tag), always with `tag="pir-base/sha256-<hex>"`, `<hex>` being the 64 hex digits of the digest (ADR-0033): contree-sdk 0.3.6 `images.oci` returns `HTTP 404` for every `@sha256:` reference, and without `tag=` it derives a local tag containing `@` that fails with 400 (live check 2026-10-25). The digest is enforced by the base-image check (section 7.2), not by the importer. Imports on first use (about 12.5 s), reuses after (about 2 s); cached per process. `images.pull` (deprecated) is not used. |
 | `prepare(files)` | SDK `result = await image.run(shell=PREPARE_CMD, files=files, disposable=False)`: in the async SDK the call is awaited directly and returns the saved result image (no `op.wait()`; live check 2026-10-25, ADR-0034) | Trusted input only: our agent zip, and for local fixtures a trusted tarball; files land root-owned 0644 under `/opt/pir/`. `PREPARE_CMD` is the constant `mkdir -p /work && chown 65534:65534 /work`. The only SDK `run()` call: the SDK runs as root without network control, so it never touches repo content. Cached per process by the sha256 of `files`. If the SDK cannot save a `files=` run, `prepare` uses the REST equivalent; the interface is unchanged. |
 | `run(...)` | REST `POST /sandboxes/v1/instances`, then poll `GET /sandboxes/v1/operations/{id}` (0.5 s doubling to 2 s) until terminal | Body: source image UUID; command `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/uv UV_NO_BUILD=1 UV_NO_CONFIG=1 UV_PYTHON_DOWNLOADS=never` + argv (`shlex.join`); nothing else is set, so `VIRTUAL_ENV`, `CONDA_PREFIX`, other `PYTHON*` and proxy variables stay unset (ADR-0032); `networking.enabled = network`; `uid = gid = 65534`; `disposable = not save`; platform timeout `ceil(timeout_s)`; `truncate_output_at = SANDBOX_MAX_OUTPUT_BYTES` (constant, 10 MiB = 10485760, the platform maximum: 11534336 is rejected with 400; ADR-0034). |
 | `discard(image)` | untag the saved image | Called for every saved image at scan end; failures are logged, not raised. |
@@ -294,12 +294,13 @@ Result mapping, in this order: (1) status `SUCCESS` with `state.timed_out == tru
 
 ### 7.2 Sandbox agent protocol (`pir/sandbox_agent/`, `pir/agent_client.py`)
 
-Amended 2026-10-25 by ADR-0034 (result-line cap, compile output file, spend denial).
+Amended 2026-10-25 by ADR-0034 (result-line cap, compile output file, spend denial) and ADR-0033 (`selfcheck`).
 
 Our stdlib-only agent is zipped at runtime into `agent.pyz`, placed at `/opt/pir/agent.pyz` by `prepare`, and run as uid 65534: `/usr/local/bin/python3.13 -I -S /opt/pir/agent.pyz <command> --args-b64 <base64 JSON>` (absolute interpreter; the agent's first action is `os.chdir("/")` and it uses only absolute paths: the repo is at `/work/repo`). It prints exactly one stdout line `PIR-RESULT:<base64(gzip(JSON))>`; logs go to stderr. **Output caps (ADR-0034):** the base64 body of the result line is at most `MAX_RESULT_B64_BYTES` = 8 MiB (8388608), the same constant in `sandbox_agent/protocol.py` and `agent_client.py`; the agent checks it before printing and, if over, prints no result line and exits 3 (limit exceeded); the agent writes at most 1 MiB to stderr (later log lines are dropped). Both stay below the platform's 10 MiB `truncate_output_at` (section 7.1), so a valid result is never truncated whether the platform counts stdout and stderr separately or together. Exit codes: 0 ok, 2 bad input, 3 limit exceeded, other = failure.
 
 | Command | Network | From | Saves | Output |
 |---|---|---|---|---|
+| `selfcheck` (no arguments: `--args-b64 e30=`) | OFF | agent image | no | `SelfcheckResult{python_version, uv_version, files, stdlib_tree_sha256}` (see "Base-image check") |
 | `fetch --owner --repo --sha --max-bytes --max-files` | ON | agent image | A | `FetchResult{commit_sha, files_total, bytes_total, py_files, manifests}` |
 | `unpack --max-bytes --max-files` (local fixtures; tarball at `/opt/pir/src.tar.gz`) | OFF | agent image + tarball | A | `FetchResult` |
 | `resolve --lockfile-only` | OFF | A | no | `ResolveResult{method, lockfile, dependencies, notes, needs_compile}` |
@@ -323,6 +324,10 @@ class SandboxAgentClient:   # __init__(executor, settings); raises SandboxTimeou
     async def index(self, ws: Workspace, target_modules: list[str]) -> AnalysisIndex
     async def close(self, ws: Workspace) -> None          # discards saved images
 ```
+
+#### Base-image check (`selfcheck`, ADR-0033)
+
+**Output.** `python_version`: `platform.python_version()` (e.g. `"3.13.11"`). `uv_version`: stdout of `/usr/local/bin/uv --version`, stripped (e.g. `"uv 0.9.30"`; spawned with the fixed environment of section 7.1). `files`: an object mapping each of `/usr/local/bin/python3.13`, `/usr/local/lib/libpython3.13.so.1.0`, `/usr/local/bin/uv`, `/usr/local/bin/uvx`, `/lib64/ld-linux-x86-64.so.2` and `/lib/x86_64-linux-gnu/libc.so.6` to the lowercase sha256 hex of its content (links followed), or `"missing"`. `stdlib_tree_sha256`: lowercase sha256 hex over the UTF-8 lines `<relative path>\t<entry>\n`, sorted by relative path, one per regular file and symlink under `/usr/local/lib/python3.13` (walked without following links; directories add nothing), where `<entry>` is the file's content sha256, `link:<target>` for a symlink, or `unreadable`. **Fingerprint file** `src/pir/executor/base_image_fingerprint.json` (package data, committed, reviewed): `{"format": 1, "base_image": "<SANDBOX_BASE_IMAGE, tag@sha256:<64 hex>>", "measured_on": "YYYY-MM-DD", "selfcheck": <SelfcheckResult JSON>}`. **When.** `SandboxAgentClient` runs `selfcheck` once per process, right after `prepare` and before the first `fetch` or `unpack`, network OFF, `save=False`, timeout `SELFCHECK_TIMEOUT_S` = 60 (constant), metered against the current scan's budget. It passes only if the decoded result equals the file's `selfcheck` object exactly and the file's `base_image` equals `SANDBOX_BASE_IMAGE` (so its digest matches); anything else, including a missing or malformed file, raises `SandboxFailed("selfcheck", "base image does not match the reviewed fingerprint")`, and no other command runs (fail closed). Only a pass is cached (with the prepared image); a failure or `SandboxTimeout("selfcheck")` is retried by the next scan. `FakeExecutor` skips it (`executor.kind == "fake"`). **Measuring** (one-off on the developer's machine, repeated whenever the image changes; Docker pulls by digest): (1) `docker buildx imagetools inspect ghcr.io/astral-sh/uv:0.9.30-python3.13-bookworm-slim` confirms the version tag and gives its index digest for `SANDBOX_BASE_IMAGE`; (2) write `build_agent_pyz()` output to `<dir>/agent.pyz`; (3) `docker run --rm --platform linux/amd64 --network none --user 65534:65534 -v <dir>:/opt/pir:ro <SANDBOX_BASE_IMAGE> /usr/local/bin/python3.13 -I -S /opt/pir/agent.pyz selfcheck --args-b64 e30=`; (4) decode the `PIR-RESULT:` line with the client's parser and commit it as `selfcheck` with `base_image` and the date. The live test `test_base_image_fingerprint_matches` runs the same check in the Sandbox.
 
 ### 7.3 GitHub intake and OSV client (`pir/github.py`, `pir/osv.py`)
 
@@ -527,9 +532,9 @@ OSV and GitHub are free and only counted. `SANDBOX_USD_PER_SECOND=0.001` is twic
 
 ## 13. Dependency resolution (ADR-0028, OQ-6)
 
-Amended 2026-10-25 by ADR-0034 (compile output file; which uv error text is authoritative).
+Amended 2026-10-25 by ADR-0034 (compile output file; which uv error text is authoritative) and ADR-0033 (base-image tag).
 
-Inside the Sandbox, root manifests only (monorepos are a limitation), names PEP 503-normalized; `uv` comes from the base image `ghcr.io/astral-sh/uv:python3.13-bookworm-slim` (Python 3.13.11 and uv 0.9.30, verified live 2026-10-25), pinned by digest (ADR-0030; how the Sandbox imports it is pending ADR-0033). First match wins:
+Inside the Sandbox, root manifests only (monorepos are a limitation), names PEP 503-normalized; `uv` comes from the base image `ghcr.io/astral-sh/uv:0.9.30-python3.13-bookworm-slim` (Python 3.13.11 and uv 0.9.30, verified live 2026-10-25), imported by version tag and checked against the reviewed fingerprint of its digest (sections 7.1, 7.2; ADR-0030, ADR-0033). First match wins:
 
 1. `uv.lock`: every registry package, transitive included; `direct` from the root package; git, path and URL sources unresolved ("non-registry source").
 2. `poetry.lock`: every `[[package]]`, transitive included; groups recorded; `direct` from `pyproject.toml`.
@@ -614,8 +619,8 @@ ProveItReachable/
   src/pir/  {__init__,__main__,cli,config,messages,deps,logs,tracing,keepalive,http,github,osv,research,llm,
             agent_client,pipeline,report_builder,markdown,jobs,replay,ratelimit,spend}.py
     models/{report,index,research,reasoning,api,recording,ledger,eval}.py   api/{app,routes,sse,errors,security_headers}.py
-    reasoning/{strategy,tool_calling,ast_tool,prompts}.py   executor/{base,contree,fake}.py   evaluation/{cases,metrics,runner}.py
-    sandbox_agent/{__main__,fetch,resolve,index,proof,protocol}.py   # stdlib only
+    reasoning/{strategy,tool_calling,ast_tool,prompts}.py   executor/{base,contree,fake}.py + base_image_fingerprint.json   evaluation/{cases,metrics,runner}.py
+    sandbox_agent/{__main__,fetch,resolve,index,proof,protocol,selfcheck}.py   # stdlib only
   web/  index.html  css/{tokens,app}.css  fonts/  js/{app,render,export}.js  js/api/{index,http,mock,errors}.js  fixtures/
   demo/replays/  # index.json + <slug>.json (committed)
   eval/  cases.toml  fixtures/<repo>/  recordings/{osv,tavily}/  results/ (gitignored except latest.md, latest.json)
@@ -664,7 +669,7 @@ Zones: the **host process** (trusted code; untrusted **data** only: GitHub metad
 
 - Secrets come only from environment variables (pydantic-settings; `.env` loaded locally by the app, gitignored, never read by agents), held as `SecretStr`. `require(settings, names)` raises `ConfigError("Missing required environment variable: NAME")` naming only the variable, at `serve` start (live scans on) and at `scan` and `eval` start. `redact()` (section 19.2) covers every log line and LangSmith payload; fast tests set every secret variable to a sentinel, run a stubbed scan with one failing external call, and assert no sentinel appears in any log line, report, recording, trace payload or `/api/health` response. `GITHUB_TOKEN` (optional) is fine-grained, public read-only, sent only to `api.github.com`; `HF_TOKEN` is fine-grained with write access to the ledger dataset only; CI uses no secrets; the keepalive uses a repository variable only.
 - Spend and abuse: durable per-pool caps with reserve-before-spend and a fail-closed ledger shared by every spender after deploy (compare-and-swap, per-spender allowances), a daily spend ceiling, and holds that bound reasoning tokens (sections 7.5, 11); replay, SSE and job-eviction limits (sections 7.7, 8); Sandbox runs metered and capped like inference; rate limits; `MAX_CONCURRENT_SCANS`; per-scan budget; `MAX_FINDINGS_REASONED`; size caps; timeouts; the 4 KB body cap; the `LIVE_SCANS_ENABLED` kill switch. Replays cost nothing and work while live scans are paused. `/api/health` and `/api/config` disclose only fractions, flags and public limits: no amounts, keys or internal hosts.
-- Supply chain (ADR-0030): exact pins in `pyproject.toml`, installed by the Docker image from the hashed `requirements.lock` with `--require-hashes`; the Space image and `SANDBOX_BASE_IMAGE` pinned by `@sha256:` digest (the Sandbox importer refuses digest references, live check 2026-10-25; ADR-0033, Proposed, would import the Sandbox image by version tag and fail closed unless the image in use matches a fingerprint measured from the digest); `contree-sdk` pinned to 0.3.6; no CDN, third-party script or remote font (Geist and Geist Mono self-hosted under the SIL Open Font License, licence file shipped); GitHub Actions pinned to commit SHAs.
+- Supply chain (ADR-0030): exact pins in `pyproject.toml`, installed by the Docker image from the hashed `requirements.lock` with `--require-hashes`; the Space image and `SANDBOX_BASE_IMAGE` pinned by `@sha256:` digest; because the Sandbox importer refuses digest references, the Sandbox image is imported by version tag and every process fails closed unless the image in use matches the committed fingerprint measured from that digest (`selfcheck`, section 7.2; ADR-0033); `contree-sdk` pinned to 0.3.6; no CDN, third-party script or remote font (Geist and Geist Mono self-hosted under the SIL Open Font License, licence file shipped); GitHub Actions pinned to commit SHAs.
 
 ### Data handled and retention
 
@@ -709,7 +714,7 @@ From the round-2 review. Each is a named test in `tests/live/` (slow + live), wr
 | `test_uv_repo_interpreter_never_runs` (**gate** for live `resolve --compile` and `proof-install`) | Compile and proof-install on the uv-canary repo (uploaded with `unpack`; `save=True` in this test only) leave no `/tmp/pir-canary-ran`, checked by a following network-OFF run, and no `PIR-CANARY` in stdout or stderr | Not fail-safe: the build stops |
 | `test_uv_no_build_refuses_sdist`; `test_uv_accepts_double_dash` | `uv pip compile --no-build` and `uv pip install --only-binary :all: --no-build` on an sdist-only package fail without building (the text matches the Sandbox-image fixture exactly, section 13, ADR-0034); uv accepts `--` before the pin, with the full section 7.2 argv | Fail-safe: any compile or install error becomes unresolved or "no wheel"; an argv error makes the proof "not proven" |
 | `test_max_completion_tokens_bounds_reasoning` | Token Factory honours `max_completion_tokens`, reasoning tokens included | Fail-safe: the 16,000-token hold and the overrun rule (section 7.5) |
-| `test_images_oci_accepts_digest` | `images.oci` accepts an `@sha256:` reference. **Result 2026-10-25: false** (HTTP 404 for every digest reference) | Fail-safe, and it happened: a tag-only ref is refused, the Sandbox is unavailable and live scans are blocked. ADR-0033 (Proposed) replaces this test with `test_base_image_fingerprint_matches` |
+| `test_base_image_fingerprint_matches` (replaces `test_images_oci_accepts_digest`, false on 2026-10-25: HTTP 404 for every digest reference; ADR-0033) | Importing the version tag with the `tag=` override works, and `selfcheck` on it equals the committed fingerprint (section 7.2) | Fail-safe: a mismatch raises `SandboxFailed("selfcheck", ...)` and live scans stop until the image is re-pinned and re-measured |
 | `test_network_off_blocks_egress` | `index`, `resolve --lockfile-only` and `proof-run` cannot connect out | Not fail-safe: the build stops |
 | `test_hf_ledger_rejects_stale_parent` (**gate: required before the hosted ledger is enabled**) | `create_commit(parent_commit=<stale>)` on the ledger dataset raises a conflict (the same probe as the section 7.8 gate) | **Not fail-safe:** two writers could overwrite each other's spend. Until it passes, `set-caps` writes nothing, the HF ledger refuses all spending and live scans stay paused (fail closed) |
 | Deploy check (section 18): `X-Forwarded-For` hop count on the HF proxy | Which entry is the client | Fail-safe: `TRUSTED_PROXY_HOPS=0` makes all visitors share one limit |
@@ -726,8 +731,9 @@ From the round-2 review. Each is a named test in `tests/live/` (slow + live), wr
 | Node.js with npx | 20 (user has 24) | `node --version` and `npx --version` | prototype preview, screenshots |
 | Playwright Chromium (Python for e2e; npx for screenshots) | pytest-playwright 0.5; Playwright 1.48 | `.venv/Scripts/python -m playwright --version` and `npx playwright --version` (install each with `... playwright install chromium`) | slow UI tests (M2), screenshots |
 | Impeccable (optional); Hugging Face CLI (optional) | n/a; huggingface_hub 0.26 | the orchestrator's launcher check; `hf --help` (older: `huggingface-cli --help`) | UI review (M2); deploy (M2) |
+| Docker with buildx (optional) | 24 | `docker --version` and `docker buildx version` | only to measure the base-image fingerprint (section 7.2), once per image change; never to run or test the app |
 
-`uv` comes with the dev extras (only to regenerate `requirements.lock`); Docker is not needed on the host.
+`uv` comes with the dev extras (only to regenerate `requirements.lock`).
 
 ### Accounts and credentials
 
@@ -753,7 +759,7 @@ For `.env.example`; loaded by `pir/config.py` (`Settings`); an invalid value sto
 |---|---|---|---|
 | `NEBIUS_API_KEY` / `NEBIUS_PROJECT_ID` | none (secret; live scans) / none (`EXECUTOR=sandbox`) | Inference and Sandbox auth; Sandbox project | M1 |
 | `NEBIUS_MODEL` / `_PRICE_INPUT_PER_MTOK` / `_PRICE_OUTPUT_PER_MTOK` | `nvidia/nemotron-3-super-120b-a12b` / `0.60` / `2.40` (pessimistic) | Model ID, must contain "nemotron"; USD per million tokens | M1 |
-| `EXECUTOR` / `SANDBOX_BASE_IMAGE` | `sandbox` / `ghcr.io/astral-sh/uv:python3.13-bookworm-slim@sha256:531f855bda2c73cd6ef67d56b733b357cea384185b3022bd09f05e002cd144ca` (Python 3.13.11, uv 0.9.30; ADR-0033, Proposed, would change the tag part to the version tag `0.9.30-python3.13-bookworm-slim` and its digest) | `sandbox` or `fake` (local fixtures only); base image, digest required | M1 |
+| `EXECUTOR` / `SANDBOX_BASE_IMAGE` | `sandbox` / `ghcr.io/astral-sh/uv:python3.13-bookworm-slim@sha256:531f855bda2c73cd6ef67d56b733b357cea384185b3022bd09f05e002cd144ca` (Python 3.13.11, uv 0.9.30). ADR-0033: the M1-TASK-08 rework changes the tag part to the version tag `0.9.30-python3.13-bookworm-slim` with that tag's confirmed index digest, and the value must equal `base_image` in the fingerprint file (section 7.2) | `sandbox` or `fake` (local fixtures only); base image, digest required; only the part before `@` is imported | M1 |
 | `SANDBOX_USD_PER_SECOND` / `SANDBOX_MAX_CONCURRENT_OPS` | `0.001` / `4` | Sandbox estimate and fallback rate; concurrency (platform limit 50) | M1 |
 | `TAVILY_API_KEY` / `_SEARCH_DEPTH` / `_MAX_RESULTS` / `_PRICE_PER_CREDIT_USD` | none (secret; live scans) / `basic` / `5` / `0.008` | Tavily search; depth (1 or 2 credits), results, metering | M1 |
 | `LANGSMITH_API_KEY` / `_TRACING` / `_PROJECT` / `_ENDPOINT` / `_DATASET` | none (secret; `eval`) / `false` (`true` for eval and hosted) / `ProveItReachable` / `https://api.smith.langchain.com` / `proveitreachable-eval-v1` | Traces and datasets; tracing switch; project, region endpoint, eval dataset | M1 |
@@ -779,7 +785,7 @@ Required sets: `scan` and `eval` need `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `TA
 | Item | Why it is expensive |
 |---|---|
 | **Report schema v1.0** (verdict labels, categorical confidence, `Finding` rules, `StepStatus.tools`) | The UI, Markdown export, mock fixtures, eval scoring, the published JSON Schema and every recorded replay depend on it; a change means re-recording replays (credits) and reworking UI and tests. |
-| **Sandbox boundary**: `Executor` interface, SDK-prepare / REST-run split (uid 65534, explicit network per command), agent protocol, and the invariant that during network-ON commands nothing from the repo or an sdist executes and no repo-controlled file influences a tool (`--no-build`, wheels only, empty uv working directory, explicit interpreter, sanitized input; ADR-0032) | It carries the hard safety guarantee (AC-29); network ON has no egress allowlist, so adding any network-ON step that can run repo code would let visitors use the Nebius account for attacks. Any change re-opens the security review and the canary and executor tests. There is no fallback, so a platform change has no second path. |
+| **Sandbox boundary**: `Executor` interface, SDK-prepare / REST-run split (uid 65534, explicit network per command), agent protocol, and the invariant that during network-ON commands nothing from the repo or an sdist executes and no repo-controlled file influences a tool (`--no-build`, wheels only, empty uv working directory, explicit interpreter, sanitized input; ADR-0032), and the pinned base image with its reviewed fingerprint (ADR-0033) | It carries the hard safety guarantee (AC-29); network ON has no egress allowlist, so adding any network-ON step that can run repo code would let visitors use the Nebius account for attacks. Any change re-opens the security review and the canary and executor tests; changing the base image also means a new tag and digest, a re-measured fingerprint, every live gate re-run and the Sandbox uv fixture re-recorded. There is no fallback, so a platform change has no second path. |
 | **Index-once static analysis and the ast tool contract** | Prompts, the verdict gate and the measured precision are tuned to these tools and index fields; a change invalidates eval results. |
 | **HTTP API contract** (job + SSE, endpoints, error codes and messages, `AppConfigResponse`, `HealthResponse.budget_remaining`) | The UI, mock adapter, e2e tests, replays and the keepalive check depend on it. |
 | **External services**: Token Factory (Nemotron, Sandboxes), Tavily, OSV, LangSmith | Token Factory is a hackathon requirement and Tavily a prize target; LangSmith holds the dataset and experiment history; switching means new clients, metering and recorded fixtures. |
