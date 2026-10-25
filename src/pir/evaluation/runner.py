@@ -429,7 +429,7 @@ class ExperimentPublisher:
             "correct",
             score=1 if result.correct else 0,
             comment=f"label={case.label}; predicted={result.scored_as}",
-            project_id=self.project_id,
+            session_id=self.project_id,  # project_id is rejected alongside a run id
         )
 
     def finish(self, metrics: EvalMetrics) -> None:
@@ -834,6 +834,7 @@ async def run_eval_command(
             eval_settings,
             search=TavilySearchClient(eval_settings, transport=tavily_transport),
             llm=deps.llm,
+            bill_search=refresh,  # a replayed answer made no request, so it costs nothing
         )
         try:
             run = await run_eval(

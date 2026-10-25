@@ -184,11 +184,15 @@ class AdvisoryResearcher:
         search: SearchClient,
         llm: LLMClient,
         clock: Callable[[], float] = time.time,
+        bill_search: bool = True,
     ) -> None:
+        """`bill_search=False` is for a search client answered from recordings: the call still
+        needs budget headroom, but it costs nothing and the meter is charged 0."""
         self._settings = settings or load_settings()
         self._search = search
         self._llm = llm
         self._clock = clock
+        self._bill_search = bill_search
         self._cache_dir = Path(self._settings.data_dir) / "cache" / "research"
 
     async def research(
@@ -240,12 +244,13 @@ class AdvisoryResearcher:
             )
         except SearchFailed as exc:
             # A timeout may still have been billed: keep the hold. Other failures cost nothing.
-            budget.record(decision, decision.amount_usd if exc.kind == "timeout" else 0.0)
+            billed = self._bill_search and exc.kind == "timeout"
+            budget.record(decision, decision.amount_usd if billed else 0.0)
             raise _StageFailed("tavily_failed") from exc
         except BaseException:
-            budget.record(decision, decision.amount_usd)
+            budget.record(decision, decision.amount_usd if self._bill_search else 0.0)
             raise
-        budget.record(decision, decision.amount_usd)
+        budget.record(decision, decision.amount_usd if self._bill_search else 0.0)
         return results
 
     async def _extract(

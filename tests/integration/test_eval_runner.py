@@ -8,12 +8,14 @@ AC-39 (latest.json and the figure), recorded OSV and Tavily answers.
 import json
 import logging
 import uuid
+import warnings
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import httpx
+import pytest
 from fakes.deps import (
     GHSA,
     OTHER_GHSA,
@@ -28,7 +30,7 @@ from fakes.deps import (
     write_repo,
 )
 from fakes.http import RecordingTransport
-from fakes.langsmith import FakeLangSmithClient
+from fakes.langsmith import FakeLangSmithClient, check_feedback_args
 from fakes.llm import Call, FakeLLM, json_result, tool_result
 
 from pir.cli import main
@@ -148,7 +150,13 @@ class EvalFakeLangSmith(FakeLangSmithClient):
         if str(run_id) in known:
             self.got_case_updates.append({"run_id": str(run_id), **kw})
 
-    def create_feedback(self, run_id, key="unnamed", **kw):
+    def create_feedback(self, run_id=None, key="unnamed", **kw):
+        check_feedback_args(
+            run_id,
+            trace_id=kw.get("trace_id"),
+            project_id=kw.get("project_id"),
+            session_id=kw.get("session_id"),
+        )
         if self.fail_feedback:
             raise RuntimeError("feedback rejected")
         self.got_feedback.append({"run_id": run_id, "key": key, **kw})
@@ -466,8 +474,10 @@ async def test_ac37_dataset_experiment_traces_feedback_and_read_back(tmp_path):
     assert first_update["extra"]["metadata"]["scan_id"] == scan_ids["c-tp"]
     assert first_update["extra"]["metadata"]["case_id"] == "c-tp"
     assert first_update["outputs"]["predicted"] == LR
-    # the feedback names the experiment project (no session_id deprecation warning)
-    assert all(f["project_id"] == "proj-1" for f in client.got_feedback)
+    # the feedback names the experiment as session_id: project_id is an error with a run id, and
+    # run feedback without session_id is deprecated
+    assert all(f["session_id"] == "proj-1" for f in client.got_feedback)
+    assert not any("project_id" in f for f in client.got_feedback)
     # the pipeline's own scan traces go to the same experiment project
     assert client.got_other_runs, "the scans were traced"
     # metrics are the experiment metadata
@@ -792,3 +802,46 @@ async def test_ac37_each_case_root_trace_has_children_and_holds_or_names_the_sca
     miss_score = next(i for i in scores if i["parent_run_id"] == roots["c-miss"])
     update = next(u for u in client.got_case_updates if u["run_id"] == miss_score["id"])
     assert update["outputs"]["scan_trace_id"] == roots["c-tp"]
+
+
+# ---- M1-FIX-02 attempt 2: feedback arguments, replayed Tavily is free -------------------------
+
+
+def test_feedback_fake_rejects_project_id_with_a_run_id_like_the_sdk():
+    client = EvalFakeLangSmith()
+    with pytest.raises(ValueError, match="project_id cannot be provided"):
+        client.create_feedback("run-1", "correct", score=1, project_id="proj-1")
+    with pytest.raises(ValueError, match="One of run_id"):
+        client.create_feedback(None, "correct", score=1)
+    client.create_feedback("run-1", "correct", score=1, session_id="proj-1")
+    assert len(client.got_feedback) == 1
+
+
+def test_the_real_sdk_has_the_rules_the_fake_copies():
+    """If a langsmith upgrade changes create_feedback, this fails before a live run does."""
+    real = FakeLangSmithClient()
+    with pytest.raises(ValueError, match="project_id cannot be provided"):
+        real.create_feedback(uuid.uuid4(), "correct", score=1, project_id=uuid.uuid4())
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # the deprecation warning must not fire
+        real.create_feedback(uuid.uuid4(), "correct", score=1, session_id=uuid.uuid4())
+
+
+def tavily_used(h: Harness) -> float:
+    line = next(ln for ln in h.deps.meter.summary_lines() if ln.startswith("spend tavily:"))
+    return float(line.split("used $")[1].split(",")[0])
+
+
+async def test_a_replayed_run_charges_no_tavily_spend(tmp_path, monkeypatch):
+    first = harness(tmp_path / "one")
+    cases = command_env(tmp_path, monkeypatch, first)
+    inner = {"osv": RecordingTransport(osv_routes()), "tavily": RecordingTransport(tavily_routes())}
+    await run_command(first.settings, cases, refresh=True, record_inner=inner)
+    assert tavily_used(first) > 0  # a real (re-recorded) call is charged
+
+    second = harness(tmp_path / "two", osv={}, tavily={})  # any live request would fail the test
+    monkeypatch.setattr("pir.evaluation.runner.build_deps", lambda *a, **kw: second.deps)
+    replayed = await run_command(second.settings, cases)
+
+    assert "precision 1.00" in replayed.text.lower()  # the Tavily answers were really replayed
+    assert tavily_used(second) == 0.0

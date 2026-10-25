@@ -221,6 +221,8 @@ def _researcher(tmp_path, search=None, llm=None, clock=None, **kw):
     search = search or FakeSearch()
     llm = llm or FakeLLM([json_result({"identified": True, "symbols": ["yaml.full_load"]})])
     extra = {"clock": clock} if clock else {}
+    if "bill_search" in kw:
+        extra["bill_search"] = kw.pop("bill_search")
     return (
         AdvisoryResearcher(_settings(tmp_path, **kw), search=search, llm=llm, **extra),
         search,
@@ -446,6 +448,16 @@ async def test_cache_hit_skips_search_and_model_and_keeps_links(tmp_path):
     assert second.from_cache and not first.from_cache
     assert second.model_copy(update={"from_cache": False}) == first
     assert len(search.queries) == 1 and len(llm.calls) == 1
+
+
+async def test_replayed_search_is_checked_against_the_budget_but_costs_nothing(tmp_path):
+    researcher, search, _ = _researcher(tmp_path, bill_search=False)
+    budget = _budget()
+    result = await _research(researcher, budget=budget)
+    assert result.failure is None and len(search.queries) == 1
+    assert budget.usage_usd()["tavily"] == 0.0
+    denied = await _research(_researcher(tmp_path / "d", bill_search=False)[0], budget=_budget(0.0))
+    assert denied.failure == "tavily_failed"  # the cap still applies
 
 
 async def test_cache_hit_does_not_spend(tmp_path):

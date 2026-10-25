@@ -15,6 +15,24 @@ from langsmith import Client
 from pir.tracing import redact_payload
 
 
+def check_feedback_args(
+    run_id: Any = None,
+    *,
+    trace_id: Any = None,
+    project_id: Any = None,
+    session_id: Any = None,
+) -> None:
+    """The argument rules of langsmith 0.14.12 `Client.create_feedback`, for fakes that override it.
+
+    The real client raises on `project_id` together with a run or trace id, and warns when run
+    feedback has no `session_id` (the warning is checked by the real-client test).
+    """
+    if run_id is None and trace_id is None and project_id is None:
+        raise ValueError("One of run_id, trace_id, or project_id  must be provided")
+    if (run_id is not None or trace_id is not None) and project_id is not None:
+        raise ValueError("project_id cannot be provided if run_id or trace_id is provided")
+
+
 class _RecordingSession(requests.Session):
     def __init__(self) -> None:
         super().__init__()
