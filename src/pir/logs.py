@@ -32,6 +32,7 @@ _EXTRA_FIELDS = (
     "error_id",
     "client",
     "cost_usd",
+    "run_id",
 )
 
 _AUTHORIZATION = re.compile(
