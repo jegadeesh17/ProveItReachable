@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from pir.config import ConfigError, Settings
 from pir.http import OutboundBlocked
 from pir.llm import (
+    PROMPT_OVERHEAD_TOKENS,
     TOKEN_FACTORY_BASE_URL,
     ChatMessage,
     ForcedTool,
@@ -258,10 +259,10 @@ async def test_empty_messages_are_refused():
 
 
 def _expected_hold(chars: int, completion_tokens: int) -> float:
-    return math.ceil(chars / 2.5) * IN_PRICE + completion_tokens * OUT_PRICE
+    return (math.ceil(chars / 2.5) + 64) * IN_PRICE + completion_tokens * OUT_PRICE
 
 
-async def test_hold_is_ceil_chars_over_2_5_times_input_plus_max_tokens_times_output():
+async def test_hold_is_ceil_chars_over_2_5_plus_64_times_input_plus_max_tokens_times_output():
     budget = _budget()
     seen: list[float] = []
 
@@ -331,6 +332,19 @@ async def test_missing_usage_keeps_the_hold():
     result = await _chat(client, budget, max_tokens=1500)
     assert result.usage.estimated
     assert budget.usage_usd()["nebius"] == pytest.approx(_expected_hold(100, 1500))
+
+
+async def test_adr0035_short_prompt_filling_its_limit_does_not_overrun_the_hold():
+    # Live finding: a 43-character prompt was billed 32 prompt tokens; ceil(43 / 2.5) is 18.
+    usage = {"prompt_tokens": 32, "completion_tokens": 200}
+    budget = _budget()
+    client, _, _ = _client({URL: json_response(200, _body(usage=usage, finish="length"))})
+    short = [ChatMessage(role="user", content="x" * 43)]
+    await client.chat(short, max_tokens=200, timeout_s=30.0, budget=budget)
+    assert PROMPT_OVERHEAD_TOKENS == 64
+    assert not budget.overrun
+    assert budget.usage_usd()["nebius"] == pytest.approx(32 * IN_PRICE + 200 * OUT_PRICE)
+    assert budget.usage_usd()["nebius"] <= _expected_hold(43, 200)
 
 
 async def test_actual_over_hold_marks_the_scan_overrun_and_denies_later_spend():

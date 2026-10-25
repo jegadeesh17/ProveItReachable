@@ -56,8 +56,8 @@ async def test_max_completion_tokens_bounds_reasoning():
         f"limit {limit} not honoured: completion={usage.completion_tokens} "
         f"reasoning={usage.reasoning_tokens} finish={result.finish_reason}"
     )
-    # Not asserted: `budget.overrun`. The chat template adds about 20 prompt tokens that
-    # ceil(chars / 2.5) does not cover, so a short prompt that fills the limit can overrun its hold.
+    # The hold's fixed prompt overhead (ADR-0035) covers the chat template, so no overrun.
+    assert not budget.overrun
     assert budget.usage_usd()["nebius"] > 0
 
 

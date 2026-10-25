@@ -34,6 +34,7 @@ TOKEN_FACTORY_MAX_BYTES = 5 * MIB
 COMPLETION_LIMIT_PARAM: Literal["max_completion_tokens", "max_tokens"] = "max_completion_tokens"
 
 CHARS_PER_TOKEN = 2.5  # pessimistic prompt-size estimate for the hold
+PROMPT_OVERHEAD_TOKENS = 64  # chat template and wrapping the character estimate misses (ADR-0035)
 RETRIES = 1
 _BACKOFF_S = 0.5
 
@@ -150,6 +151,10 @@ def prompt_chars(messages: list[ChatMessage], tools: list[ToolSpec] | None) -> i
     return total
 
 
+def _estimated_prompt_tokens(chars: int) -> int:
+    return math.ceil(chars / CHARS_PER_TOKEN) + PROMPT_OVERHEAD_TOKENS
+
+
 def _count(value: object) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
 
@@ -217,10 +222,10 @@ class NebiusLLMClient:
         return self._settings.llm_hold_completion_tokens
 
     def hold_usd(self, chars: int, max_tokens: int) -> float:
-        """ceil(chars / 2.5) x input price + completion bound x output price."""
+        """(ceil(chars / 2.5) + 64) x input price + completion bound x output price."""
         price_in, price_out = self._prices()
         return (
-            math.ceil(chars / CHARS_PER_TOKEN) * price_in
+            _estimated_prompt_tokens(chars) * price_in
             + self._hold_completion_tokens(max_tokens) * price_out
         )
 
@@ -354,7 +359,7 @@ class NebiusLLMClient:
         if raw_usage is None or not isinstance(prompt, int) or not isinstance(completion, int):
             # No usable usage: the hold stays as the cost (section 7.5).
             price_in, price_out = self._prices()
-            estimated_prompt = math.ceil(chars / CHARS_PER_TOKEN)
+            estimated_prompt = _estimated_prompt_tokens(chars)
             remaining = max(0.0, hold.amount_usd - estimated_prompt * price_in)
             usage = Usage(
                 prompt_tokens=estimated_prompt,
