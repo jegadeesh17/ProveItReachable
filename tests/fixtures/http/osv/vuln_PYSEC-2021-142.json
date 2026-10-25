@@ -1,0 +1,37 @@
+{
+  "id": "PYSEC-2021-142",
+  "summary": "A vulnerability in PyYAML before 5.4",
+  "aliases": [
+    "CVE-2020-14343",
+    "GHSA-8q59-q68h-6hv4"
+  ],
+  "modified": "2021-08-27T03:22:00Z",
+  "published": "2021-02-09T15:15:00Z",
+  "references": [
+    {
+      "type": "ADVISORY",
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2020-14343"
+    }
+  ],
+  "affected": [
+    {
+      "package": {
+        "name": "pyyaml",
+        "ecosystem": "PyPI"
+      },
+      "ranges": [
+        {
+          "type": "ECOSYSTEM",
+          "events": [
+            {
+              "introduced": "0"
+            },
+            {
+              "fixed": "5.4"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

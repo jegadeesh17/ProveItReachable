@@ -1,0 +1,50 @@
+{
+  "id": "GHSA-8q59-q68h-6hv4",
+  "summary": "Improper Input Validation in PyYAML",
+  "details": "A vulnerability in FullLoader allows arbitrary code execution via yaml.load.",
+  "aliases": [
+    "CVE-2020-14343",
+    "PYSEC-2021-142"
+  ],
+  "modified": "2024-05-20T10:00:00Z",
+  "published": "2020-07-21T20:00:00Z",
+  "database_specific": {
+    "severity": "CRITICAL",
+    "github_reviewed": true
+  },
+  "references": [
+    {
+      "type": "ADVISORY",
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2020-14343"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/yaml/pyyaml/issues/420?x=1&y=%20z"
+    },
+    {
+      "type": "PACKAGE",
+      "url": "https://pypi.org/project/PyYAML"
+    }
+  ],
+  "affected": [
+    {
+      "package": {
+        "name": "pyyaml",
+        "ecosystem": "PyPI"
+      },
+      "ranges": [
+        {
+          "type": "ECOSYSTEM",
+          "events": [
+            {
+              "introduced": "0"
+            },
+            {
+              "fixed": "5.4"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

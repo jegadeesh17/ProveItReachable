@@ -1,0 +1,11 @@
+{
+  "results": [
+    {
+      "vulns": [
+        {
+          "id": "GHSA-aaaa-bbbb-cccc"
+        }
+      ]
+    }
+  ]
+}

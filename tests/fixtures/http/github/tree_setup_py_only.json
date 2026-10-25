@@ -1,0 +1,21 @@
+{
+  "sha": "0123456789abcdef0123456789abcdef01234567",
+  "url": "https://api.github.com/repos/octo/sample/git/trees/0123456789abcdef0123456789abcdef01234567",
+  "tree": [
+    {
+      "path": "setup.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 300
+    },
+    {
+      "path": "pkg/__init__.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 20
+    }
+  ],
+  "truncated": false
+}

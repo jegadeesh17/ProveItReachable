@@ -1,0 +1,12 @@
+{
+  "results": [
+    {
+      "vulns": [
+        {
+          "id": "GHSA-8q59-q68h-6hv4"
+        }
+      ],
+      "next_page_token": "tok-2"
+    }
+  ]
+}

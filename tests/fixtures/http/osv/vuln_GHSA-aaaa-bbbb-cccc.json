@@ -1,0 +1,32 @@
+{
+  "id": "GHSA-aaaa-bbbb-cccc",
+  "summary": "Unrelated issue",
+  "aliases": [
+    "CVE-2021-00001"
+  ],
+  "database_specific": {
+    "severity": "MODERATE"
+  },
+  "references": [],
+  "affected": [
+    {
+      "package": {
+        "name": "pyyaml",
+        "ecosystem": "PyPI"
+      },
+      "ranges": [
+        {
+          "type": "ECOSYSTEM",
+          "events": [
+            {
+              "introduced": "0"
+            },
+            {
+              "fixed": "6.0"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

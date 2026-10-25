@@ -1,0 +1,47 @@
+{
+  "sha": "0123456789abcdef0123456789abcdef01234567",
+  "url": "https://api.github.com/repos/octo/sample/git/trees/0123456789abcdef0123456789abcdef01234567",
+  "tree": [
+    {
+      "path": "src",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "path": "pyproject.toml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 400
+    },
+    {
+      "path": "requirements.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 80
+    },
+    {
+      "path": "src/app.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 1200
+    },
+    {
+      "path": "src/util.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 800
+    },
+    {
+      "path": "vendor/lib",
+      "mode": "160000",
+      "type": "commit",
+      "sha": "cccccccccccccccccccccccccccccccccccccccc"
+    }
+  ],
+  "truncated": false
+}
