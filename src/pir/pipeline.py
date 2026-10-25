@@ -18,6 +18,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
+from langsmith.run_trees import RunTree
+
 from pir import __version__
 from pir.agent_client import (
     LocalFixtureTarget,
@@ -70,6 +72,8 @@ _DENIAL_TEXT = {
 _MAX_MESSAGE = 300
 _IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _NAME_CHARS = re.compile(r"[^A-Za-z0-9._-]")
+_LOCAL_FIXTURE_LIMITATION = "local fixture, not fetched from GitHub"
+
 _SCAN_LIMITATIONS = [
     "Reachability is judged by static analysis of the repository's own code (imports, calls and "
     "references found with ast); dynamic imports, reflection and runtime configuration are not "
@@ -621,6 +625,8 @@ class _Scan:
             notes=["The scan stopped before dependencies were resolved."],
         )
         limitations = list(_SCAN_LIMITATIONS)
+        if isinstance(self.target, LocalFixtureTarget):
+            limitations.append(_LOCAL_FIXTURE_LIMITATION)
         unresolved = sum(not d.resolved for d in dependencies)
         if unresolved:
             limitations.append(
@@ -697,10 +703,12 @@ async def run_scan(
     repo: RepoRef | None = None,
     scan_id: str | None = None,
     sink: EventSink | None = None,
+    trace_parent: RunTree | None = None,
 ) -> ScanReport:
     """Run one scan and return its report. Never raises for an external failure.
 
     `budget` is the scan's reservation (the caller settles it). `repo` defaults to the target's.
+    `trace_parent` nests the scan's trace under that run (the evaluation runner's case trace).
     Raises only if the final report cannot be built (a bug); the caller reports an error id.
     """
     scan_id = scan_id or budget.scan_id
@@ -714,6 +722,8 @@ async def run_scan(
     token = bind_scan(scan_id)
     try:
         scan = _Scan(deps, target, repo, budget, scan_id, sink)
-        return await run_traced(deps.settings, scan_id, scan.run, client=deps.langsmith)
+        return await run_traced(
+            deps.settings, scan_id, scan.run, client=deps.langsmith, parent=trace_parent
+        )
     finally:
         scan_id_var.reset(token)

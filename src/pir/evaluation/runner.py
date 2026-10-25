@@ -8,7 +8,12 @@ whose repo errors is recorded as errored and scored as `uncertain`; the other re
 LangSmith (AC-37): the dataset `LANGSMITH_DATASET` gets one example per case; each run is one
 experiment (`eval-<UTC timestamp>-<model>`) with one root trace `pir.eval_case` per case and the
 feedback `correct`; metrics go into the experiment metadata; the traces are read back with
-`client.runs.query()`.
+`client.runs.query()` (selecting `name`, or the API returns only ids) and polled for a few seconds
+until every case trace is visible. A short read-back makes the run unscored.
+
+Trace tree: a repo is scanned once, so the scan's trace (`pir.scan` with its step, LLM and tool
+runs) is nested under the root trace of the repo's first case. Every case root has a child run
+`pir.eval_score`; for the other cases of a repo it names the root trace that holds the scan.
 """
 
 import asyncio
@@ -16,8 +21,9 @@ import hashlib
 import json
 import logging
 import tempfile
+import time
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +31,7 @@ from typing import Any, Literal
 
 import httpx
 from langsmith import Client
+from langsmith.run_trees import RunTree
 from pydantic import ValidationError
 
 from pir.agent_client import LocalFixtureTarget
@@ -46,6 +53,9 @@ from pir.tracing import make_client
 logger = logging.getLogger("pir.evaluation")
 
 CASE_RUN_NAME = "pir.eval_case"
+SCORE_RUN_NAME = "pir.eval_score"
+READBACK_TIMEOUT_S = 10.0
+READBACK_INTERVAL_S = 1.0
 SELFCHECK_FAILED_TEXT = "base image check failed"  # ADR-0033: every Sandbox case would fail
 EXIT_MET, EXIT_NOT_MET, EXIT_COULD_NOT_RUN = 0, 1, 2
 RECORDING_HEADER = "x-pir-recording"
@@ -217,8 +227,13 @@ def _local_commit_sha(path: Path) -> str:
     return local_commit_sha(path)
 
 
-async def _scan_repo(deps: PipelineDeps, suite: EvalSuite, repo: EvalRepo) -> RepoScan:
-    """Scan one repo; any failure becomes `RepoScan.error`, never an exception."""
+async def _scan_repo(
+    deps: PipelineDeps, suite: EvalSuite, repo: EvalRepo, trace_parent: RunTree | None = None
+) -> RepoScan:
+    """Scan one repo; any failure becomes `RepoScan.error`, never an exception.
+
+    `trace_parent` is the run the scan's trace is nested under (the first case's root trace).
+    """
     scan_id = uuid.uuid4().hex
     started = deps.clock.now()
     report: ScanReport | None = None
@@ -243,7 +258,14 @@ async def _scan_repo(deps: PipelineDeps, suite: EvalSuite, repo: EvalRepo) -> Re
                 error = f"spend admission refused: {budget.reason}"
             else:
                 try:
-                    report = await run_scan(deps, target, budget, repo=repo_ref, scan_id=scan_id)
+                    report = await run_scan(
+                        deps,
+                        target,
+                        budget,
+                        repo=repo_ref,
+                        scan_id=scan_id,
+                        trace_parent=trace_parent,
+                    )
                 finally:
                     await deps.meter.settle(budget)
         except Exception as exc:  # per-repo isolation (AC-38): record it and run the others
@@ -262,8 +284,22 @@ class ExperimentPublisher:
     """Dataset upsert, one experiment, one root trace per case with feedback `correct`."""
 
     def __init__(
-        self, client: Client, dataset_name: str, experiment: str, model: str, bar: float
+        self,
+        client: Client,
+        dataset_name: str,
+        experiment: str,
+        model: str,
+        bar: float,
+        *,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        monotonic: Callable[[], float] = time.monotonic,
+        readback_timeout_s: float = READBACK_TIMEOUT_S,
+        readback_interval_s: float = READBACK_INTERVAL_S,
     ) -> None:
+        self.sleep = sleep
+        self.monotonic = monotonic
+        self.readback_timeout_s = readback_timeout_s
+        self.readback_interval_s = readback_interval_s
         self.client = client
         self.dataset_name = dataset_name
         self.experiment = experiment
@@ -329,34 +365,71 @@ class ExperimentPublisher:
         )
         self.project_id = project.id
 
-    def record_case(self, result: CaseResult) -> None:
-        """One root trace for the case and the feedback `correct` (1 or 0)."""
-        case = result.case
-        run_id = uuid.uuid4()
-        self.client.create_run(
-            CASE_RUN_NAME,
-            {"case_id": case.id, "package": case.package, "advisory": case.advisory},
-            "chain",
-            id=run_id,
+    def open_case(self, case: EvalCase, started: datetime) -> RunTree:
+        """Post the root trace of a case; the scan of its repo is nested beneath it."""
+        root = RunTree(
+            name=CASE_RUN_NAME,
+            id=uuid.uuid4(),
+            run_type="chain",
+            inputs={"case_id": case.id, "package": case.package, "advisory": case.advisory},
             project_name=self.experiment,
             reference_example_id=self.example_ids[case.id],
+            start_time=started,
+            extra={"metadata": {"case_id": case.id}},
+            client=self.client,
+        )
+        root.post()
+        return root
+
+    def record_case(
+        self, result: CaseResult, root: RunTree | None = None, scan_root: RunTree | None = None
+    ) -> None:
+        """Finish the case's root trace (opened here when `root` is None), add its child run
+        `pir.eval_score` and the feedback `correct` (1 or 0).
+
+        `scan_root` is the case root that holds the repo's scan when that is not this case.
+        """
+        case = result.case
+        if root is None:
+            root = self.open_case(case, result.started)
+        scan_holder = scan_root if scan_root is not None else root
+        root.add_metadata({"scan_id": result.scan_id, "case_id": case.id})
+        score = root.create_child(
+            SCORE_RUN_NAME,
+            "chain",
+            inputs={"case_id": case.id, "label": case.label},
+            start_time=result.ended,
+            extra={"metadata": {"scan_trace_id": str(scan_holder.id)}},
+        )
+        score.end(
+            outputs={
+                "predicted": result.scored_as,
+                "correct": result.correct,
+                "scan_trace_id": str(scan_holder.id),
+            },
+            error=result.detail if result.status == "errored" else None,
+            end_time=result.ended,
+        )
+        score.post()
+        score.patch()
+        root.end(
             outputs={
                 "predicted": result.scored_as,
                 "label": case.label,
                 "status": result.status,
             },
             error=result.detail if result.status == "errored" else None,
-            start_time=result.started,
             end_time=result.ended,
-            extra={"metadata": {"scan_id": result.scan_id, "case_id": case.id}},
         )
-        self.case_runs[case.id] = run_id
+        root.patch()
+        self.case_runs[case.id] = root.id
         self.client.flush()  # the run must exist before its feedback
         self.client.create_feedback(
-            run_id,
+            root.id,
             "correct",
             score=1 if result.correct else 0,
             comment=f"label={case.label}; predicted={result.scored_as}",
+            project_id=self.project_id,
         )
 
     def finish(self, metrics: EvalMetrics) -> None:
@@ -378,13 +451,31 @@ class ExperimentPublisher:
         )
         self.client.flush()
 
-    async def read_back(self) -> int:
-        """How many `pir.eval_case` root runs LangSmith returns for the experiment."""
-        seen = 0
-        async for run in self.client.runs.query(project_ids=[str(self.project_id)], is_root=True):
-            if getattr(run, "name", None) == CASE_RUN_NAME:
-                seen += 1
-        return seen
+    async def _visible_case_runs(self) -> int:
+        """How many of this run's case traces the API lists now (it returns ids only unless
+        `selects` is given, so `NAME` is requested)."""
+        wanted = {str(run_id) for run_id in self.case_runs.values()}
+        seen: set[str] = set()
+        async for run in self.client.runs.query(
+            project_ids=[str(self.project_id)], is_root=True, selects=["ID", "NAME"]
+        ):
+            run_id = str(getattr(run, "id", ""))
+            if getattr(run, "name", None) == CASE_RUN_NAME and run_id in wanted:
+                seen.add(run_id)
+        return len(seen)
+
+    async def read_back(self, expected: int) -> int:
+        """How many `pir.eval_case` root runs LangSmith returns for the experiment.
+
+        Polls until `expected` are visible or the bounded timeout passes (ingestion is
+        asynchronous); returns the last count. A failed query raises.
+        """
+        deadline = self.monotonic() + self.readback_timeout_s
+        while True:
+            seen = await self._visible_case_runs()
+            if seen >= expected or self.monotonic() >= deadline:
+                return seen
+            await self.sleep(self.readback_interval_s)
 
 
 # ---- result rendering and files -------------------------------------------------------------
@@ -561,11 +652,18 @@ async def run_eval(
         cases = [c for c in suite.cases if c.repo == repo.id]
         if not cases:
             continue
-        scan = await _scan_repo(deps, suite, repo)
+        lead_root: RunTree | None = None
+        if publisher is not None:
+            try:
+                lead_root = await asyncio.to_thread(publisher.open_case, cases[0], deps.clock.now())
+            except Exception:
+                publish_failures += 1
+                logger.exception("langsmith publish failed for a case")
+        scan = await _scan_repo(deps, suite, repo, lead_root)
         if scan.report is not None and SELFCHECK_FAILED_TEXT in scan.report.model_dump_json():
             aborted = f"the Sandbox base image check failed (ADR-0033); stopped at repo {repo.id}"
             break
-        for case in cases:
+        for position, case in enumerate(cases):
             token = bind_scan(scan.scan_id)
             try:
                 result = score_case(case, scan)
@@ -579,7 +677,12 @@ async def run_eval(
                 results.append(result)
                 if publisher is not None:
                     try:
-                        await asyncio.to_thread(publisher.record_case, result)
+                        await asyncio.to_thread(
+                            publisher.record_case,
+                            result,
+                            lead_root if position == 0 else None,
+                            lead_root if position > 0 else None,
+                        )
                     except Exception:
                         publish_failures += 1
                         logger.exception("langsmith publish failed for a case")
@@ -606,9 +709,14 @@ async def run_eval(
     if publisher is not None and not aborted:
         try:
             await asyncio.to_thread(publisher.finish, metrics)
-            readback = await publisher.read_back()
-        except Exception as exc:  # reporting only: the run's metrics stand without it
+            readback = await publisher.read_back(len(results))
+        except Exception as exc:  # the traces cannot be shown to exist: the run is unscored
             logger.warning("langsmith finish or read-back failed: %s", type(exc).__name__)
+            reasons.append(f"LangSmith finish or read-back failed ({type(exc).__name__})")
+        if readback is not None and readback < len(results):
+            reasons.append(
+                f"LangSmith read-back found {readback} of {len(results)} case traces after the wait"
+            )
     scored = not reasons
     precision_ok = bar_met(metrics.precision)
     summary = EvalRunSummary(

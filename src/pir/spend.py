@@ -7,6 +7,7 @@ fails closed. Any ledger that cannot be read or written pauses live scans (`Ledg
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import math
@@ -16,7 +17,7 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -160,8 +161,15 @@ def _replace_with_retry(src: str, dst: Path) -> None:
 class FileSpendLedger:
     """Local JSON ledger. Revision = a counter in the file; saves go to a temp file, then
     `os.replace`, so a reader never sees a partial file. A save whose parent is not the file's
-    current revision raises `LedgerConflict`. The check and replace are serialised per file
-    within this process only, which is enough for the single-user build ledger."""
+    current revision raises `LedgerConflict`. The read-check-replace is serialised per file within
+    this process by a thread lock, and across processes (a `pir eval` beside a `pir scan`) by an
+    `O_EXCL` lock file next to the ledger: a lock not obtained within `LOCK_WAIT_S` is
+    `LedgerUnavailable` (fail closed), and a lock file older than `LOCK_STALE_S` is taken over."""
+
+    LOCK_WAIT_S = 5.0
+    LOCK_STALE_S = 30.0
+    LOCK_POLL_S = 0.01
+    _READ_TRIES = 5
 
     def __init__(
         self, path: str | Path, caps: Mapping[Pool, float], clock: Clock | None = None
@@ -187,14 +195,26 @@ class FileSpendLedger:
         return str(await asyncio.to_thread(self._save_sync, state, parent))
 
     def _read(self) -> tuple[LedgerState, int]:
-        try:
-            text = self._path.read_text(encoding="utf-8")
-        except (FileNotFoundError, NotADirectoryError):
-            # No file there. Linux raises NotADirectoryError when a parent is a plain file,
-            # Windows raises FileNotFoundError; both mean "missing", so `save` is where it fails.
-            return initial_state(self._caps, self._clock.now()), 0
-        except OSError as exc:
-            raise LedgerUnavailable(f"ledger file unreadable: {type(exc).__name__}") from exc
+        text = ""
+        for attempt in range(1, self._READ_TRIES + 1):
+            try:
+                text = self._path.read_text(encoding="utf-8")
+                break
+            except (FileNotFoundError, NotADirectoryError):
+                # No file there. Linux raises NotADirectoryError when a parent is a plain file,
+                # Windows raises FileNotFoundError; both mean "missing", so `save` fails there.
+                logger.warning(
+                    "spend ledger file missing; starting from a fresh initial state (zero spend)",
+                    extra={"event": "ledger_missing", "ledger": self._path.name},
+                )
+                return initial_state(self._caps, self._clock.now()), 0
+            except PermissionError as exc:
+                # Windows refuses a read while another process is replacing the file.
+                if attempt == self._READ_TRIES:
+                    raise LedgerUnavailable("ledger file unreadable: PermissionError") from exc
+                time.sleep(_REPLACE_PAUSE_S * attempt)
+            except OSError as exc:
+                raise LedgerUnavailable(f"ledger file unreadable: {type(exc).__name__}") from exc
         try:
             data = json.loads(text)
             revision = data["revision"]
@@ -209,8 +229,55 @@ class FileSpendLedger:
         with self._lock:
             return self._read()
 
+    @contextlib.contextmanager
+    def _file_lock(self) -> Iterator[None]:
+        """Hold the cross-process lock file for the block (stdlib only; Windows and Linux)."""
+        lock_path = self._path.with_name(self._path.name + ".lock")
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise LedgerUnavailable(f"ledger file not writable: {type(exc).__name__}") from exc
+        deadline = time.monotonic() + self.LOCK_WAIT_S
+        while True:
+            try:
+                fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                break
+            except (FileExistsError, PermissionError):  # held, or (Windows) being deleted
+                self._drop_if_stale(lock_path)
+                if time.monotonic() >= deadline:
+                    raise LedgerUnavailable("ledger lock not obtained in time") from None
+                time.sleep(self.LOCK_POLL_S)
+            except OSError as exc:
+                raise LedgerUnavailable(f"ledger lock not available: {type(exc).__name__}") from exc
+        try:
+            try:
+                os.write(fd, str(os.getpid()).encode("ascii"))
+            finally:
+                os.close(fd)
+            yield
+        finally:
+            with contextlib.suppress(FileNotFoundError):
+                lock_path.unlink()
+
+    def _drop_if_stale(self, lock_path: Path) -> None:
+        """Remove a lock file left by a process that died (older than `LOCK_STALE_S`)."""
+        try:
+            seen = lock_path.stat().st_mtime
+            if time.time() - seen <= self.LOCK_STALE_S:
+                return
+            if lock_path.stat().st_mtime == seen:  # still the same file, not a fresh lock
+                logger.warning(
+                    "removing a stale spend ledger lock",
+                    extra={"event": "ledger_lock_stale", "ledger": self._path.name},
+                )
+                lock_path.unlink()
+        except (FileNotFoundError, PermissionError):
+            return  # released meanwhile, or (Windows) being deleted: the caller retries
+        except OSError as exc:
+            raise LedgerUnavailable(f"ledger lock not available: {type(exc).__name__}") from exc
+
     def _save_sync(self, state: LedgerState, parent: str) -> int:
-        with self._lock:
+        with self._lock, self._file_lock():
             _, current = self._read()
             if parent != str(current):
                 raise LedgerConflict(f"stale revision {parent!r}, current {current}")

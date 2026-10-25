@@ -63,6 +63,12 @@ def tools(report) -> dict[str, list[str]]:
 # ---- AC-01, AC-30 ----------------------------------------------------------------------
 
 
+async def test_a_local_fixture_scan_says_it_was_not_fetched_from_github(tmp_path):
+    # M1-FIX-02: `scan --local` reports a made-up GitHub URL, so the report must say so
+    report = await scan(make_harness(tmp_path), tmp_path)
+    assert "local fixture, not fetched from GitHub" in report.limitations
+
+
 async def test_ac01_steps_run_in_order_with_final_states_and_the_tools_rule(tmp_path):
     h = make_harness(tmp_path)
     sink = ListSink()

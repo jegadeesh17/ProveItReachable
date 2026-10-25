@@ -1,8 +1,14 @@
 """FileSpendLedger: atomic writes, revision counter, stale-revision detection (AC-51, AC-53)."""
 
 import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
 
 import pytest
+from fakes.deps import capture_json_logs, log_lines
 from fakes.ledger import make_state
 
 from pir.config import Settings
@@ -218,3 +224,94 @@ async def test_ac51_two_meters_on_one_file_never_both_take_the_last_money(tmp_pa
     results = await asyncio.gather(meters[0].reserve("a"), meters[1].reserve("b"))
     assert sorted(type(r).__name__ for r in results) == ["Refused", "ScanBudget"]
     assert Refused("paused") in results
+
+
+# ---- M1-FIX-02: missing-file warning and the cross-process lock ----------------------------
+
+
+async def test_ac51_a_missing_ledger_file_logs_a_warning(tmp_path, frozen_clock):
+    with capture_json_logs() as buffer:
+        await _ledger(tmp_path, frozen_clock).load()
+    lines = [x for x in log_lines(buffer) if x.get("event") == "ledger_missing"]
+    assert len(lines) == 1 and lines[0]["level"].upper() == "WARNING"
+
+
+async def test_ac51_an_existing_ledger_file_logs_no_missing_warning(tmp_path, frozen_clock):
+    ledger = _ledger(tmp_path, frozen_clock)
+    state, revision = await ledger.load()
+    await ledger.save(state, revision)
+    with capture_json_logs() as buffer:
+        await ledger.load()
+    assert [x for x in log_lines(buffer) if x.get("event") == "ledger_missing"] == []
+
+
+async def test_ac51_a_held_lock_file_makes_the_ledger_unavailable(
+    tmp_path, frozen_clock, monkeypatch
+):
+    ledger = _ledger(tmp_path, frozen_clock)
+    state, revision = await ledger.load()
+    lock = tmp_path / "spend_ledger.json.lock"
+    lock.write_text("1234", encoding="ascii")  # a live holder: fresh mtime
+    monkeypatch.setattr(FileSpendLedger, "LOCK_WAIT_S", 0.1)
+    with pytest.raises(LedgerUnavailable):
+        await ledger.save(state, revision)
+    assert lock.exists()  # a live holder's lock is never removed
+    assert not (tmp_path / "spend_ledger.json").exists()  # nothing was written
+
+
+async def test_ac51_a_stale_lock_file_is_taken_over_and_released(tmp_path, frozen_clock):
+    ledger = _ledger(tmp_path, frozen_clock)
+    state, revision = await ledger.load()
+    lock = tmp_path / "spend_ledger.json.lock"
+    lock.write_text("dead", encoding="ascii")
+    old = time.time() - 3600
+    os.utime(lock, (old, old))
+    assert await ledger.save(state, revision) == "1"
+    assert not lock.exists()
+    assert [p.name for p in tmp_path.iterdir()] == ["spend_ledger.json"]
+
+
+async def test_ac51_the_lock_is_released_after_a_conflict(tmp_path, frozen_clock):
+    ledger = _ledger(tmp_path, frozen_clock)
+    state, _ = await ledger.load()
+    with pytest.raises(LedgerConflict):
+        await ledger.save(state, "7")
+    assert not (tmp_path / "spend_ledger.json.lock").exists()
+
+
+_WORKER = """
+import asyncio, sys
+from datetime import UTC, datetime
+from pir.spend import FileSpendLedger, LedgerConflict, initial_state
+
+class Clock:
+    def now(self):
+        return datetime(2026, 1, 1, tzinfo=UTC)
+
+async def main(path, n):
+    ledger = FileSpendLedger(path, {"nebius": 10.0, "tavily": 5.0}, Clock())
+    done = 0
+    while done < n:
+        state, revision = await ledger.load()
+        try:
+            await ledger.save(state, revision)
+            done += 1
+        except LedgerConflict:
+            pass
+
+asyncio.run(main(sys.argv[1], int(sys.argv[2])))
+"""
+
+
+@pytest.mark.slow
+def test_ac51_concurrent_processes_never_lose_a_save(tmp_path):
+    path = tmp_path / "ledger.json"
+    src = str(Path(__file__).resolve().parents[2] / "src")
+    env = {**os.environ, "PYTHONPATH": src}
+    procs = [
+        subprocess.Popen([sys.executable, "-c", _WORKER, str(path), "15"], env=env)
+        for _ in range(4)
+    ]
+    assert [p.wait(timeout=120) for p in procs] == [0, 0, 0, 0]
+    assert json.loads(path.read_text(encoding="utf-8"))["revision"] == 60
+    assert not (tmp_path / "ledger.json.lock").exists()

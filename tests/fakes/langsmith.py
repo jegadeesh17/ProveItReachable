@@ -6,6 +6,7 @@ available decoded in `payloads`.
 """
 
 import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 import requests
@@ -32,9 +33,33 @@ class _RecordingSession(requests.Session):
         raise AssertionError("the fake LangSmith session never sends a request")
 
 
+class FakeRuns:
+    """`client.runs`: `query` returns only `id` unless `selects` names more, like the real API
+    (langsmith 0.14.12 `runs.query` / `query_v2`), so a caller that forgets `selects` sees no
+    names."""
+
+    def __init__(self, client: "FakeLangSmithClient") -> None:
+        self._client = client
+
+    def query(self, **kwargs: Any) -> AsyncIterator[Any]:
+        self._client.query_calls.append(kwargs)
+        selects = {str(item).upper() for item in kwargs.get("selects") or []}
+        rows = self._client.stored_runs(kwargs)
+
+        async def generate() -> AsyncIterator[Any]:
+            for row in rows:
+                out = {"id": row["id"]}
+                if "NAME" in selects:
+                    out["name"] = row["name"]
+                yield type("Run", (), out)()
+
+        return generate()
+
+
 class FakeLangSmithClient(Client):
     def __init__(self, *, redact: bool = True) -> None:
         self._recording = _RecordingSession()
+        self.query_calls: list[dict[str, Any]] = []
         hide = redact_payload if redact else None
         super().__init__(
             api_url="https://langsmith.invalid",
@@ -62,6 +87,15 @@ class FakeLangSmithClient(Client):
             for method, url, data in self._recording.calls
             if method == "POST" and "/runs" in url and data
         ]
+
+    @property
+    def runs(self) -> FakeRuns:  # type: ignore[override]
+        return FakeRuns(self)
+
+    def stored_runs(self, query: dict[str, Any]) -> list[dict[str, Any]]:
+        """The runs a query would list (id and name): the posted root runs."""
+        roots = [p for p in self.posted if not p.get("parent_run_id")]
+        return [{"id": str(p["id"]), "name": p["name"]} for p in roots]
 
     def text(self) -> str:
         """Everything uploaded, as one string (for 'no secret appears' checks)."""

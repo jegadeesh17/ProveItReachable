@@ -293,10 +293,14 @@ def _gate(
         )
 
     def downgrade(code: ReasonCode, reason: str) -> Finding:
+        if verdict.verdict == "uncertain":  # nothing was downgraded: the model itself said so
+            lead = "The model answered 'uncertain'"
+        else:
+            lead = f"Downgraded from '{verdict.verdict}'"
         return base.uncertain(
             code,
             reason,
-            explanation=f"Downgraded from '{verdict.verdict}': {reason}. {verdict.explanation}",
+            explanation=f"{lead}: {reason}. {verdict.explanation}",
             limitations=limitations,
             source_locations=locations,
         )

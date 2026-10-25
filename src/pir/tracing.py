@@ -13,6 +13,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from langsmith import Client, traceable, tracing_context
+from langsmith.run_trees import RunTree
 
 from pir.logs import redact
 
@@ -79,10 +80,13 @@ async def run_traced(
     body: Callable[[], Awaitable[T]],
     *,
     client: Client | None = None,
+    parent: RunTree | None = None,
 ) -> T:
     """Run `body` as the root run of a trace and log `scan_started` with the root run id.
 
     `client` is given by tests (a fake); otherwise one is made from `settings` when tracing is on.
+    `parent` (the evaluation runner's case trace) makes the scan a child run of that run, so the
+    scan's step, LLM and tool runs sit beneath it; it is ignored when tracing is off.
     """
     client = client if client is not None else make_client(settings)
     run_id = uuid.uuid4() if client is not None else None
@@ -93,17 +97,16 @@ async def run_traced(
     if client is None:
         with tracing_context(enabled=False):
             return await body()
+    extra: dict[str, Any] = {
+        "run_id": run_id,
+        "client": client,
+        "project_name": settings.langsmith_project,
+        "metadata": {"scan_id": scan_id},
+    }
+    if parent is not None:
+        extra["parent"] = parent
     with tracing_context(enabled=True, client=client, project_name=settings.langsmith_project):
-        return await _root(
-            scan_id,
-            body,
-            langsmith_extra={
-                "run_id": run_id,
-                "client": client,
-                "project_name": settings.langsmith_project,
-                "metadata": {"scan_id": scan_id},
-            },
-        )
+        return await _root(scan_id, body, langsmith_extra=extra)
 
 
 async def flush(client: Client | None) -> None:

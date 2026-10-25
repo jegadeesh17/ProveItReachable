@@ -7,6 +7,7 @@ AC-39 (latest.json and the figure), recorded OSV and Tavily answers.
 
 import json
 import logging
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -81,9 +82,12 @@ class EvalFakeLangSmith(FakeLangSmithClient):
         self.got_updated_projects: list[dict[str, Any]] = []
         self.got_case_runs: list[dict[str, Any]] = []
         self.got_other_runs: list[str] = []
+        self.got_other_run_info: list[dict[str, Any]] = []
+        self.got_case_updates: list[dict[str, Any]] = []
         self.got_feedback: list[dict[str, Any]] = []
-        self.got_query_calls: list[dict[str, Any]] = []
         self.fail_feedback = fail_feedback
+        self.visible_after_queries = 1  # the query call number from which case runs are listed
+        self.fail_query = False
 
     def has_dataset(self, *, dataset_name=None, dataset_id=None) -> bool:
         return dataset_name in self.got_datasets
@@ -104,7 +108,7 @@ class EvalFakeLangSmith(FakeLangSmithClient):
         for item in examples or []:
             self.got_examples.append(
                 SimpleNamespace(
-                    id=f"ex-{len(self.got_examples)}",
+                    id=str(uuid.UUID(int=len(self.got_examples) + 1)),  # real ids are UUIDs
                     inputs=item["inputs"],
                     outputs=item["outputs"],
                     metadata=item["metadata"],
@@ -128,6 +132,21 @@ class EvalFakeLangSmith(FakeLangSmithClient):
             self.got_case_runs.append({"name": name, "inputs": inputs, "run_type": run_type, **kw})
         else:
             self.got_other_runs.append(name)  # the pipeline's own scan traces
+            parent = kw.get("parent_run_id")
+            self.got_other_run_info.append(
+                {
+                    "name": name,
+                    "id": str(kw.get("id")),
+                    "parent_run_id": str(parent) if parent else None,
+                    "trace_id": str(kw.get("trace_id")),
+                }
+            )
+
+    def update_run(self, run_id, **kw):
+        known = {str(r["id"]) for r in self.got_case_runs}
+        known |= {i["id"] for i in self.got_other_run_info}
+        if str(run_id) in known:
+            self.got_case_updates.append({"run_id": str(run_id), **kw})
 
     def create_feedback(self, run_id, key="unnamed", **kw):
         if self.fail_feedback:
@@ -137,21 +156,18 @@ class EvalFakeLangSmith(FakeLangSmithClient):
     def list_runs(self, *args, **kwargs):
         raise AssertionError("list_runs is banned: use client.runs.query()")
 
-    @property
-    def runs(self):
-        outer = self
-
-        class Runs:
-            def query(self, **kw):
-                outer.got_query_calls.append(kw)
-
-                async def generate():
-                    for run in outer.got_case_runs:
-                        yield SimpleNamespace(name=run["name"])
-
-                return generate()
-
-        return Runs()
+    def stored_runs(self, query):
+        if self.fail_query:
+            raise RuntimeError("query rejected")
+        if len(self.query_calls) < self.visible_after_queries:
+            return []  # ingestion has not caught up yet
+        rows = [{"id": str(r["id"]), "name": r["name"]} for r in self.got_case_runs]
+        rows += [
+            {"id": i["id"], "name": i["name"]}
+            for i in self.got_other_run_info
+            if i["parent_run_id"] is None
+        ]
+        return rows
 
 
 def make_suite(tmp_path: Path, cases: list[tuple[str, str, str, str]]):
@@ -437,24 +453,30 @@ async def test_ac37_dataset_experiment_traces_feedback_and_read_back(tmp_path):
     assert run.summary.experiment == experiment["name"]
     # one root trace per case, linked to its example, each with feedback "correct"
     assert [r["inputs"]["case_id"] for r in client.got_case_runs] == ["c-tp", "c-fp"]
-    assert [r["reference_example_id"] for r in client.got_case_runs] == [
+    assert [str(r["reference_example_id"]) for r in client.got_case_runs] == [
         e.id for e in client.got_examples
     ]
-    assert all(r["project_name"] == experiment["name"] for r in client.got_case_runs)
+    assert all(r["session_name"] == experiment["name"] for r in client.got_case_runs)
     assert [(f["key"], f["score"]) for f in client.got_feedback] == [("correct", 1), ("correct", 0)]
     assert [f["run_id"] for f in client.got_feedback] == [r["id"] for r in client.got_case_runs]
     scan_ids = {r.case.id: r.scan_id for r in run.results}
-    assert client.got_case_runs[0]["extra"]["metadata"] == {
-        "scan_id": scan_ids["c-tp"],
-        "case_id": "c-tp",
-    }
+    first_update = next(
+        u for u in client.got_case_updates if u["run_id"] == str(client.got_case_runs[0]["id"])
+    )
+    assert first_update["extra"]["metadata"]["scan_id"] == scan_ids["c-tp"]
+    assert first_update["extra"]["metadata"]["case_id"] == "c-tp"
+    assert first_update["outputs"]["predicted"] == LR
+    # the feedback names the experiment project (no session_id deprecation warning)
+    assert all(f["project_id"] == "proj-1" for f in client.got_feedback)
     # the pipeline's own scan traces go to the same experiment project
     assert client.got_other_runs, "the scans were traced"
     # metrics are the experiment metadata
     assert client.got_updated_projects[0]["metadata"]["precision"] == 0.5
     assert client.got_updated_projects[0]["metadata"]["n"] == 2
     # read back with runs.query, never list_runs
-    assert client.got_query_calls == [{"project_ids": ["proj-1"], "is_root": True}]
+    assert client.query_calls == [
+        {"project_ids": ["proj-1"], "is_root": True, "selects": ["ID", "NAME"]}
+    ]
     assert run.readback == 2
     assert "LangSmith read-back: 2 of 2" in run.markdown
 
@@ -650,3 +672,123 @@ def test_the_cli_exits_2_when_it_cannot_run(tmp_path, monkeypatch, capsys):
 def test_package_names_are_compared_in_normalized_form():
     assert normalize_package("PyYAML") == normalize_package("pyyaml") == "pyyaml"
     assert normalize_package("Foo_Bar.baz") == "foo-bar-baz"
+
+
+# ---- M1-FIX-02: read-back, trace tree, unscored reasons ---------------------------------------
+
+
+class FakeSleeper:
+    """Injectable clock and sleep for the read-back poll: sleeping advances the clock."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.slept: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    async def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+def with_sleeper(monkeypatch, sleeper: FakeSleeper) -> None:
+    real_init = runner.ExperimentPublisher.__init__
+
+    def init(self, *args, **kw):
+        real_init(self, *args, sleep=sleeper.sleep, monotonic=sleeper.monotonic, **kw)
+
+    monkeypatch.setattr(runner.ExperimentPublisher, "__init__", init)
+
+
+async def test_ac37_read_back_requests_names_and_the_fake_hides_them_otherwise():
+    # the fake returns ids only unless `selects` names more, as the real API does
+    client = EvalFakeLangSmith()
+    client.got_case_runs.append({"id": "r1", "name": CASE_RUN_NAME})
+    publisher = runner.ExperimentPublisher(client, "ds", "exp", "m", 0.8)
+    publisher.project_id = "proj-1"
+    publisher.case_runs = {"c": "r1"}  # type: ignore[dict-item]
+
+    assert await publisher.read_back(1) == 1
+    assert "NAME" in client.query_calls[0]["selects"]
+
+    rows = [r async for r in client.runs.query(project_ids=["proj-1"], is_root=True)]
+    assert rows and not hasattr(rows[0], "name")  # no selects: ids only
+
+
+async def test_ac37_read_back_polls_until_the_case_traces_are_visible(tmp_path, monkeypatch):
+    suite = make_suite(tmp_path, CASES[:2])
+    h = harness(tmp_path)
+    as_sandbox(h)
+    client = EvalFakeLangSmith()
+    client.visible_after_queries = 3  # listed from the third query on
+    sleeper = FakeSleeper()
+    with_sleeper(monkeypatch, sleeper)
+
+    run = await run_eval(suite, h.deps, client=client, results_dir=tmp_path / "r")
+
+    assert run.readback == 2 and run.summary.scored
+    assert len(client.query_calls) == 3 and len(sleeper.slept) == 2
+
+
+async def test_ac37_a_short_read_back_after_the_wait_makes_the_run_unscored(tmp_path, monkeypatch):
+    suite = make_suite(tmp_path, CASES[:2])
+    h = harness(tmp_path)
+    as_sandbox(h)
+    client = EvalFakeLangSmith()
+    client.visible_after_queries = 10**6  # never visible
+    sleeper = FakeSleeper()
+    with_sleeper(monkeypatch, sleeper)
+    results = tmp_path / "r"
+    seed = harness(tmp_path / "seed")  # a scored latest.json from an earlier run must survive
+    as_sandbox(seed)
+    first = await run_eval(suite, seed.deps, client=EvalFakeLangSmith(), results_dir=results)
+    assert first.summary.scored
+    before = (results / "latest.json").read_text(encoding="utf-8")
+
+    run = await run_eval(suite, h.deps, client=client, results_dir=results)
+
+    assert run.readback == 0
+    assert not run.summary.scored and run.exit_code == 2 and not run.summary.bar_met
+    assert any("read-back found 0 of 2" in reason for reason in run.unscored_reasons)
+    assert sum(sleeper.slept) <= runner.READBACK_TIMEOUT_S + runner.READBACK_INTERVAL_S
+    assert (results / "latest.json").read_text(encoding="utf-8") == before
+
+
+async def test_ac37_a_failing_read_back_query_makes_the_run_unscored(tmp_path):
+    suite = make_suite(tmp_path, CASES[:1])
+    h = harness(tmp_path)
+    as_sandbox(h)
+    client = EvalFakeLangSmith()
+    client.fail_query = True
+
+    run = await run_eval(suite, h.deps, client=client, results_dir=tmp_path / "r")
+
+    assert run.readback is None and not run.summary.scored and run.exit_code == 2
+    assert any("read-back failed" in reason for reason in run.unscored_reasons)
+
+
+async def test_ac37_each_case_root_trace_has_children_and_holds_or_names_the_scan(tmp_path):
+    # c-tp and c-miss share repo-a; c-fp is repo-b
+    suite = make_suite(tmp_path, [CASES[0], CASES[1], CASES[3]])
+    h = harness(tmp_path)
+    as_sandbox(h)
+    client = EvalFakeLangSmith()
+
+    run = await run_eval(suite, h.deps, client=client, results_dir=tmp_path / "r")
+
+    assert run.readback == 3
+    roots = {r["inputs"]["case_id"]: str(r["id"]) for r in client.got_case_runs}
+    assert set(roots) == {"c-tp", "c-fp", "c-miss"}
+    # the scan of each repo is a child run of the first case of that repo, in the same trace
+    scans = [i for i in client.got_other_run_info if i["name"] == "pir.scan"]
+    assert sorted(i["parent_run_id"] for i in scans) == sorted([roots["c-tp"], roots["c-fp"]])
+    for info in scans:
+        assert info["trace_id"] == info["parent_run_id"]  # same trace as the case root
+    assert {i["trace_id"] for i in client.got_other_run_info} <= set(roots.values())
+    # every case root has the child run pir.eval_score; the other case names the scan's root
+    scores = [i for i in client.got_other_run_info if i["name"] == runner.SCORE_RUN_NAME]
+    assert sorted(i["parent_run_id"] for i in scores) == sorted(roots.values())
+    miss_score = next(i for i in scores if i["parent_run_id"] == roots["c-miss"])
+    update = next(u for u in client.got_case_updates if u["run_id"] == miss_score["id"])
+    assert update["outputs"]["scan_trace_id"] == roots["c-tp"]

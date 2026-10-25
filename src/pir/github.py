@@ -170,6 +170,26 @@ def _is_manifest(path: str) -> bool:
     return "/" not in path and any(fnmatch.fnmatchcase(path, pat) for pat in _MANIFEST_NAMES)
 
 
+def _canonical_name(repo: dict, requested: RepoCoordinates) -> tuple[str, str]:
+    """The `owner`, `name` GitHub reports for the repository (`full_name`), so a renamed or
+    differently cased repository is fetched from codeload under its current name.
+
+    A response without `full_name` keeps the requested names; a malformed one is an error.
+    """
+    full_name = repo.get("full_name")
+    if full_name is None:
+        return requested.owner, requested.name
+    owner, sep, name = full_name.partition("/") if isinstance(full_name, str) else ("", "", "")
+    if (
+        not sep
+        or not _OWNER_RE.fullmatch(owner)
+        or not _NAME_RE.fullmatch(name)
+        or name in (".", "..")
+    ):
+        raise GitHubUnavailable("GitHub returned an unexpected repository response")
+    return owner, name
+
+
 async def validate_repo(
     coords: RepoCoordinates,
     ref: str | None,
@@ -208,6 +228,7 @@ async def validate_repo(
             raise GitHubUnavailable("GitHub returned an unexpected repository response")
         if repo.get("private") is True:
             raise RepoNotFound("repository is not public")
+        owner, name = _canonical_name(repo, coords)
         commit = await _get_json(
             client, f"{base}/commits/{chosen or default_branch}", unprocessable_is_missing=True
         )
@@ -252,7 +273,7 @@ async def validate_repo(
     if not manifests:
         raise NotPythonProject("no dependency manifest at the repository root")
     return ValidatedTarget(
-        coords=RepoCoordinates(owner=coords.owner, name=coords.name, ref=chosen),
+        coords=RepoCoordinates(owner=owner, name=name, ref=chosen),
         default_branch=default_branch,
         commit_sha=sha,
         files_total=files_total,

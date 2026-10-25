@@ -156,6 +156,29 @@ async def test_ac05_happy_path_reads_repo_commit_tree():
     assert target.coords.ref is None
 
 
+async def test_ac05_a_renamed_repo_is_fetched_under_its_canonical_name():
+    # M1-FIX-02: the owner/name later steps use (codeload, the report URL) is GitHub's full_name
+    renamed = {"name": "Sample-Renamed", "full_name": "NewOwner/Sample-Renamed", "private": False}
+    transport = _routes(**{f"GET {API}": json_response(200, {**renamed, "default_branch": "main"})})
+    target = await validate_repo(COORDS, None, settings=_settings(), transport=transport)
+    assert (target.coords.owner, target.coords.name) == ("NewOwner", "Sample-Renamed")
+
+
+async def test_ac05_a_repo_response_without_full_name_keeps_the_requested_names():
+    body = {"default_branch": "main", "private": False}
+    transport = _routes(**{f"GET {API}": json_response(200, body)})
+    target = await validate_repo(COORDS, None, settings=_settings(), transport=transport)
+    assert (target.coords.owner, target.coords.name) == ("octo", "sample")
+
+
+@pytest.mark.parametrize("full_name", ["noslash", "a/b/c", "evil/..", "../x", "", 7, "o/n ame"])
+async def test_ac05_a_malformed_full_name_is_unavailable(full_name):
+    body = {"default_branch": "main", "private": False, "full_name": full_name}
+    transport = _routes(**{f"GET {API}": json_response(200, body)})
+    with pytest.raises(GitHubUnavailable):
+        await validate_repo(COORDS, None, settings=_settings(), transport=transport)
+
+
 async def test_ac06_explicit_ref_is_resolved_to_a_sha():
     transport = _routes(
         **{f"GET {API}/commits/feature/x": fixture_response(200, "github", "commit.json")}

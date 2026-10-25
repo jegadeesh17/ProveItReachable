@@ -26,7 +26,7 @@ from pir.github import (
     ValidatedTarget,
     parse_repo_url,
 )
-from pir.logs import configure_logging
+from pir.logs import bind_scan, configure_logging, scan_id_var
 from pir.models.api import check_ref
 from pir.models.report import ScanReport
 from pir.pipeline import github_repo_ref, local_repo_ref, run_scan
@@ -113,7 +113,11 @@ async def _scan_async(
                 return 2
             repo = github_repo_ref(target)
         scan_id = uuid.uuid4().hex
-        budget = await deps.meter.reserve(scan_id)
+        token = bind_scan(scan_id)  # so ledger log lines written during reserve carry the scan id
+        try:
+            budget = await deps.meter.reserve(scan_id)
+        finally:
+            scan_id_var.reset(token)
         if isinstance(budget, Refused):
             print(_refusal_message(budget), file=sys.stderr)
             return 2
