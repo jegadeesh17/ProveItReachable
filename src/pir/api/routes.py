@@ -1,6 +1,6 @@
 """API routes of ARCHITECTURE section 8: scans, status, report, config, health, schema.
 
-The events (SSE) and proof routes belong to later tasks; they get the
+The events route lives in `pir.api.sse`; the proof route belongs to a later task. Both get the
 same `ApiContext` through `request.app.state.ctx` (see `get_context`).
 """
 
@@ -23,6 +23,7 @@ from pir.api.errors import (
     minutes_for,
     request_invalid,
 )
+from pir.api.sse import create_sse_router
 from pir.config import Settings
 from pir.deps import PipelineDeps
 from pir.evaluation.metrics import load_eval_figure
@@ -145,9 +146,13 @@ def parse_scan_request(body: bytes) -> tuple[ScanRequest, RepoCoordinates]:
     return scan_request, coords
 
 
-def create_router(*, markdown_export: bool = True) -> APIRouter:
-    """`markdown_export=False` (FEATURE_MARKDOWN_EXPORT) leaves `report.md` unregistered (AC-64)."""
+def create_router(*, markdown_export: bool = True, max_sse_streams: int | None = None) -> APIRouter:
+    """`markdown_export=False` (FEATURE_MARKDOWN_EXPORT) leaves `report.md` unregistered (AC-64).
+    `max_sse_streams` registers the events route with that stream cap; None (FEATURE_PROGRESS_FEED
+    false) leaves it unregistered (AC-42)."""
     router = APIRouter(prefix="/api")
+    if max_sse_streams is not None:
+        router.include_router(create_sse_router(max_streams=max_sse_streams))
 
     @router.post("/scans", status_code=202)
     async def start_scan(request: Request) -> Response:

@@ -100,7 +100,12 @@ def create_app(
     async def _invalid(_request: Request, _exc: RequestValidationError) -> Response:  # type: ignore[misc]
         return error_response(request_invalid("a request parameter is not valid"))
 
-    app.include_router(create_router(markdown_export=settings.feature_markdown_export))
+    app.include_router(
+        create_router(
+            markdown_export=settings.feature_markdown_export,
+            max_sse_streams=settings.max_sse_streams if settings.feature_progress_feed else None,
+        )
+    )
 
     static_dir = web_dir or _project_path("web")
     if static_dir.is_dir():
