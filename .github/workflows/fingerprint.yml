@@ -1,0 +1,91 @@
+name: Fingerprint
+
+# ADR-0033 (amended 2026-10-25). Measures the sandbox base-image fingerprint and uploads it as an artifact.
+# Manual only. Never commits or pushes. The developer reviews the artifact and commits it.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: python -m pip install -e .
+      - name: Read the base image and check its digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/image"
+          python -c 'from pir.config import Settings; print(Settings.model_fields["sandbox_base_image"].default)' > "$RUNNER_TEMP/image/image.txt"
+          image="$(cat "$RUNNER_TEMP/image/image.txt")"
+          if [[ ! "$image" =~ ^([^[:space:]@]+)@(sha256:[0-9a-f]{64})$ ]]; then
+            echo "SANDBOX_BASE_IMAGE default must be <tag>@sha256:<64 hex>" >&2
+            exit 1
+          fi
+          tag="${BASH_REMATCH[1]}"
+          digest="${BASH_REMATCH[2]}"
+          actual="$(docker buildx imagetools inspect "$tag" --format '{{.Manifest.Digest}}')"
+          if [ "$actual" != "$digest" ]; then
+            echo "tag $tag points to $actual, expected $digest" >&2
+            exit 1
+          fi
+      - name: Write the agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/agent"
+          python -c 'import sys; from pir.agent_client import build_agent_pyz; sys.stdout.buffer.write(build_agent_pyz())' > "$RUNNER_TEMP/agent/agent.pyz"
+          chmod 0755 "$RUNNER_TEMP/agent"
+          chmod 0644 "$RUNNER_TEMP/agent/agent.pyz"
+      - name: Run selfcheck in the sandbox image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/selfcheck"
+          image="$(cat "$RUNNER_TEMP/image/image.txt")"
+          docker run --rm --platform linux/amd64 --network none --user 65534:65534 -v "$RUNNER_TEMP/agent":/opt/pir:ro "$image" /usr/local/bin/python3.13 -I -S /opt/pir/agent.pyz selfcheck --args-b64 e30= > "$RUNNER_TEMP/selfcheck/stdout.txt"
+      - name: Write the fingerprint file
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/out"
+          python - <<'EOF'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          from pir.sandbox_agent.protocol import RESULT_PREFIX, decode_result
+
+          temp = Path(os.getenv("RUNNER_TEMP"))
+          image = (temp / "image" / "image.txt").read_text(encoding="utf-8").strip()
+          stdout = (temp / "selfcheck" / "stdout.txt").read_text(encoding="utf-8")
+          results = [line for line in stdout.splitlines() if line.strip().startswith(RESULT_PREFIX)]
+          if len(results) != 1:
+              raise SystemExit(f"expected exactly one {RESULT_PREFIX} line, found {len(results)}")
+          fingerprint = {
+              "format": 1,
+              "base_image": image,
+              "measured_on": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+              "selfcheck": decode_result(results[0]),
+          }
+          text = json.dumps(fingerprint, indent=2) + "\n"
+          (temp / "out" / "base_image_fingerprint.json").write_text(text, encoding="utf-8")
+          EOF
+      - name: Upload the fingerprint
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: base-image-fingerprint
+          path: ${{ runner.temp }}/out/base_image_fingerprint.json
+          if-no-files-found: error
+          retention-days: 7
