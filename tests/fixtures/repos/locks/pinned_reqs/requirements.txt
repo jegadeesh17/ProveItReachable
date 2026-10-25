@@ -1,0 +1,7 @@
+# pinned file with an include and options
+--index-url https://example.invalid/simple
+-r deps/base.txt
+requests[security]==2.32.3 \
+    --hash=sha256:aaaa \
+    --hash=sha256:bbbb
+PyYAML==6.0.2 ; python_version >= "3.9"

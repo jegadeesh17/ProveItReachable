@@ -1,0 +1,37 @@
+[[package]]
+name = "Flask"
+version = "3.0.3"
+description = "A simple framework"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+
+[[package]]
+name = "Jinja2"
+version = "3.1.4"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+
+[[package]]
+name = "pytest"
+version = "8.3.3"
+optional = false
+python-versions = ">=3.8"
+groups = ["dev"]
+
+[[package]]
+name = "localpkg"
+version = "0.1.0"
+optional = false
+python-versions = "*"
+groups = ["main"]
+
+[package.source]
+type = "directory"
+url = "../localpkg"
+
+[metadata]
+lock-version = "2.1"
+python-versions = "^3.12"
+content-hash = "abc"

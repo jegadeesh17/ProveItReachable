@@ -1,0 +1,2 @@
+error: No solution found when resolving dependencies
+  cause: Because doesnotexist-zzzz-pkg was not found in the package registry and you require doesnotexist-zzzz-pkg==1.0, we can conclude that your requirements are unsatisfiable.

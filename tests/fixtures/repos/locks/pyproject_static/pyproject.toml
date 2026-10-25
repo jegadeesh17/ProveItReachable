@@ -1,0 +1,14 @@
+[project]
+name = "demo"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "Requests>=2.31",
+    "PyYAML[extra] ; python_version > '3.8'",
+    "pkg @ https://example.invalid/pkg.whl",
+    "git+https://example.invalid/r.git#egg=gitpkg",
+    "./local",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]

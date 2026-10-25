@@ -1,0 +1,11 @@
+{
+    "_meta": {"hash": {"sha256": "x"}, "pipfile-spec": 6},
+    "default": {
+        "requests": {"hashes": ["sha256:aa"], "index": "pypi", "version": "==2.32.3"},
+        "urllib3": {"hashes": ["sha256:bb"], "version": "==2.2.3"},
+        "mylib": {"git": "https://github.com/example/mylib.git", "ref": "abc"}
+    },
+    "develop": {
+        "pytest": {"hashes": ["sha256:cc"], "version": "==8.3.3"}
+    }
+}

@@ -1,17 +1,18 @@
 """Agent entry point: `python3.13 -I -S agent.pyz <command> --args-b64 <base64 JSON>`.
 
-`resolve` is added by M1-TASK-06 and `proof` by M2-TASK-09.
+`proof` is added by M2-TASK-09.
 """
 
 import os
 import sys
 
-from . import fetch, index, protocol
+from . import fetch, index, protocol, resolve
 
 HANDLERS: dict[str, protocol.Handler] = {
     "fetch": fetch.fetch,
     "unpack": fetch.unpack,
     "index": index.index_command,
+    "resolve": resolve.resolve_command,
 }
 
 

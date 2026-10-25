@@ -110,8 +110,8 @@ def test_require_int_rejects_bools_strings_and_out_of_range():
     assert protocol.require_int({"k": 5}, "k", 1, 10) == 5
 
 
-def test_main_dispatches_the_part_one_commands():
-    assert set(agent_main.HANDLERS) == {"fetch", "unpack", "index"}
+def test_main_dispatches_the_part_one_and_two_commands():
+    assert set(agent_main.HANDLERS) == {"fetch", "unpack", "index", "resolve"}
     code = agent_main.main(["fetch", "--args-b64", _b64({"owner": "../x"})])
     assert code == 2
 
