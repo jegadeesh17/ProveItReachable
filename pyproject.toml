@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools==84.2.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "proveitreachable"
+version = "0.1.0"
+description = "Decides whether a known vulnerability in a Python repository's pinned dependencies is actually reachable."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi==0.162.0",
+    "uvicorn==0.54.0",
+    "pydantic==2.14.1",
+    "pydantic-settings==2.16.1",
+    "httpx==0.28.1",
+    "openai==3.37.0",
+    "contree-sdk==0.3.6",
+    "langsmith==0.14.12",
+    "huggingface_hub==2.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "pytest-playwright==0.10.0",
+    "ruff==0.17.2",
+    "pyyaml==6.0.3",
+    "uv==0.13.5",
+]
+
+[project.scripts]
+pir = "pir.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = ["tests/fixtures/repos/", "eval/fixtures/", "*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "T20", "TID"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/pir/cli.py" = ["T20"]
+"tests/**" = ["T20"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"langsmith.Client.list_runs".msg = "use client.runs.query()"
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: browser, server, agent subprocess, or over 1 s",
+    "live: real external service (always also slow); needs PIR_LIVE_TESTS=1",
+]
+addopts = "--strict-markers"
+testpaths = ["tests"]
+norecursedirs = ["fixtures", ".*", "node_modules"]
+asyncio_mode = "auto"
