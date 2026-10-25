@@ -22,10 +22,11 @@ from collections.abc import Awaitable, Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Protocol, TextIO, get_args
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TextIO, get_args
 
 from pir.models import Pool
 from pir.models.ledger import (
+    CasCheck,
     DayState,
     LedgerState,
     PoolState,
@@ -54,6 +55,18 @@ class LedgerConflict(Exception):
 
 class LedgerUnavailable(Exception):
     """The ledger cannot be loaded or saved. The meter fails closed."""
+
+
+class LedgerNotVerified(LedgerUnavailable):
+    """The HF ledger has no state yet, or no current `cas_verified`: every spend is refused."""
+
+
+class CasProbeFailed(Exception):
+    """The stale-parent probe did not prove that the Hub rejects a commit on a stale parent."""
+
+
+class CapsRefused(ValueError):
+    """`ledger set-caps` was given values the caps rules refuse (section 11.1)."""
 
 
 class Clock(Protocol):
@@ -355,6 +368,268 @@ class FileSpendLedger:
                 if tmp_name is not None:
                     Path(tmp_name).unlink(missing_ok=True)
             return revision
+
+
+LEDGER_FILE = "ledger.json"
+PROBE_FILE = "cas_probe.json"
+STALE_PARENT_STATUSES = frozenset({409, 412})  # what the Hub answers to a stale `parent_commit`
+HEADROOM_MIN_USD: dict[Pool, float] = {"nebius": 5.0, "tavily": 3.0}  # section 11.1 constants
+
+
+class HfDatasetSpendLedger:
+    """The hosted ledger: `ledger.json` in a private Hugging Face dataset (section 7.8).
+
+    Revision = the dataset head commit (`repo_info().sha`); the file is read at that revision.
+    `save` = `create_commit(parent_commit=revision)`: a stale parent is a `LedgerConflict`, any
+    other failure is `LedgerUnavailable`. `load` and `save` refuse (`LedgerNotVerified`) while the
+    state has no `cas_verified` or its `hub_version` is not the installed `huggingface_hub`, so the
+    ledger stays off until `ledger set-caps` has proved the Hub rejects stale parents. `read_head`,
+    `write` and `probe_stale_parent` are the unguarded steps `set-caps` itself needs."""
+
+    def __init__(
+        self,
+        repo_id: str,
+        token: str,
+        *,
+        api: Any = None,
+        hub_version: str | None = None,
+        clock: Clock | None = None,
+    ) -> None:
+        if not repo_id or "/" not in repo_id:
+            raise ValueError("repo_id must look like <user>/<dataset>")
+        if not token:
+            raise ValueError("token must not be empty")
+        if api is None or hub_version is None:
+            import huggingface_hub
+
+            api = api if api is not None else huggingface_hub.HfApi()
+            hub_version = hub_version if hub_version is not None else huggingface_hub.__version__
+        self._repo_id = repo_id
+        self._token = token
+        self._api = api
+        self._hub_version = hub_version
+        self._clock = clock or SystemClock()
+
+    @classmethod
+    def from_settings(
+        cls, settings: "Settings", clock: Clock | None = None, *, api: Any = None
+    ) -> "HfDatasetSpendLedger":
+        if settings.hf_token is None or not settings.spend_ledger_hf_repo:
+            raise LedgerUnavailable("HF_TOKEN and SPEND_LEDGER_HF_REPO are required")
+        return cls(
+            settings.spend_ledger_hf_repo,
+            settings.hf_token.get_secret_value(),
+            api=api,
+            clock=clock,
+        )
+
+    @property
+    def hub_version(self) -> str:
+        return self._hub_version
+
+    async def load(self) -> tuple[LedgerState, str]:
+        state, revision = await asyncio.to_thread(self._read_head_sync)
+        if state is None:
+            raise LedgerNotVerified("the hosted ledger is empty: run `ledger set-caps` first")
+        self._require_verified(state)
+        return state, revision
+
+    async def save(self, state: LedgerState, parent: str) -> str:
+        self._require_verified(state)
+        return await self.write(state, parent)
+
+    async def read_head(self) -> tuple[LedgerState | None, str]:
+        """The state at the dataset head (None when no ledger file exists yet) and that head."""
+        return await asyncio.to_thread(self._read_head_sync)
+
+    async def write(self, state: LedgerState, parent: str) -> str:
+        """Commit `state` on `parent` without the verification check (used by `set-caps`)."""
+        payload = (state.model_dump_json(indent=2) + "\n").encode("utf-8")
+        return await asyncio.to_thread(
+            self._commit_sync, LEDGER_FILE, payload, parent, "update spend ledger"
+        )
+
+    async def probe_stale_parent(self) -> None:
+        """Prove the Hub rejects a commit on a stale parent (section 7.8): read head H, commit
+        `cas_probe.json` on H, then commit it on H again; the second must raise a conflict.
+
+        Each probe file carries a fresh nonce: an identical file would be skipped by the Hub client
+        as an empty commit and prove nothing. Raises `CasProbeFailed` unless the second commit is
+        rejected as a conflict."""
+        await asyncio.to_thread(self._probe_sync)
+
+    def _require_verified(self, state: LedgerState) -> None:
+        check = state.cas_verified
+        if check is None:
+            raise LedgerNotVerified("the hosted ledger has no stale-parent check: run set-caps")
+        if check.hub_version != self._hub_version:
+            raise LedgerNotVerified(
+                f"the stale-parent check was made with huggingface_hub {check.hub_version}, "
+                f"this is {self._hub_version}: run set-caps again"
+            )
+
+    def _wrap(self, what: str, exc: Exception) -> LedgerUnavailable:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        suffix = f" (HTTP {status})" if isinstance(status, int) else ""
+        return LedgerUnavailable(f"hosted ledger {what} failed: {type(exc).__name__}{suffix}")
+
+    def _head_sync(self) -> str:
+        try:
+            info = self._api.repo_info(self._repo_id, repo_type="dataset", token=self._token)
+        except Exception as exc:  # any Hub or network failure pauses spending (fail closed)
+            raise self._wrap("head lookup", exc) from exc
+        sha = getattr(info, "sha", None)
+        if not isinstance(sha, str) or not sha:
+            raise LedgerUnavailable("hosted ledger head lookup returned no commit")
+        return sha
+
+    def _read_head_sync(self) -> tuple[LedgerState | None, str]:
+        from huggingface_hub.errors import EntryNotFoundError
+
+        sha = self._head_sync()
+        with tempfile.TemporaryDirectory(prefix="pir-ledger-") as cache:
+            try:
+                path = self._api.hf_hub_download(
+                    self._repo_id,
+                    LEDGER_FILE,
+                    repo_type="dataset",
+                    revision=sha,
+                    cache_dir=cache,
+                    token=self._token,
+                )
+                text = Path(path).read_text(encoding="utf-8")
+            except EntryNotFoundError:
+                return None, sha
+            except Exception as exc:  # Hub, network or local read failure
+                raise self._wrap("read", exc) from exc
+        try:
+            return LedgerState.model_validate_json(text), sha
+        except ValueError as exc:
+            raise LedgerUnavailable("hosted ledger file is not valid") from exc
+
+    def _commit_sync(self, filename: str, payload: bytes, parent: str, message: str) -> str:
+        from huggingface_hub import CommitOperationAdd
+
+        try:
+            info = self._api.create_commit(
+                self._repo_id,
+                [CommitOperationAdd(path_in_repo=filename, path_or_fileobj=payload)],
+                commit_message=message,
+                repo_type="dataset",
+                parent_commit=parent,
+                token=self._token,
+            )
+        except Exception as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if status in STALE_PARENT_STATUSES:
+                raise LedgerConflict(f"stale parent {parent[:12]}") from exc
+            raise self._wrap("commit", exc) from exc
+        oid = getattr(info, "oid", None)
+        if not isinstance(oid, str) or not oid:
+            raise LedgerUnavailable("hosted ledger commit returned no revision")
+        return oid
+
+    def _probe_sync(self) -> None:
+        head = self._head_sync()
+        message = "stale-parent probe"
+        now = self._clock.now().isoformat()
+        first = json.dumps({"probe": secrets.token_hex(8), "at": now})
+        second = json.dumps({"probe": secrets.token_hex(8), "at": now})
+        try:
+            self._commit_sync(PROBE_FILE, first.encode("utf-8"), head, message)
+        except (LedgerConflict, LedgerUnavailable) as exc:
+            raise CasProbeFailed(f"the first probe commit failed: {exc}") from exc
+        try:
+            self._commit_sync(PROBE_FILE, second.encode("utf-8"), head, message)
+        except LedgerConflict:
+            return
+        except LedgerUnavailable as exc:
+            raise CasProbeFailed(f"the stale probe commit failed otherwise: {exc}") from exc
+        raise CasProbeFailed("the Hub accepted a commit on a stale parent: no compare-and-swap")
+
+
+def plan_set_caps(
+    current: LedgerState | None,
+    *,
+    balances: Mapping[Pool, float],
+    headrooms: Mapping[Pool, float],
+    caps: Mapping[Pool, float | None],
+    local_allowance: Mapping[Pool, float],
+    now: datetime,
+    hub_version: str,
+) -> LedgerState:
+    """The ledger state `ledger set-caps` writes, or `CapsRefused` (section 11.1).
+
+    Per pool: recorded = spent + reserved over all spenders (kept as is); maximum cap = recorded +
+    balance - headroom, which is also the default cap; headroom must be at least
+    `HEADROOM_MIN_USD`. `local` gets `local_allowance`, `hosted` the rest of the cap."""
+    new_caps: dict[Pool, float] = {}
+    allowances: dict[str, dict[Pool, float]] = {"hosted": {}, "local": {}}
+    for pool in POOLS:
+        balance, headroom = float(balances[pool]), float(headrooms[pool])
+        local = float(local_allowance[pool])
+        for label, value in (("balance", balance), ("headroom", headroom), ("local", local)):
+            if not math.isfinite(value) or value < 0:
+                raise CapsRefused(f"{pool}: the {label} must be a finite number, 0 or more")
+        if headroom + _EPS < HEADROOM_MIN_USD[pool]:
+            raise CapsRefused(
+                f"{pool}: headroom ${headroom:.2f} is below the minimum "
+                f"${HEADROOM_MIN_USD[pool]:.2f}"
+            )
+        used = {
+            name: _pool(ss, pool).spent_usd + _pool(ss, pool).reserved_usd
+            for name, ss in (current.spenders.items() if current else [])
+        }
+        recorded = sum(used.values())
+        maximum = recorded + balance - headroom
+        if maximum < recorded - _EPS:
+            raise CapsRefused(
+                f"{pool}: balance ${balance:.2f} does not cover headroom ${headroom:.2f}"
+            )
+        requested = caps.get(pool)
+        cap = maximum if requested is None else float(requested)
+        if not math.isfinite(cap):
+            raise CapsRefused(f"{pool}: the cap must be a finite number")
+        if cap < recorded - _EPS:
+            raise CapsRefused(f"{pool}: cap ${cap:.2f} is below recorded spend ${recorded:.2f}")
+        if cap > maximum + _EPS:
+            raise CapsRefused(
+                f"{pool}: cap ${cap:.2f} is above the maximum ${maximum:.2f} "
+                f"(recorded spend ${recorded:.2f} + balance ${balance:.2f} - headroom "
+                f"${headroom:.2f})"
+            )
+        hosted = cap - local
+        if hosted < -_EPS:
+            raise CapsRefused(f"{pool}: local allowance ${local:.2f} is above the cap ${cap:.2f}")
+        for name, allowance in (("local", local), ("hosted", hosted)):
+            if allowance + _EPS < used.get(name, 0.0):
+                raise CapsRefused(
+                    f"{pool}: the {name} allowance ${allowance:.2f} is below its recorded spend "
+                    f"${used.get(name, 0.0):.2f}"
+                )
+        new_caps[pool] = cap
+        allowances["local"][pool] = local
+        allowances["hosted"][pool] = max(0.0, hosted)
+
+    spenders: dict[Spender, SpenderState] = {}
+    for name in ("hosted", "local"):
+        existing = current.spenders.get(name) if current else None
+        if existing is not None:
+            spenders[name] = existing.model_copy(update={"allowance_usd": allowances[name]})
+        else:
+            spenders[name] = SpenderState(
+                allowance_usd=allowances[name],
+                pools={p: PoolState(spent_usd=0.0, reserved_usd=0.0) for p in POOLS},
+                day=None,
+            )
+    return LedgerState(
+        schema_version=2,
+        caps_usd=new_caps,
+        spenders=spenders,
+        reservations=list(current.reservations) if current else [],
+        cas_verified=CasCheck(verified_at=now, hub_version=hub_version),
+        updated_at=now,
+    )
 
 
 class ScanBudget:

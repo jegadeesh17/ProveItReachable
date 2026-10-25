@@ -30,7 +30,19 @@ from pir.logs import bind_scan, configure_logging, scan_id_var
 from pir.models.api import check_ref
 from pir.models.report import ScanReport
 from pir.pipeline import github_repo_ref, local_repo_ref, run_scan
-from pir.spend import Refused, print_spend_summary
+from pir.spend import (
+    HEADROOM_MIN_USD,
+    CapsRefused,
+    CasProbeFailed,
+    HfDatasetSpendLedger,
+    LedgerConflict,
+    LedgerUnavailable,
+    Refused,
+    SystemClock,
+    plan_set_caps,
+    print_spend_summary,
+    spend_summary_lines,
+)
 
 logger = logging.getLogger("pir.cli")
 
@@ -246,6 +258,71 @@ def _serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def _hf_ledger(settings: Settings) -> HfDatasetSpendLedger:
+    """The hosted ledger for `settings` (tests replace this to use a fake Hub)."""
+    return HfDatasetSpendLedger.from_settings(settings)
+
+
+async def _set_caps_async(settings: Settings, args: argparse.Namespace) -> int:
+    ledger = _hf_ledger(settings)
+    plan = {
+        "balances": {"nebius": args.nebius_balance, "tavily": args.tavily_balance},
+        "headrooms": {"nebius": args.headroom_nebius, "tavily": args.headroom_tavily},
+        "caps": {"nebius": args.nebius, "tavily": args.tavily},
+        "local_allowance": {"nebius": args.local_nebius, "tavily": args.local_tavily},
+        "hub_version": ledger.hub_version,
+    }
+    try:
+        current, _ = await ledger.read_head()
+        plan_set_caps(current, now=SystemClock().now(), **plan)  # refuse bad values before probing
+        await ledger.probe_stale_parent()
+        current, head = await ledger.read_head()  # the probe moved the head
+        state = plan_set_caps(current, now=SystemClock().now(), **plan)
+        await ledger.write(state, head)
+    except CapsRefused as exc:
+        print(f"Refused: {exc}", file=sys.stderr)
+        return 2
+    except CasProbeFailed as exc:
+        print(f"Stale-parent check failed, nothing was written: {exc}", file=sys.stderr)
+        return 1
+    except LedgerConflict:
+        print(
+            "The ledger changed while set-caps ran; nothing was written. Run it again.",
+            file=sys.stderr,
+        )
+        return 1
+    except LedgerUnavailable as exc:
+        print(f"The hosted ledger is unavailable, nothing was written: {exc}", file=sys.stderr)
+        return 1
+    print("Stale-parent check passed; caps written to the hosted ledger.", file=sys.stderr)
+    for spender in ("hosted", "local"):
+        for line in spend_summary_lines(state, spender):
+            print(line, file=sys.stderr)
+    return 0
+
+
+def _ledger_set_caps(args: argparse.Namespace) -> int:
+    """`ledger set-caps`: exit 0 written, 1 gate or ledger failure (nothing written), 2 refused."""
+    try:
+        settings = load_settings()
+    except ValidationError as exc:
+        names = sorted({str(err["loc"][0]).upper() for err in exc.errors() if err["loc"]})
+        print(
+            "Invalid configuration: " + (", ".join(names) or "see variable rules"), file=sys.stderr
+        )
+        return 1
+    if settings.spend_ledger_backend != "hf_dataset":
+        print("set-caps needs SPEND_LEDGER_BACKEND=hf_dataset.", file=sys.stderr)
+        return 1
+    try:
+        require(settings, ["HF_TOKEN", "SPEND_LEDGER_HF_REPO"])
+    except ConfigError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    configure_logging(settings)
+    return asyncio.run(_set_caps_async(settings, args))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pir", description="ProveItReachable")
     sub = parser.add_subparsers(dest="command")
@@ -270,6 +347,23 @@ def build_parser() -> argparse.ArgumentParser:
     serve = sub.add_parser("serve", help="run the API and the web UI")
     serve.add_argument("--host", default="127.0.0.1", help="interface to bind")
     serve.add_argument("--port", type=int, help="port (default: PORT, else 8000)")
+    ledger = sub.add_parser("ledger", help="manage the hosted spend ledger")
+    ledger_sub = ledger.add_subparsers(dest="ledger_command")
+    caps = ledger_sub.add_parser(
+        "set-caps", help="prove the stale-parent check, then write caps and the local allowance"
+    )
+    caps.add_argument("--nebius-balance", type=float, required=True, help="real Token Factory USD")
+    caps.add_argument("--tavily-balance", type=float, required=True, help="real Tavily USD")
+    caps.add_argument("--nebius", type=float, help="cap in USD (default: the maximum)")
+    caps.add_argument("--tavily", type=float, help="cap in USD (default: the maximum)")
+    caps.add_argument(
+        "--headroom-nebius", type=float, default=HEADROOM_MIN_USD["nebius"], help="at least 5"
+    )
+    caps.add_argument(
+        "--headroom-tavily", type=float, default=HEADROOM_MIN_USD["tavily"], help="at least 3"
+    )
+    caps.add_argument("--local-nebius", type=float, default=5.0, help="local allowance in USD")
+    caps.add_argument("--local-tavily", type=float, default=2.0, help="local allowance in USD")
     return parser
 
 
@@ -287,5 +381,7 @@ def main(argv: list[str] | None = None) -> int:
         return _eval(args)
     if args.command == "serve":
         return _serve(args)
+    if args.command == "ledger" and args.ledger_command == "set-caps":
+        return _ledger_set_caps(args)
     parser.print_help(sys.stderr)
     return 2

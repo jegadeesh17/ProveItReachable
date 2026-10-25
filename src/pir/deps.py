@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from langsmith import Client
 
 from pir.agent_client import SandboxAgentClient
-from pir.config import ConfigError, Settings
+from pir.config import Settings, require
 from pir.executor.base import Executor
 from pir.executor.contree import ContreeExecutor
 from pir.executor.fake import FakeExecutor
@@ -22,7 +22,15 @@ from pir.osv import OsvClient
 from pir.reasoning.strategy import ReasoningStrategy
 from pir.reasoning.tool_calling import ToolCallingStrategy
 from pir.research import AdvisoryResearcher, TavilySearchClient
-from pir.spend import Clock, FileSpendLedger, Spender, SpendMeter, SystemClock
+from pir.spend import (
+    Clock,
+    FileSpendLedger,
+    HfDatasetSpendLedger,
+    Spender,
+    SpendLedger,
+    SpendMeter,
+    SystemClock,
+)
 from pir.tracing import flush, make_client
 
 logger = logging.getLogger("pir.deps")
@@ -57,6 +65,15 @@ class PipelineDeps:
         await flush(self.langsmith)
 
 
+def build_ledger(settings: Settings, clock: Clock | None = None) -> SpendLedger:
+    """The spend ledger for `settings.spend_ledger_backend`."""
+    clock = clock or SystemClock()
+    if settings.spend_ledger_backend == "hf_dataset":
+        require(settings, ["HF_TOKEN", "SPEND_LEDGER_HF_REPO"])
+        return HfDatasetSpendLedger.from_settings(settings, clock)
+    return FileSpendLedger.from_settings(settings, clock)
+
+
 def build_deps(
     settings: Settings,
     *,
@@ -66,15 +83,13 @@ def build_deps(
 ) -> PipelineDeps:
     """Create the real components for `settings`. `settings.executor` picks the executor.
 
-    Raises ConfigError for a missing key and for a ledger backend this build does not have.
+    The ledger follows `settings.spend_ledger_backend`: the local file, or the private HF dataset
+    (every spender after deploy; it stays off until `ledger set-caps` has verified it).
+    Raises ConfigError for a missing key (including HF_TOKEN and SPEND_LEDGER_HF_REPO).
     """
     register_secrets(secrets_from_settings(settings))
     clock = clock or SystemClock()
-    if settings.spend_ledger_backend != "file":
-        raise ConfigError(
-            "SPEND_LEDGER_BACKEND=hf_dataset is not available in this build; use the file ledger"
-        )
-    ledger = FileSpendLedger.from_settings(settings, clock)
+    ledger = build_ledger(settings, clock)
     meter = SpendMeter.from_settings(ledger, spender, settings, clock)
     executor: Executor
     if settings.executor == "fake":
@@ -100,4 +115,4 @@ def build_deps(
     return deps
 
 
-__all__ = ["PipelineDeps", "ValidateRepo", "build_deps"]
+__all__ = ["PipelineDeps", "ValidateRepo", "build_deps", "build_ledger"]

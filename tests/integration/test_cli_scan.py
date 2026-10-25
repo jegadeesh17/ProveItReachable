@@ -263,7 +263,17 @@ def test_build_deps_wires_the_real_components_by_executor_setting(tmp_path):
     real = build_deps(Settings(_env_file=None, executor="sandbox", **keys))
     assert isinstance(real.executor, ContreeExecutor)
     assert real.llm.model == "nvidia/nemotron-3-super-120b-a12b"
-    with pytest.raises(ConfigError, match="hf_dataset"):
+    with pytest.raises(ConfigError, match="HF_TOKEN"):  # the hf_dataset ledger needs its settings
         build_deps(Settings(_env_file=None, spend_ledger_backend="hf_dataset", **keys))
+    hosted = build_deps(
+        Settings(
+            _env_file=None,
+            spend_ledger_backend="hf_dataset",
+            spend_ledger_hf_repo="me/pir-spend-ledger",
+            hf_token="hf_not_a_real_token",
+            **keys,
+        )
+    )
+    assert hosted.meter is not None
     with pytest.raises(ConfigError, match="TAVILY_API_KEY"):
         build_deps(Settings(_env_file=None, **{**keys, "tavily_api_key": None}))
