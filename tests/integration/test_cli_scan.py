@@ -147,10 +147,55 @@ def test_local_path_must_be_a_directory(tmp_path, monkeypatch, capsys):
     assert "directory" in capsys.readouterr().err
 
 
-def test_format_md_is_not_accepted_yet(capsys):
+def test_format_rejects_unknown_values(capsys):
     with pytest.raises(SystemExit) as caught:
-        main(["scan", "https://github.com/o/r", "--format", "md"])
+        main(["scan", "https://github.com/o/r", "--format", "html"])
     assert caught.value.code == 2
+
+
+def test_ac62_format_md_prints_markdown_to_stdout(tmp_path, monkeypatch, capsys):
+    use_harness(monkeypatch, tmp_path)
+    repo = write_repo(tmp_path / "repo")
+
+    assert main(["scan", "--executor", "fake", "--local", str(repo), "--format", "md"]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.out.startswith("# ProveItReachable report: ")
+    assert "### 1. likely reachable: " in captured.out
+    assert "**Confidence:**" in captured.out and "**Limitations**" in captured.out
+    assert "spend nebius: used $" in captured.err  # the spend summary still goes to stderr
+    with pytest.raises(ValueError):
+        json.loads(captured.out)
+
+
+def test_ac62_format_md_with_out_writes_the_file_and_json_stays_the_default(
+    tmp_path, monkeypatch, capsys
+):
+    use_harness(monkeypatch, tmp_path)
+    repo = write_repo(tmp_path / "repo")
+    out = tmp_path / "report.md"
+
+    assert (
+        main(
+            [
+                "scan",
+                "--executor",
+                "fake",
+                "--local",
+                str(repo),
+                "--format",
+                "md",
+                "--out",
+                str(out),
+            ]
+        )
+        == 0
+    )
+    assert out.read_text(encoding="utf-8").startswith("# ProveItReachable report: ")
+    assert capsys.readouterr().out == ""
+
+    assert main(["scan", "--executor", "fake", "--local", str(repo)]) == 0
+    ScanReport.model_validate_json(capsys.readouterr().out)
 
 
 def test_ac31_missing_nebius_key_fails_naming_the_variable(monkeypatch, capsys):

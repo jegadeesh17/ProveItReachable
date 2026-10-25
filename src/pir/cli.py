@@ -28,6 +28,7 @@ from pir.github import (
     parse_repo_url,
 )
 from pir.logs import bind_scan, configure_logging, scan_id_var
+from pir.markdown import render_markdown
 from pir.models.api import check_ref
 from pir.models.report import ScanReport
 from pir.pipeline import github_repo_ref, local_repo_ref, run_scan
@@ -147,7 +148,10 @@ async def _scan_async(
         finally:
             await deps.meter.settle(budget)
             print_spend_summary(deps.meter)
-        text = report.model_dump_json(indent=2) + "\n"
+        if args.format == "md":
+            text = render_markdown(report)
+        else:
+            text = report.model_dump_json(indent=2) + "\n"
         if args.out:
             Path(args.out).write_text(text, encoding="utf-8")
         else:
@@ -439,7 +443,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("repo_url", nargs="?", help="https://github.com/owner/repo")
     scan.add_argument("--ref", help="branch, tag or commit SHA (default: the default branch)")
     scan.add_argument("--out", help="write the report to this file instead of stdout")
-    scan.add_argument("--format", choices=["json"], default="json", help="report format")
+    scan.add_argument("--format", choices=["json", "md"], default="json", help="report format")
     scan.add_argument("--executor", choices=["sandbox", "fake"], help="override EXECUTOR")
     scan.add_argument("--local", help="scan a trusted local fixture directory (fake or sandbox)")
     evaluation = sub.add_parser("eval", help="run the evaluation suite (spends credits)")

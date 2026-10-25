@@ -30,6 +30,7 @@ from pir.github import (
     RepoTooLarge,
     ValidatedTarget,
 )
+from pir.markdown import render_markdown
 from pir.models.api import AppConfigResponse, ErrorResponse, HealthResponse, ScanAccepted
 from pir.models.report import ScanReport
 
@@ -625,3 +626,108 @@ def test_serve_builds_hosted_deps_when_live_scans_are_enabled(serve_env, monkeyp
     ((app, kwargs),) = serve_env
     assert kwargs["host"] == "127.0.0.1" and kwargs["port"] == 8000
     assert app.state.ctx.deps is not None
+
+
+# ---- Markdown export (M2-TASK-04: AC-62 server part, AC-63, AC-64) --------------------------
+
+
+async def test_ac62_report_md_renders_the_finished_scan_and_download_names_the_file(api):
+    async with client(api.app) as c:
+        accepted = await post_scan(c)
+        body = ScanAccepted.model_validate_json(accepted.content)
+        await finish(api, accepted)
+        report = ScanReport.model_validate_json((await c.get(body.report_url)).content)
+        plain = await c.get(body.report_url + ".md")
+        download = await c.get(body.report_url + ".md?download=1")
+
+    assert plain.status_code == 200
+    assert plain.headers["content-type"].startswith("text/markdown")
+    assert "content-disposition" not in plain.headers
+    assert download.content == plain.content
+    assert download.headers["content-disposition"] == (
+        f'attachment; filename="proveitreachable-demo-{SHA[:7]}.md"'
+    )
+    text = plain.text
+    assert text == render_markdown(report)
+    finding = report.findings[0]
+    i_verdict = text.index(f"### 1. {finding.verdict}")
+    i_conf = text.index(f"**Confidence:** {finding.confidence}", i_verdict)
+    i_lim = text.index("**Limitations**", i_conf)
+    assert i_verdict < i_conf < i_lim
+    assert "- Call path:" in text
+    for loc in finding.source_locations:
+        assert f"`{loc.file}:{loc.line}`" in text
+    for link in finding.advisory_links:
+        assert f"<{link.url}>" in text
+    # the same security headers as every other response
+    assert plain.headers["x-content-type-options"] == "nosniff"
+    assert "default-src 'self'" in plain.headers["content-security-policy"]
+    assert plain.headers["referrer-policy"] == "no-referrer"
+
+
+async def test_report_md_not_ready_then_scan_not_found(tmp_path, monkeypatch):
+    gate = asyncio.Event()
+    api = make_api(tmp_path, monkeypatch, gate=gate)
+    async with client(api.app) as c:
+        accepted = await post_scan(c)
+        scan_id = ScanAccepted.model_validate_json(accepted.content).scan_id
+        early = await c.get(f"/api/scans/{scan_id}/report.md")
+        gate.set()
+        await finish(api, accepted)
+        missing = await c.get("/api/scans/" + "0" * 32 + "/report.md")
+
+    assert early.status_code == 409
+    assert error_of(early).message == messages.message("report_not_ready")
+    assert missing.status_code == 404
+    assert error_of(missing).message == messages.message("scan_not_found")
+
+
+async def test_ac63_report_md_works_for_a_replay_job_with_no_live_calls(tmp_path):
+    from pir.replay import ReplayStore
+
+    fixtures = ROOT / "tests" / "fixtures" / "replays"
+
+    async def no_sleep(_seconds: float) -> None:
+        return None
+
+    h = make_harness(tmp_path / "h")
+    app = create_app(
+        h.deps,
+        web_dir=WEB,
+        eval_path=tmp_path / "latest.json",
+        replay_store=ReplayStore(fixtures, sleep=no_sleep),
+    )
+    slug = "fixture-yaml"
+    async with client(app) as c:
+        accepted = await c.post(f"/api/demos/{slug}/replay")
+        scan_id = await finish(SimpleNamespace(ctx=app.state.ctx), accepted)
+        md = await c.get(f"/api/scans/{scan_id}/report.md")
+        js = await c.get(f"/api/scans/{scan_id}/report")
+
+    assert md.status_code == 200 and js.status_code == 200
+    report = ScanReport.model_validate_json(js.content)
+    assert md.text == render_markdown(report)
+    assert md.text.startswith(f"# ProveItReachable report: {report.repo.owner}/")
+    assert h.osv_transport.requests == [] and h.tavily_transport.requests == []
+    assert h.llm.calls == [] and h.executor.calls == []
+
+
+async def test_ac64_report_md_is_absent_when_the_feature_is_off_and_json_still_works(
+    tmp_path, monkeypatch
+):
+    api = make_api(tmp_path, monkeypatch, feature_markdown_export=False)
+    async with client(api.app) as c:
+        accepted = await post_scan(c)
+        body = ScanAccepted.model_validate_json(accepted.content)
+        await finish(api, accepted)
+        md = await c.get(body.report_url + ".md")
+        md_download = await c.get(body.report_url + ".md?download=1")
+        js = await c.get(body.report_url + "?download=1")
+        config = await c.get("/api/config")
+
+    assert md.status_code == 404 and md_download.status_code == 404
+    assert "text/markdown" not in md.headers.get("content-type", "")
+    assert "content-security-policy" in md.headers  # the headers cover the 404 too
+    assert js.status_code == 200
+    ScanReport.model_validate_json(js.content)
+    assert config.json()["features"]["markdown_export"] is False

@@ -1,6 +1,6 @@
 """API routes of ARCHITECTURE section 8: scans, status, report, config, health, schema.
 
-The events (SSE), `report.md` and proof routes belong to later tasks; they get the
+The events (SSE) and proof routes belong to later tasks; they get the
 same `ApiContext` through `request.app.state.ctx` (see `get_context`).
 """
 
@@ -29,6 +29,7 @@ from pir.evaluation.metrics import load_eval_figure
 from pir.github import InvalidRepoUrl, RepoCoordinates, parse_repo_url
 from pir.jobs import JobManager, ScanNotFound
 from pir.logs import bind_scan, scan_id_var
+from pir.markdown import render_markdown
 from pir.models.api import (
     AppConfigResponse,
     DemoSummary,
@@ -144,7 +145,8 @@ def parse_scan_request(body: bytes) -> tuple[ScanRequest, RepoCoordinates]:
     return scan_request, coords
 
 
-def create_router() -> APIRouter:
+def create_router(*, markdown_export: bool = True) -> APIRouter:
+    """`markdown_export=False` (FEATURE_MARKDOWN_EXPORT) leaves `report.md` unregistered (AC-64)."""
     router = APIRouter(prefix="/api")
 
     @router.post("/scans", status_code=202)
@@ -239,6 +241,29 @@ def create_router() -> APIRouter:
             media_type="application/json",
             headers=headers,
         )
+
+    if markdown_export:
+
+        @router.get("/scans/{scan_id}/report.md")
+        async def scan_report_markdown(
+            scan_id: str, request: Request, download: str | None = None
+        ) -> Response:
+            job = _job(get_context(request), scan_id)
+            report = job.report
+            if report is None:
+                raise ApiError("report_not_ready")
+            headers = {}
+            if download == "1":
+                name = _FILENAME_CHARS.sub("-", report.repo.name)
+                sha7 = _FILENAME_CHARS.sub("-", report.repo.commit_sha[:7])
+                headers["Content-Disposition"] = (
+                    f'attachment; filename="proveitreachable-{name}-{sha7}.md"'
+                )
+            return Response(
+                content=render_markdown(report),
+                media_type="text/markdown; charset=utf-8",
+                headers=headers,
+            )
 
     @router.get("/demos")
     async def list_demos(request: Request) -> Response:
