@@ -1,0 +1,907 @@
+{
+  "$defs": {
+    "Advisory": {
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "fixed_versions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fixed Versions",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "modified": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Modified"
+        },
+        "published": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Published"
+        },
+        "severity": {
+          "enum": [
+            "critical",
+            "high",
+            "moderate",
+            "low",
+            "unknown"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Summary"
+        }
+      },
+      "required": [
+        "id",
+        "aliases",
+        "summary",
+        "severity",
+        "fixed_versions",
+        "published",
+        "modified"
+      ],
+      "title": "Advisory",
+      "type": "object"
+    },
+    "AdvisoryLink": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "osv",
+            "tavily"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Title"
+        },
+        "url": {
+          "maxLength": 2048,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "source",
+        "title"
+      ],
+      "title": "AdvisoryLink",
+      "type": "object"
+    },
+    "CallPathStep": {
+      "additionalProperties": false,
+      "properties": {
+        "edge": {
+          "enum": [
+            "entry",
+            "call",
+            "heuristic_call",
+            "vulnerable_call"
+          ],
+          "title": "Edge",
+          "type": "string"
+        },
+        "file": {
+          "title": "File",
+          "type": "string"
+        },
+        "line": {
+          "minimum": 1,
+          "title": "Line",
+          "type": "integer"
+        },
+        "symbol": {
+          "minLength": 1,
+          "title": "Symbol",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "line",
+        "edge",
+        "symbol"
+      ],
+      "title": "CallPathStep",
+      "type": "object"
+    },
+    "Dependency": {
+      "additionalProperties": false,
+      "properties": {
+        "direct": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Direct"
+        },
+        "groups": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Groups",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "osv_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Osv Error"
+        },
+        "osv_status": {
+          "enum": [
+            "checked",
+            "not_checked",
+            "not_queried"
+          ],
+          "title": "Osv Status",
+          "type": "string"
+        },
+        "resolved": {
+          "title": "Resolved",
+          "type": "boolean"
+        },
+        "source": {
+          "enum": [
+            "uv.lock",
+            "poetry.lock",
+            "Pipfile.lock",
+            "requirements.txt",
+            "uv pip compile",
+            "manifest"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "unresolved_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Unresolved Reason"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Version"
+        }
+      },
+      "required": [
+        "name",
+        "source",
+        "groups",
+        "version",
+        "resolved",
+        "unresolved_reason",
+        "direct",
+        "osv_status",
+        "osv_error"
+      ],
+      "title": "Dependency",
+      "type": "object"
+    },
+    "Finding": {
+      "additionalProperties": false,
+      "properties": {
+        "advisory": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Advisory"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "advisory_links": {
+          "items": {
+            "$ref": "#/$defs/AdvisoryLink"
+          },
+          "title": "Advisory Links",
+          "type": "array"
+        },
+        "call_path": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CallPathStep"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Call Path"
+        },
+        "confidence": {
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "explanation": {
+          "maxLength": 2000,
+          "title": "Explanation",
+          "type": "string"
+        },
+        "finding_id": {
+          "title": "Finding Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "advisory",
+            "not_checked"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Limitations",
+          "type": "array"
+        },
+        "package": {
+          "title": "Package",
+          "type": "string"
+        },
+        "proof": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Proof"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reason"
+        },
+        "reason_code": {
+          "anyOf": [
+            {
+              "enum": [
+                "vulnerable_function_not_identified",
+                "tavily_failed",
+                "nebius_failed",
+                "model_output_invalid",
+                "unsupported_reachability_claim",
+                "contradicted_by_index",
+                "osv_failed",
+                "sandbox_timeout",
+                "sandbox_failed",
+                "spend_cap_reached",
+                "scan_budget_reached",
+                "scan_timeout",
+                "finding_limit_reached"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reason Code"
+        },
+        "source_locations": {
+          "items": {
+            "$ref": "#/$defs/SourceLocation"
+          },
+          "title": "Source Locations",
+          "type": "array"
+        },
+        "verdict": {
+          "enum": [
+            "likely reachable",
+            "no reachable path detected",
+            "uncertain"
+          ],
+          "title": "Verdict",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "vulnerable_symbol": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VulnerableSymbol"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "finding_id",
+        "kind",
+        "verdict",
+        "confidence",
+        "package",
+        "version",
+        "advisory",
+        "vulnerable_symbol",
+        "advisory_links",
+        "source_locations",
+        "call_path",
+        "explanation",
+        "limitations",
+        "reason_code",
+        "reason"
+      ],
+      "title": "Finding",
+      "type": "object"
+    },
+    "Proof": {
+      "additionalProperties": false,
+      "properties": {
+        "entry": {
+          "title": "Entry",
+          "type": "string"
+        },
+        "ran_at": {
+          "format": "date-time",
+          "title": "Ran At",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "recorded_call": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Recorded Call"
+        },
+        "status": {
+          "enum": [
+            "proven",
+            "not_proven"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "reason",
+        "ran_at",
+        "entry",
+        "target",
+        "recorded_call"
+      ],
+      "title": "Proof",
+      "type": "object"
+    },
+    "RepoRef": {
+      "additionalProperties": false,
+      "properties": {
+        "commit_sha": {
+          "title": "Commit Sha",
+          "type": "string"
+        },
+        "default_branch": {
+          "title": "Default Branch",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "owner": {
+          "title": "Owner",
+          "type": "string"
+        },
+        "ref_requested": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ref Requested"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "owner",
+        "name",
+        "ref_requested",
+        "default_branch",
+        "commit_sha"
+      ],
+      "title": "RepoRef",
+      "type": "object"
+    },
+    "ReportSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "by_verdict": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "likely reachable",
+              "no reachable path detected",
+              "uncertain"
+            ]
+          },
+          "title": "By Verdict",
+          "type": "object"
+        },
+        "dependencies_checked": {
+          "minimum": 0,
+          "title": "Dependencies Checked",
+          "type": "integer"
+        },
+        "dependencies_not_checked": {
+          "minimum": 0,
+          "title": "Dependencies Not Checked",
+          "type": "integer"
+        },
+        "dependencies_total": {
+          "minimum": 0,
+          "title": "Dependencies Total",
+          "type": "integer"
+        },
+        "dependencies_unresolved": {
+          "minimum": 0,
+          "title": "Dependencies Unresolved",
+          "type": "integer"
+        },
+        "findings_total": {
+          "minimum": 0,
+          "title": "Findings Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "dependencies_total",
+        "dependencies_checked",
+        "dependencies_unresolved",
+        "dependencies_not_checked",
+        "findings_total",
+        "by_verdict"
+      ],
+      "title": "ReportSummary",
+      "type": "object"
+    },
+    "Resolution": {
+      "additionalProperties": false,
+      "properties": {
+        "compiled_from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Compiled From"
+        },
+        "lockfile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Lockfile"
+        },
+        "method": {
+          "enum": [
+            "lockfile",
+            "compiled",
+            "failed"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Notes",
+          "type": "array"
+        },
+        "python_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Python Version"
+        }
+      },
+      "required": [
+        "method",
+        "python_version",
+        "lockfile",
+        "compiled_from",
+        "notes"
+      ],
+      "title": "Resolution",
+      "type": "object"
+    },
+    "SourceLocation": {
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "title": "File",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "import",
+            "call",
+            "reference",
+            "definition"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "line": {
+          "minimum": 1,
+          "title": "Line",
+          "type": "integer"
+        },
+        "snippet": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Snippet"
+        }
+      },
+      "required": [
+        "file",
+        "line",
+        "kind",
+        "snippet"
+      ],
+      "title": "SourceLocation",
+      "type": "object"
+    },
+    "StepStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "finished_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Finished At"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Message"
+        },
+        "name": {
+          "enum": [
+            "resolve",
+            "osv",
+            "research",
+            "analysis",
+            "reasoning",
+            "report"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Started At"
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "running",
+            "done",
+            "failed",
+            "skipped"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "tools": {
+          "items": {
+            "enum": [
+              "lockfile",
+              "uv",
+              "sandbox",
+              "osv",
+              "tavily",
+              "nemotron",
+              "ast",
+              "verdict_gate"
+            ],
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "state",
+        "tools",
+        "started_at",
+        "finished_at",
+        "message"
+      ],
+      "title": "StepStatus",
+      "type": "object"
+    },
+    "VulnerableSymbol": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_urls": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Urls",
+          "type": "array"
+        },
+        "identified": {
+          "title": "Identified",
+          "type": "boolean"
+        },
+        "not_identified_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Not Identified Reason"
+        },
+        "symbols": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Symbols",
+          "type": "array"
+        }
+      },
+      "required": [
+        "identified",
+        "symbols",
+        "not_identified_reason",
+        "evidence_urls"
+      ],
+      "title": "VulnerableSymbol",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "dependencies": {
+      "items": {
+        "$ref": "#/$defs/Dependency"
+      },
+      "title": "Dependencies",
+      "type": "array"
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/Finding"
+      },
+      "title": "Findings",
+      "type": "array"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    },
+    "model": {
+      "title": "Model",
+      "type": "string"
+    },
+    "outcome": {
+      "enum": [
+        "findings",
+        "clean",
+        "incomplete"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "repo": {
+      "$ref": "#/$defs/RepoRef"
+    },
+    "resolution": {
+      "$ref": "#/$defs/Resolution"
+    },
+    "scan_id": {
+      "title": "Scan Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/StepStatus"
+      },
+      "title": "Steps",
+      "type": "array"
+    },
+    "summary": {
+      "$ref": "#/$defs/ReportSummary"
+    },
+    "tool_version": {
+      "title": "Tool Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "scan_id",
+    "tool_version",
+    "model",
+    "generated_at",
+    "repo",
+    "outcome",
+    "resolution",
+    "steps",
+    "dependencies",
+    "findings",
+    "summary",
+    "limitations"
+  ],
+  "title": "ScanReport",
+  "type": "object"
+}

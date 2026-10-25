@@ -1,0 +1,395 @@
+"""Report builder and the deterministic verdict gate (ARCHITECTURE sections 7.7 and 9.2).
+
+The model proposes; this module decides. Nothing the model says reaches a report without passing
+the rules below, and every output is validated by the strict models.
+"""
+
+from collections.abc import Collection, Iterable
+from dataclasses import dataclass, field
+from datetime import datetime
+
+from pir.models import VERDICTS, Confidence, ReasonCode, Severity, Verdict
+from pir.models.index import AnalysisIndex, TargetSite
+from pir.models.reasoning import ModelVerdict, ReasoningOutcome
+from pir.models.report import (
+    NOT_IDENTIFIED_PREFIX,
+    SCHEMA_VERSION,
+    SCOPE_PREFIX,
+    STEP_TOOL_ORDER,
+    VERDICT_ORDER,
+    Advisory,
+    AdvisoryLink,
+    CallPathStep,
+    Dependency,
+    Finding,
+    RepoRef,
+    ReportSummary,
+    Resolution,
+    ScanReport,
+    SourceLocation,
+    StepStatus,
+    VulnerableSymbol,
+    compute_finding_id,
+    expected_outcome,
+)
+from pir.models.research import AdvisoryResearch
+
+_CONFIDENCE_RANK: dict[str, int] = {"high": 0, "medium": 1, "low": 2}
+_SEVERITY_RANK: dict[str, int] = {"critical": 0, "high": 1, "moderate": 2, "low": 3, "unknown": 4}
+_MAX_TEXT = 2000
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """One dependency (and advisory) to turn into a finding; `advisory=None` means not_checked."""
+
+    package: str
+    version: str
+    advisory: Advisory | None
+    advisory_links: list[AdvisoryLink] = field(default_factory=list)
+    direct: bool | None = None  # False = transitive
+    required_by: str | None = None  # a direct dependency that pulls this one in
+
+
+@dataclass(frozen=True)
+class ScanContext:
+    """Everything build_report needs besides the findings."""
+
+    scan_id: str
+    tool_version: str
+    model: str
+    generated_at: datetime
+    repo: RepoRef
+    resolution: Resolution
+    steps: list[StepStatus]
+    dependencies: list[Dependency]
+    limitations: list[str]
+
+
+def step_tools(step: str, used: Iterable[str]) -> list[str]:
+    """The step-tools rule: tools a step used, in the canonical order of section 6.2."""
+    order = STEP_TOOL_ORDER[step]
+    used_set = set(used)
+    unknown = used_set - set(order)
+    if unknown:
+        raise ValueError(f"tools {sorted(unknown)} are not allowed for step {step}")
+    return [tool for tool in order if tool in used_set]
+
+
+def _truncate(text: str, limit: int = _MAX_TEXT) -> str:
+    return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+def _merge_links(*groups: Iterable[AdvisoryLink]) -> list[AdvisoryLink]:
+    seen: set[str] = set()
+    merged: list[AdvisoryLink] = []
+    for group in groups:
+        for link in group:
+            if link.url not in seen:
+                seen.add(link.url)
+                merged.append(link)
+    return merged
+
+
+def _vulnerable_symbol(research: AdvisoryResearch | None, urls: set[str]) -> VulnerableSymbol:
+    if research is not None and research.identified:
+        evidence = [u for u in research.evidence_urls if u in urls]
+        return VulnerableSymbol(
+            identified=True, symbols=list(research.symbols), not_identified_reason=None,
+            evidence_urls=evidence,
+        )  # fmt: skip
+    detail = research.not_identified_reason if research is not None else None
+    if detail and not detail.startswith(NOT_IDENTIFIED_PREFIX):
+        detail = f"{NOT_IDENTIFIED_PREFIX}: {detail}"
+    return VulnerableSymbol(
+        identified=False,
+        symbols=[],
+        not_identified_reason=detail or f"{NOT_IDENTIFIED_PREFIX}: no research result",
+        evidence_urls=[],
+    )
+
+
+def _scope_statement(index: AnalysisIndex, candidate: Candidate) -> str:
+    parsed = sum(1 for f in index.files if f.parsed)
+    skipped = sorted({f.skip_reason for f in index.files if f.skip_reason})
+    notes = [f"{len(index.files) - parsed} skipped: " + ", ".join(skipped)] if skipped else []
+    if index.truncated:
+        notes.append("index truncated at the size limit")
+    detail = f" ({'; '.join(notes)})" if notes else ""
+    modules = ", ".join(f"`{m}`" for m in index.target_modules) or "the package"
+    transitive = ""
+    if candidate.direct is False:
+        parent = f" of `{candidate.required_by}`" if candidate.required_by else ""
+        transitive = f" (this is a transitive dependency{parent})"
+    return (
+        f"{SCOPE_PREFIX} {parsed} of {len(index.files)} Python files parsed{detail}; examined "
+        f"imports, calls and references of {modules} in repository code. Not examined: dynamic "
+        f"imports, getattr or reflection, code inside other dependencies{transitive}, C "
+        "extensions, runtime configuration."
+    )
+
+
+def _min_confidence(a: str, b: str) -> Confidence:
+    return a if _CONFIDENCE_RANK[a] >= _CONFIDENCE_RANK[b] else b  # type: ignore[return-value]
+
+
+def _valid_locations(
+    locations: list[SourceLocation], index: AnalysisIndex, seen: Collection[tuple[str, int]]
+) -> list[SourceLocation]:
+    lines = {f.path: f.lines for f in index.files}
+    return [
+        loc
+        for loc in locations
+        if loc.file in lines and 1 <= loc.line <= lines[loc.file] and (loc.file, loc.line) in seen
+    ]
+
+
+def _first_failed_reachability_rule(
+    path: list[CallPathStep] | None,
+    symbols: set[str],
+    index: AnalysisIndex,
+    seen: Collection[tuple[str, int]],
+) -> tuple[str | None, TargetSite | None]:
+    """Gate rule 2. Returns (failed rule text or None, the TargetSite the path ends on)."""
+    if not path:
+        return "rule 2: likely reachable has no call path", None
+    lines = {f.path: f.lines for f in index.files}
+    for step in path:
+        if step.file not in lines:
+            return f"rule 2: step {step.file}:{step.line} is not a file in the index", None
+        if not 1 <= step.line <= lines[step.file]:
+            return f"rule 2: step {step.file}:{step.line} is outside the file's line range", None
+        if (step.file, step.line) not in seen:
+            return f"rule 2: step {step.file}:{step.line} was never returned by the ast tool", None
+    last = path[-1]
+    for site in index.target_sites:
+        if site.file == last.file and site.line == last.line and site.target in symbols:
+            return None, site
+    return f"rule 2: last step {last.file}:{last.line} is not a use of the vulnerable symbol", None
+
+
+def _starts_at_entry(path: list[CallPathStep], index: AnalysisIndex) -> bool:
+    first = path[0]
+    entry_ids = {d.id for d in index.defs if d.entry_kind is not None}
+    module_level = first.symbol == "<module>" or first.symbol.endswith(":<module>")
+    return first.edge == "entry" and (first.symbol in entry_ids or module_level)
+
+
+def _contradicting_site(symbols: set[str], index: AnalysisIndex) -> TargetSite | None:
+    test_files = {f.path for f in index.files if f.is_test}
+    for site in index.target_sites:
+        if site.target in symbols and site.file not in test_files:
+            return site
+    return None
+
+
+@dataclass(frozen=True)
+class _Base:
+    """What every finding of one candidate shares."""
+
+    candidate: Candidate
+    symbol: VulnerableSymbol
+    links: list[AdvisoryLink]
+
+    def make(
+        self,
+        verdict: Verdict,
+        confidence: Confidence,
+        *,
+        explanation: str,
+        limitations: list[str],
+        source_locations: list[SourceLocation],
+        call_path: list[CallPathStep] | None = None,
+        reason_code: ReasonCode | None = None,
+        reason: str | None = None,
+    ) -> Finding:
+        cand = self.candidate
+        advisory = cand.advisory
+        return Finding(
+            finding_id=compute_finding_id(
+                cand.package, cand.version, advisory.id if advisory else None
+            ),
+            kind="advisory" if advisory else "not_checked",
+            verdict=verdict,
+            confidence=confidence,
+            package=cand.package,
+            version=cand.version,
+            advisory=advisory,
+            vulnerable_symbol=self.symbol if advisory else None,
+            advisory_links=self.links if advisory else [],
+            source_locations=source_locations,
+            call_path=call_path,
+            explanation=_truncate(explanation),
+            limitations=limitations,
+            reason_code=reason_code,
+            reason=reason,
+        )
+
+    def uncertain(
+        self,
+        code: ReasonCode,
+        reason: str,
+        *,
+        explanation: str | None = None,
+        limitations: list[str] | None = None,
+        source_locations: list[SourceLocation] | None = None,
+    ) -> Finding:
+        return self.make(
+            "uncertain",
+            "low",
+            explanation=explanation or f"No reachability verdict was established: {reason}",
+            limitations=limitations or [f"No verdict: {reason}"],
+            source_locations=source_locations or [],
+            reason_code=code,
+            reason=reason,
+        )
+
+
+def build_finding(
+    candidate: Candidate,
+    research: AdvisoryResearch | None,
+    outcome: ReasoningOutcome | None,
+    index: AnalysisIndex | None,
+    forced: tuple[ReasonCode, str] | None = None,
+    *,
+    seen_locations: Collection[tuple[str, int]] = (),
+) -> Finding:
+    """The verdict gate (section 9.2). `seen_locations` is `AstTool.seen_locations`."""
+    links = _merge_links(candidate.advisory_links, research.links if research else [])
+    symbol = _vulnerable_symbol(research, {link.url for link in links})
+    base = _Base(candidate, symbol, links)
+    if candidate.advisory is None:
+        code, reason = forced or ("osv_failed", "the OSV query failed for this dependency")
+        return base.uncertain(code, reason)
+    if forced is not None:
+        return base.uncertain(*forced)
+    if not symbol.identified:
+        code = research.failure if research and research.failure else None
+        reason = symbol.not_identified_reason or NOT_IDENTIFIED_PREFIX
+        return base.uncertain(code or "vulnerable_function_not_identified", reason)
+    if outcome is None or outcome.verdict is None:
+        code = outcome.failure if outcome and outcome.failure else "model_output_invalid"
+        detail = (outcome.failure_detail if outcome else None) or "no valid model verdict"
+        return base.uncertain(code, detail)
+    if index is None:
+        return base.uncertain("sandbox_failed", "no code index is available to check the claim")
+    return _gate(base, outcome.verdict, index, seen_locations)
+
+
+def _incomplete(index: AnalysisIndex) -> bool:
+    return index.truncated or any(not f.parsed for f in index.files)
+
+
+def _gate(
+    base: _Base, verdict: ModelVerdict, index: AnalysisIndex, seen: Collection[tuple[str, int]]
+) -> Finding:
+    """Rules 2 to 5 for a model verdict on a grounded vulnerable symbol."""
+    symbols = set(base.symbol.symbols)
+    locations = _valid_locations(verdict.source_locations, index, seen)
+    limitations = list(verdict.limitations)
+    if len(locations) < len(verdict.source_locations):
+        limitations.append(
+            "Source locations given by the model that are not in the index were dropped."
+        )
+
+    def downgrade(code: ReasonCode, reason: str) -> Finding:
+        return base.uncertain(
+            code,
+            reason,
+            explanation=f"Downgraded from '{verdict.verdict}': {reason}. {verdict.explanation}",
+            limitations=limitations,
+            source_locations=locations,
+        )
+
+    if verdict.verdict == "uncertain":
+        return downgrade(
+            "unsupported_reachability_claim", "the model could not establish a reachability claim"
+        )
+    if verdict.verdict == "likely reachable":
+        failed, site = _first_failed_reachability_rule(verdict.call_path, symbols, index, seen)
+        if failed is not None or site is None or verdict.call_path is None:
+            return downgrade("unsupported_reachability_claim", failed or "rule 2: no call path")
+        path = verdict.call_path
+        heuristic = any(step.edge == "heuristic_call" for step in path)
+        cap: Confidence = "high" if not heuristic and _starts_at_entry(path, index) else "medium"
+        if heuristic:
+            limitations.append("The call path includes heuristic (name-based) edges.")
+        if _incomplete(index):
+            limitations.append("Some files were skipped or the index was truncated.")
+        locations = locations or [
+            SourceLocation(file=site.file, line=site.line, kind=site.kind, snippet=site.snippet)
+        ]
+        return base.make(
+            "likely reachable",
+            _min_confidence(verdict.confidence, cap),
+            explanation=verdict.explanation,
+            limitations=limitations,
+            source_locations=locations,
+            call_path=path,
+        )
+    site = _contradicting_site(symbols, index)
+    if site is not None:
+        return downgrade(
+            "contradicted_by_index",
+            f"rule 3: the index has a use of {site.target} at {site.file}:{site.line}",
+        )
+    confidence = verdict.confidence
+    if _incomplete(index):
+        confidence = _min_confidence(confidence, "medium")
+    if base.candidate.direct is False:
+        confidence = _min_confidence(confidence, "low")
+    limitations.append(_scope_statement(index, base.candidate))
+    if not locations:
+        limitations.append("No import or call site found.")
+    return base.make(
+        "no reachable path detected",
+        confidence,
+        explanation=verdict.explanation,
+        limitations=limitations,
+        source_locations=locations,
+    )
+
+
+def rank(findings: list[Finding]) -> list[Finding]:
+    """Rule 6: verdict, then confidence, severity, package name and advisory ID."""
+
+    def key(f: Finding) -> tuple[int, int, int, str, str]:
+        severity: Severity = f.advisory.severity if f.advisory else "unknown"
+        return (
+            VERDICT_ORDER[f.verdict],
+            _CONFIDENCE_RANK[f.confidence],
+            _SEVERITY_RANK[severity],
+            f.package,
+            f.advisory.id if f.advisory else "",
+        )
+
+    return sorted(findings, key=key)
+
+
+def build_report(ctx: ScanContext, findings: list[Finding]) -> ScanReport:
+    """Rank, summarise and strictly validate the final report."""
+    ranked = rank(findings)
+    deps = sorted(ctx.dependencies, key=lambda d: d.name)
+    summary = ReportSummary(
+        dependencies_total=len(deps),
+        dependencies_checked=sum(d.osv_status == "checked" for d in deps),
+        dependencies_unresolved=sum(not d.resolved for d in deps),
+        dependencies_not_checked=sum(d.osv_status == "not_checked" for d in deps),
+        findings_total=len(ranked),
+        by_verdict={v: sum(f.verdict == v for f in ranked) for v in VERDICTS},
+    )
+    return ScanReport(
+        schema_version=SCHEMA_VERSION,  # type: ignore[arg-type]
+        scan_id=ctx.scan_id,
+        tool_version=ctx.tool_version,
+        model=ctx.model,
+        generated_at=ctx.generated_at,
+        repo=ctx.repo,
+        outcome=expected_outcome(ctx.steps, deps, ranked),
+        resolution=ctx.resolution,
+        steps=ctx.steps,
+        dependencies=deps,
+        findings=ranked,
+        summary=summary,
+        limitations=ctx.limitations,
+    )

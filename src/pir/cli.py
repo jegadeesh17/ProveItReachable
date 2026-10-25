@@ -1,11 +1,13 @@
 """Command line entry point: `python -m pir <command>` (ARCHITECTURE section 21)."""
 
 import argparse
+import json
 import sys
 
 from pydantic import ValidationError
 
 from pir.config import load_settings, missing_names, required_for
+from pir.models.report import ScanReport
 
 
 def _check_config(command: str) -> int:
@@ -24,11 +26,17 @@ def _check_config(command: str) -> int:
     return 0
 
 
+def report_schema_json() -> str:
+    """The report JSON Schema as published in schemas/report.schema.json."""
+    return json.dumps(ScanReport.model_json_schema(), indent=2, sort_keys=True) + "\n"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pir", description="ProveItReachable")
     sub = parser.add_subparsers(dest="command")
     check = sub.add_parser("check-config", help="name missing variables; never prints a value")
     check.add_argument("--for", dest="target", choices=["scan", "eval", "serve"], default="scan")
+    sub.add_parser("schema", help="print the report JSON Schema")
     return parser
 
 
@@ -37,5 +45,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "check-config":
         return _check_config(args.target)
+    if args.command == "schema":
+        sys.stdout.write(report_schema_json())
+        return 0
     parser.print_help(sys.stderr)
     return 2
