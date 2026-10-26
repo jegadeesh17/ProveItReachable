@@ -42,6 +42,7 @@ Each significant technical decision for ProveItReachable, with its reasons, the 
 | [ADR-0036](#adr-0036-ship-the-published-eval-summary-in-the-space-image) | Ship the published eval summary in the Space image | Accepted | 2026-10-26 |
 | [ADR-0037](#adr-0037-call-path-matching-through-default-argument-equivalences-and-inferred-source-roots) | Call-path matching through default-argument equivalences and inferred source roots | Accepted | 2026-10-26 |
 | [ADR-0038](#adr-0038-a-langsmith-run-per-pipeline-step-finding-and-tool-call) | A LangSmith run per pipeline step, finding and tool call | Accepted | 2026-10-26 |
+| [ADR-0039](#adr-0039-call-chain-proof-runs-main-block-entries-as-scripts-and-stubs-the-call-the-repository-makes) | Call-chain proof runs main-block entries as scripts and stubs the call the repository makes | Accepted | 2026-10-26 |
 
 ## ADR-0001: Python and FastAPI service with typed schemas
 
@@ -1077,3 +1078,38 @@ Status: Accepted
 ### Consequences
 
 Each eval case and live scan shows a readable tree in LangSmith. The tracing helpers, the pipeline's step runner, the researcher and the tool-calling loop change; reports, logs and the API do not. A new acceptance criterion tests the tree's shape; one eval run is needed to confirm it in LangSmith.
+
+## ADR-0039: Call-chain proof runs main-block entries as scripts and stubs the call the repository makes
+
+Date: 2026-10-26
+Status: Accepted
+
+### Context
+
+The call-chain proof ([ADR-0018](#adr-0018-call-chain-proof-with-a-recording-stub-gated-and-cuttable), [ARCHITECTURE.md](ARCHITECTURE.md) section 16) was written for entries that are functions: it imports the entry's module and calls the function with placeholder values. The flagship demo, PyRL, has a different entry. Its validated call path starts at `main:<module>`, whose kind is `main_block` ([ADR-0037](#adr-0037-call-path-matching-through-default-argument-equivalences-and-inferred-source-roots)): the vulnerable call sits inside `if __name__ == "__main__":`. Importing a file does not run that block, so the proof would always say "not proven" for the demo the user wants to show. The user approved building the proof so that it works for this demo (plan approved 2026-10-26).
+
+Two more details of PyRL would also defeat the proof as written:
+
+1. **The repository calls a different name than the vulnerable symbol.** PyRL calls `yaml.load(f)`; the path was found because, on PyYAML 5.3, that call means `yaml.FullLoader` (ADR-0037). A stub on `yaml.full_load` or `yaml.FullLoader` would never be called by name, and a stub on any `yaml.load` call would also fire for safe calls that pass a `Loader`.
+2. **The script keeps running after the vulnerable call.** PyRL loads its settings and then trains. With the stub returning a placeholder, the script could run past the 60-second limit, and the proof would report a timeout even though the call was reached.
+
+### Decision
+
+- **Main-block entries run as a script.** When the entry is a whole module (`<module>`) and the file has a top-level `if __name__ == "__main__":` guard (checked inside the Sandbox with the same code-reading check as the index; nothing runs for the check), the proof runs the file with Python's `runpy.run_path(<file>, run_name="__main__")`, the way `python <file>` runs it: the file's folder first on the import path, the working folder at the repository root, `sys.argv` set to just the file's path, and an empty standard input. Other whole-module entries are imported, which runs their module-level code. Function entries are unchanged.
+- **The stub sits on the call the repository makes.** The proof stubs the name in the last step of the call path (for PyRL, `yaml.load`). When that step was matched only through a default-argument equivalence, the proof also names that exact line and counts only calls made from it, because only that line is known from the code to leave the argument out.
+- **The first recorded call ends the run.** The stub records the repository file and line that called it, then stops the script. A watchdog shortly before the time limit reports whatever was recorded, so a reached call stays "proven" even when the script ignores the stop.
+- **Safety and limits are unchanged.** The run is the existing `proof-run` step: same image with the pinned wheels, network off, no secrets, the same 60-second limit and the same recording stub. No command-line arguments, settings or input are invented, and no exploit payloads are passed (only the harness's own placeholders).
+- **Every ending is a stated result, never a crash.** A script that exits (`SystemExit`) ends the run; if it exited before the call it is "not proven" with its exit code. An `argparse` failure on missing required arguments is "not proven" with the reason that the script needs command-line arguments the proof does not supply. Any other error is "not proven" with the error's class name. Text the script prints is never copied into a reason. The harness always writes exactly one result and then ends its own process, and the server treats any proof failure as "not proven", so the scan, the job and the verdict are never affected.
+- No new dependency; the agent's protocol version stays 1. The `proof-run` step gains an optional `--site <file>:<line>` argument for the equivalence case.
+
+### Alternatives considered
+
+- **Import the module and call `main()` if one exists:** many scripts, PyRL among them, keep their logic in the guarded block itself, so there is nothing to call.
+- **Copy the guarded block into a new function and call it:** rewriting repository code changes what is proven and breaks file and line numbers.
+- **Supply guessed command-line arguments so `argparse` passes:** guessed values are invented input, close to a payload, and could steer the script into paths the real use never takes. Reporting "needs arguments" is honest.
+- **Stub the vulnerable symbol (`yaml.FullLoader`) instead of the called name:** it is reached only inside PyYAML, so the recorded caller would be a library file, not the repository line the report shows.
+- **Run the script in a separate child process inside the Sandbox:** stronger isolation from the harness, but a second process layer for a guarantee the single result line, the watchdog and the final process exit already give.
+
+### Consequences
+
+The flagship demo's path can be shown as "proven" with the exact repository line, in a few seconds instead of a timeout. Scripts that need command-line arguments, files or input before reaching the call are "not proven" with a clear reason; the proof is weaker for them, which is stated, not hidden. The `proof-run` step gains one optional argument, and the proof tests gain main-block fixtures (reached, `argparse` failure, early exit, a safe call before the vulnerable one). A new acceptance criterion covers this. Section 16 of [ARCHITECTURE.md](ARCHITECTURE.md) holds the details.

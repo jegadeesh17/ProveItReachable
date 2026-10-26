@@ -183,6 +183,7 @@ Format: Given / When / Then. Each criterion is tagged with its milestone and jou
 - **AC-68 [M2, J6] Proof timeout.** Given the Sandbox exceeds the proof timeout, when proof runs, then the step is reported as `uncertain` / "not proven" with reason "sandbox timeout" and the scan completes. Given a pinned dependency with no published wheel, when proof installs dependencies, then that dependency is not installed or built, and the step is reported as "not proven" with an `uncertain` reason that starts "no wheel", the verdict is not upgraded, and the scan completes.
 - **AC-69 [M2, J6] No exploit payloads.** Given any proof run, when inputs are inspected, then only recording stubs and the repo's own entry function are used; no exploit payload or crafted malicious input is generated, stored or sent.
 - **AC-70 [M2, J6] Proof only in Sandbox.** Given a proof run, when it executes, then all repo code runs only in the Sandbox (see AC-29).
+- **AC-82 [M2, J6] Call-chain proof from a main block.** Given a call path whose entry is a module's `__main__` block, when the proof runs, then it runs the file as a script with no arguments or input; it is proven when the repository's vulnerable call line is reached; it is not proven, with a stated reason and no error, when the script exits, needs arguments, or fails first; and the verdict is unchanged.
 
 ### 3.14 Production operations (NFR-11 to NFR-13)
 
