@@ -441,3 +441,105 @@ def test_main_block_is_an_entry_and_nested_calls_are_its_edges(default_loader): 
 
 def test_default_loader_fixture_index_validates(default_loader):  # AC-80
     AnalysisIndex.model_validate(default_loader)
+
+
+# --- inferred source roots (ADR-0037, AC-81) ---
+
+_ROOT_EDGE = ("run.train:main", "lib.core.config:update_config")
+
+
+def _edges(index: dict) -> dict[tuple[str, str], bool]:
+    return {(e["caller"], e["callee"]): e["heuristic"] for e in index["edges"]}
+
+
+def _copy_source_root(tmp_path: Path) -> Path:
+    root = tmp_path / "repo"
+    shutil.copytree(FIXTURES / "source_root", root)
+    return root
+
+
+@pytest.fixture(scope="module")
+def source_root() -> dict:
+    return _build("source_root", ["yaml"])
+
+
+def test_source_root_import_links_to_the_unique_suffix_module_as_heuristic(source_root):  # AC-81
+    edges = _edges(source_root)
+    assert edges[_ROOT_EDGE] is True
+    assert edges[("run.train:<module>", "run.train:main")] is False
+    kinds = {d["id"]: d["entry_kind"] for d in source_root["defs"]}
+    assert kinds["run.train:<module>"] == "main_block"
+    site = next(s for s in source_root["target_sites"] if s["target"] == "yaml.FullLoader")
+    assert (site["file"], site["caller"]) == ("lib/core/config.py", _ROOT_EDGE[1])
+    AnalysisIndex.model_validate(source_root)
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        "sys.path.insert(0, 'lib')",
+        "sys.path.append('lib')",
+        "site.addsitedir('lib')",
+    ],
+)
+def test_each_import_path_call_enables_source_roots(tmp_path, call):  # AC-81
+    root = _copy_source_root(tmp_path)
+    (root / "run" / "_init_paths.py").write_text(f"import site\nimport sys\n{call}\n")
+    assert _edges(_build("", ["yaml"], root=root))[_ROOT_EDGE] is True
+
+
+def test_no_import_path_call_means_no_source_root_edge(tmp_path):  # AC-81
+    root = _copy_source_root(tmp_path)
+    (root / "run" / "_init_paths.py").write_text(
+        "import os.path as osp\nthis_dir = osp.dirname('x')\n"
+    )
+    index = _build("", ["yaml"], root=root)
+    assert not any(c == "lib.core.config:update_config" for _, c in _edges(index))
+    assert ("run.train:<module>", "run.train:main") in _edges(index)
+
+
+def test_an_import_path_call_only_in_tests_is_ignored(tmp_path):  # AC-81
+    root = _copy_source_root(tmp_path)
+    (root / "run" / "_init_paths.py").unlink()
+    (root / "tests").mkdir()
+    (root / "tests" / "test_paths.py").write_text("import sys\nsys.path.insert(0, 'lib')\n")
+    index = _build("", ["yaml"], root=root)
+    assert not any(c == "lib.core.config:update_config" for _, c in _edges(index))
+
+
+def test_two_modules_with_the_same_suffix_mean_no_source_root_edge(tmp_path):  # AC-81
+    root = _copy_source_root(tmp_path)
+    (root / "other" / "core").mkdir(parents=True)
+    (root / "other" / "core" / "config.py").write_text(
+        "def update_config(path):\n    return path\n"
+    )
+    index = _build("", ["yaml"], root=root)
+    assert not any(c.endswith(":update_config") for _, c in _edges(index))
+
+
+def test_a_repo_top_level_module_blocks_the_source_root_fallback(tmp_path):  # AC-81
+    root = _copy_source_root(tmp_path)
+    (root / "core").mkdir()
+    (root / "core" / "other.py").write_text("X = 1\n")  # `core` is now a top-level repo package
+    index = _build("", ["yaml"], root=root)
+    assert not any(c == "lib.core.config:update_config" for _, c in _edges(index))
+
+
+def test_a_target_module_blocks_the_source_root_fallback(tmp_path):  # AC-81
+    root = _copy_source_root(tmp_path)
+    index = _build("", ["core"], root=root)
+    assert not any(c == "lib.core.config:update_config" for _, c in _edges(index))
+
+
+def test_imports_that_resolve_normally_stay_non_heuristic(tmp_path):  # AC-81
+    root = _copy_source_root(tmp_path)
+    (root / "run" / "train.py").write_text(
+        "from lib.core.config import update_config\n\n\ndef main():\n    update_config('x')\n"
+    )
+    assert _edges(_build("", ["yaml"], root=root))[_ROOT_EDGE] is False
+
+
+def test_source_root_index_is_deterministic(source_root):  # AC-81, AC-14
+    assert agent_index.index_json(_build("source_root", ["yaml"])) == agent_index.index_json(
+        source_root
+    )

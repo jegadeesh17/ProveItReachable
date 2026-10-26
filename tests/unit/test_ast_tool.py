@@ -1,6 +1,7 @@
 """AstTool: the seven section 9.1 tools over an index (M1-TASK-10; AC-17)."""
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -414,3 +415,108 @@ def test_find_call_sites_never_matches_a_loader_call_through_the_table(  # AC-80
 def test_find_call_sites_without_package_has_no_implied_sites(default_loader_index):  # AC-80
     tool = AstTool(default_loader_index)
     assert _ok(tool, "find_call_sites", {"symbol": "yaml.full_load"})["sites"] == []
+
+
+# --- inferred source roots (ADR-0037, AC-81) ---
+
+
+def _source_root_index(root: Path) -> AnalysisIndex:
+    return AnalysisIndex.model_validate(agent_index.build_index(str(root), SHA, ["yaml"]))
+
+
+@pytest.fixture(scope="module")
+def source_root_index() -> AnalysisIndex:
+    return _source_root_index(FIXTURES / "source_root")
+
+
+def _loader_paths(index: AnalysisIndex) -> list[dict]:
+    tool = AstTool(index, package="PyYAML", version="5.3.1")
+    return _ok(tool, "find_paths", {"symbol": "yaml.FullLoader"})["paths"]
+
+
+def _source_root_finding(index: AnalysisIndex):
+    tool = AstTool(index, package="PyYAML", version="5.3.1")
+    found = _ok(tool, "find_paths", {"symbol": "yaml.FullLoader"})["paths"]
+    assert found
+    steps = found[0]["steps"]
+    verdict = ModelVerdict.model_validate(
+        {
+            "verdict": "likely reachable",
+            "confidence": "high",
+            "call_path": steps,
+            "source_locations": [],
+            "explanation": "Reached from the training script.",
+            "limitations": ["Static analysis only."],
+        }
+    )
+    advisory = Advisory(
+        id="GHSA-8q59-q68h-6hv4",
+        aliases=[],
+        summary="yaml.FullLoader",
+        severity="high",
+        fixed_versions=[],
+        published=None,
+        modified=None,
+    )
+    link = AdvisoryLink(
+        url="https://osv.dev/vulnerability/GHSA-8q59-q68h-6hv4", source="osv", title=None
+    )
+    research = AdvisoryResearch(
+        advisory_id=advisory.id,
+        identified=True,
+        not_identified_reason=None,
+        from_cache=False,
+        symbols=["yaml.FullLoader"],
+        links=[link],
+        evidence_urls=[],
+        failure=None,
+    )
+    outcome = ReasoningOutcome(
+        verdict=verdict, tool_calls=[], attempts=1, failure=None, failure_detail=None
+    )
+    candidate = Candidate(package="pyyaml", version="5.3.1", advisory=advisory, direct=True)
+    return build_finding(candidate, research, outcome, index, seen_locations=tool.seen_locations)
+
+
+def test_find_paths_crosses_the_inferred_source_root_as_a_heuristic_path(  # AC-81
+    source_root_index,
+):
+    (path,) = _loader_paths(source_root_index)
+    assert path["heuristic"] is True
+    steps = path["steps"]
+    assert [(s["symbol"], s["edge"]) for s in steps] == [
+        ("run.train:<module>", "entry"),
+        ("run.train:main", "call"),
+        ("lib.core.config:update_config", "heuristic_call"),
+        ("yaml.FullLoader", "vulnerable_call"),
+    ]
+    assert steps[-1]["file"] == "lib/core/config.py"
+
+
+def test_likely_reachable_through_a_source_root_is_capped_at_medium(source_root_index):  # AC-81
+    finding = _source_root_finding(source_root_index)
+    assert finding.verdict == "likely reachable"
+    assert finding.confidence == "medium"  # the model said high
+    assert any(
+        "heuristic edges (name-based or an inferred import root)" in limitation
+        for limitation in finding.limitations
+    )
+
+
+def _without_import_path_call(root: Path) -> None:
+    (root / "run" / "_init_paths.py").write_text("import os.path as osp\n")
+
+
+def _with_duplicate_suffix(root: Path) -> None:
+    (root / "other" / "core").mkdir(parents=True)
+    (root / "other" / "core" / "config.py").write_text(
+        "def update_config(path):\n    return path\n"
+    )
+
+
+@pytest.mark.parametrize("variant", [_without_import_path_call, _with_duplicate_suffix])
+def test_find_paths_returns_no_path_for_the_negative_variants(tmp_path, variant):  # AC-81
+    root = tmp_path / "repo"
+    shutil.copytree(FIXTURES / "source_root", root)
+    variant(root)
+    assert _loader_paths(_source_root_index(root)) == []

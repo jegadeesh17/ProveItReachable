@@ -56,6 +56,10 @@ CLI_ATTRS = frozenset({"command", "group"})
 TARGET_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _NEWLINE_RE = re.compile(r"\r\n|\r|\n")
 _MODULE_CALLER = "<module>"
+# Calls that put a repository folder on Python's import path (ADR-0037, inferred source roots).
+_PATH_CALLS = frozenset(
+    {("sys", ("path", "insert")), ("sys", ("path", "append")), ("site", ("addsitedir",))}
+)
 
 
 class _Scope:
@@ -114,6 +118,7 @@ class _Facts:
     sites: list[dict[str, Any]] = field(default_factory=list)
     has_main_guard: bool = False
     has_module_calls: bool = False
+    sets_import_path: bool = False
 
 
 def module_name_for(path: str) -> tuple[str, bool]:
@@ -358,6 +363,8 @@ def _enter_call(node: ast.Call, scope: _Scope, facts: _Facts, stack: list) -> No
     func = node.func
     chain = _chain(func)
     if chain is not None:
+        if (chain[0], chain[1]) in _PATH_CALLS:
+            facts.sets_import_path = True
         positional = None if any(isinstance(a, ast.Starred) for a in node.args) else len(node.args)
         names = (
             None
@@ -450,7 +457,7 @@ def _emit_sites(facts: _Facts, targets: frozenset[str], data: bytes) -> None:
 class _Graph:
     """Repo-wide tables used to resolve calls to repo definitions."""
 
-    def __init__(self, all_facts: list[_Facts]) -> None:
+    def __init__(self, all_facts: list[_Facts], targets: frozenset[str] = frozenset()) -> None:
         self.modules = {f.module for f in all_facts}
         self.def_ids = {d["id"] for f in all_facts for d in f.defs}
         self.classes = {f"{f.module}:{c}" for f in all_facts for c in f.classes}
@@ -461,6 +468,31 @@ class _Graph:
                 if name != _MODULE_CALLER and not (name.startswith("__") and name.endswith("__")):
                     by_name.setdefault(name, set()).add(d["id"])
         self.by_name = {name: sorted(ids) for name, ids in by_name.items()}
+        # Inferred source roots (ADR-0037): only when non-test repository code edits the import
+        # path. suffixes maps a dotted suffix to the modules ending with it.
+        self.targets = targets
+        self.top_levels = {m.split(".")[0] for m in self.modules}
+        self.suffixes: dict[str, set[str]] = {}
+        if any(f.sets_import_path and not is_test_path(f.path) for f in all_facts):
+            for module in self.modules:
+                parts = module.split(".")
+                for start in range(1, len(parts)):
+                    self.suffixes.setdefault(".".join(parts[start:]), set()).add(module)
+
+    def resolve_via_source_root(self, qualified: str) -> str | None:
+        """Like `resolve_qualified`, for an import that matches no repo module (heuristic)."""
+        parts = qualified.split(".")
+        if not self.suffixes or parts[0] in self.top_levels or parts[0] in self.targets:
+            return None
+        for cut in range(len(parts) - 1, 0, -1):
+            owners = self.suffixes.get(".".join(parts[:cut]))
+            if not owners:
+                continue
+            if len(owners) != 1:
+                return None  # two modules end with this name: no guess
+            (module,) = owners
+            return self.resolve_qualified(f"{module}.{'.'.join(parts[cut:])}")
+        return None
 
     def resolve_qualified(self, qualified: str) -> str | None:
         """A repo def id for a fully qualified dotted name, using the longest module prefix."""
@@ -500,9 +532,14 @@ class _Graph:
                 return [(local, False)]
             quals = _lookup(call.scope, call.root)
             for qualified in quals:
-                callee = self.resolve_qualified(".".join((qualified, *call.attrs)))
-                if callee and (callee, False) not in found:
-                    found.append((callee, False))
+                full = ".".join((qualified, *call.attrs))
+                callee = self.resolve_qualified(full)
+                heuristic = False
+                if callee is None:
+                    callee = self.resolve_via_source_root(full)
+                    heuristic = True
+                if callee and (callee, heuristic) not in found:
+                    found.append((callee, heuristic))
             if found:
                 return found
             if call.root in ("self", "cls") and len(call.attrs) == 1 and not quals:
@@ -649,7 +686,7 @@ def build_index(
             entry["parsed"] = True
             parsed_facts.append(facts)
 
-    graph = _Graph(parsed_facts)
+    graph = _Graph(parsed_facts, target_set)
     imports = [rec for f in parsed_facts for rec in f.imports]
     defs = [{k: v for k, v in d.items() if k != "name"} for f in parsed_facts for d in f.defs]
     sites = [site for f in parsed_facts for site in f.sites]

@@ -333,7 +333,9 @@ def _gate(
         heuristic = any(step.edge == "heuristic_call" for step in path)
         cap: Confidence = "high" if not heuristic and _starts_at_entry(path, index) else "medium"
         if heuristic:
-            limitations.append("The call path includes heuristic (name-based) edges.")
+            limitations.append(
+                "The call path includes heuristic edges (name-based or an inferred import root)."
+            )
         if _incomplete(index):
             limitations.append("Some files were skipped or the index was truncated.")
         locations = locations or [
