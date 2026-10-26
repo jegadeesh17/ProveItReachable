@@ -45,6 +45,7 @@ Each significant technical decision for ProveItReachable, with its reasons, the 
 | [ADR-0039](#adr-0039-call-chain-proof-runs-main-block-entries-as-scripts-and-stubs-the-call-the-repository-makes) | Call-chain proof runs main-block entries as scripts and stubs the call the repository makes | Accepted | 2026-10-26 |
 | [ADR-0040](#adr-0040-host-the-demo-on-google-cloud-run-with-hard-cost-guards) | Host the demo on Google Cloud Run with hard cost guards | Accepted | 2026-10-26 |
 | [ADR-0041](#adr-0041-proof-dependencies-without-a-wheel-are-downloaded-with-the-network-on-and-built-with-it-off) | Proof dependencies without a wheel are downloaded with the network on and built with it off | Accepted | 2026-10-26 |
+| [ADR-0042](#adr-0042-call-path-edge-verification-anti-tuning-eval-protocol-recorded-proof-in-replays-deep-links-and-warm-ping) | Call-path edge verification, anti-tuning eval protocol, recorded proof in replays, deep links and warm ping | Accepted | 2026-10-26 |
 
 ## ADR-0001: Python and FastAPI service with typed schemas
 
@@ -1236,3 +1237,60 @@ Split the work into a download phase with the network on and a build phase with 
 - **If PyYAML 5.3.1 does not build on Python 3.13** (for example, its `setup.py` imports `distutils`, which Python 3.13 no longer ships; setuptools normally supplies a replacement, but that is unverified here):
   - The fallback is a reviewed per-package "copy the pure-Python source" row: for PyYAML 5.x, copy `lib3/yaml/` from the archive into `/work/deps/yaml` with the network off, and run nothing.
   - Trade-off: it is safer, because no build code runs, but it covers only packages someone has reviewed and installs no package metadata. That fallback needs its own ADR before it is built.
+
+## ADR-0042: Call-path edge verification, anti-tuning eval protocol, recorded proof in replays, deep links and warm ping
+
+Date: 2026-10-26
+Status: Accepted
+
+### Context
+
+At the close of M2 and preparation for hackathon submission, three critical risks were identified:
+
+1. **Call-path evidence loophole**: The reachability gate (`_first_failed_reachability_rule` in `src/pir/report_builder.py`) checked each step individually (valid file, valid line range, present in AST seen locations) and verified that the final step matched a vulnerable symbol. However, it never checked pairwise connectivity: whether step `i` actually called step `i+1`, or whether the final step's `TargetSite.caller` matched the symbol of step `N-1`. As a result, stitched or disconnected paths produced by Nemotron could pass the gate as `likely reachable`.
+2. **Small evaluation suite**: The baseline evaluation suite had only 14 cases (7 likely reachable). This sample was too small to provide a statistically defensible precision claim for hackathon judging across varied Python vulnerability patterns and dependency structures.
+3. **Sandbox proof invisibility in demos**: Token Factory Sandboxes are central to ProveItReachable, yet every finding in the 3 recorded demo replays had `"proof": null`. Live Sandbox proofs take up to 960 seconds in the worst case, cannot run under replay mode, risk rate-limit exhaustion, and incur cold-start delays. Furthermore, judges landing on the site had to manually click demo scenarios without a direct URL to a pre-computed report.
+4. **Operations and rate limiting**: Cloud Run scales to zero with ~20 s cold starts on the 6-hourly keepalive cron, and `TRUSTED_PROXY_HOPS=0` treated all visitors as a single client bucket pending second-network verification.
+
+### Decision
+
+Adopt five targeted improvements across evidence validation, evaluation rigor, demo experience, and production operations:
+
+1. **Deterministic call-path edge verification in the verdict gate**:
+   - In `_first_failed_reachability_rule`, after validating individual steps, enforce pairwise edge continuity: for each consecutive pair `(path[i], path[i+1])` where `i+1 < len(path) - 1`, require an `Edge` in `index.edges` where `caller == path[i].symbol`, `callee == path[i+1].symbol`, and `(file, line) == (path[i+1].file, path[i+1].line)`.
+   - Require `edge.heuristic` to match `path[i+1].edge == "heuristic_call"`.
+   - For the final step, require `TargetSite.caller == path[-2].symbol` (or `path[0].symbol` for a two-step path).
+   - Any violation triggers `downgrade()` to `uncertain`, with reason code `unsupported_reachability_claim` and detail text `rule 2: step <i> does not call step <i+1>`.
+   - Share caller→callee map resolution between `AstTool` and `report_builder`.
+2. **Anti-tuning evaluation protocol and suite growth**:
+   - Grow `eval/cases.toml` to ~30 cases (at least 28 cases), targeting ~45% `likely reachable`, ~30% `no reachable path detected`, and ~25% `uncertain`.
+   - Include ~13 new synthetic cases covering multi-hop chains, class methods, decorator-wrapped calls, `__init__` re-exports, conditional imports, test-only usage, string name references, dead code behind `if False`, and diverse OSV advisories beyond PyYAML and requests, plus 2–3 pinned GitHub repositories.
+   - **Anti-tuning rule**: All case ground truth labels and rationales must be committed before the live scored run and can never be adjusted afterwards to match model predictions.
+   - Run `python -m pir eval --refresh-research` once to cache advisory research, followed by a single live scored evaluation run updating `eval/results/latest.md` and `latest.json`.
+3. **Recorded Sandbox proof in replays**:
+   - Add `--proof` to `pir record`. When passed, after the scan completes, it executes the Sandbox proof pipeline (ADR-0039, ADR-0041) for each `likely reachable` finding and stores the verified `Proof` model into `Finding.proof` before writing the demo recording.
+   - Replay (`pir/replay.py`) serves recorded proofs verbatim at zero runtime cost and zero Sandbox execution.
+   - The web UI detects non-null `Finding.proof` in replays and renders "proven in Token Factory Sandbox" directly, without dispatching live proof requests.
+   - Re-record all 3 demo replays with edge validation active, with PyRL demonstrating a proven Sandbox execution.
+4. **Replay deep linking**:
+   - Support `/?demo=<slug>` in the web UI (e.g., `/?demo=pyrl`) to automatically select and start that replay on initial load.
+   - Synchronize mock chip scenarios in `web/js/api/mock.js` with `web/fixtures/demos.json`.
+5. **Judging warm ping and proxy hop verification**:
+   - Add a 10-minute warm ping cron (`*/10 * * * *`) in `.github/workflows/keepalive.yml` calling `/api/health` during the active judging window. This keeps Cloud Run warm without exceeding the free tier (<4,500 requests/month out of 2M free allowance) and within the ₹100 budget cap.
+   - Verify `TRUSTED_PROXY_HOPS` during M2-TASK-11 via a second-network test (mobile data connection) to properly isolate visitor rate limits.
+
+### Alternatives considered
+
+- **Dynamic edge verification via sandbox execution**: Checking edges dynamically by running repo code would break the offline analysis invariant and add excessive latency and cost. The deterministic `ast` index already captures all call edges and target sites.
+- **Requiring live proof on every demo replay**: Running live proofs during judging would expose judges to 960s worst-case latency, cold starts, rate limits, and quota exhaustion. Pre-recording real proofs created in Token Factory Sandboxes provides identical proof artifacts with 0s latency and $0 cost.
+- **Setting `min-instances=1` on Cloud Run**: Keeping a container continuously warm via `min-instances=1` bills CPU/memory 24/7 and would exceed the strict ₹100 ($5) hard budget cap. A 10-minute lightweight health ping achieves the warm response within Cloud Run's free tier.
+- **Post-hoc evaluation label tuning**: Modifying evaluation labels after observing model failures would artificially inflate precision and invalidate the evaluation benchmark.
+
+### Consequences
+
+- Broken or stitched call paths are strictly caught and downgraded to `uncertain`, closing the reachability evidence loophole.
+- The evaluation suite doubles to ~30 cases with an untuned, defensible precision figure.
+- Judges can inspect real Token Factory Sandbox proofs immediately from recorded demo replays with zero waiting time.
+- Deep links (`/?demo=pyrl`) allow direct links from Devpost and README into interactive reports.
+- Cloud Run remains warm and responsive during judging without violating cost caps.
+- No breaking schema changes: `Finding.proof` was already an optional field in `ScanReport` v1.0.
