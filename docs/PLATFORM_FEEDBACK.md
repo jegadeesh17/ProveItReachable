@@ -77,3 +77,18 @@ Attempt 1 (Hugging Face Space) stopped at the HTTP 402 above. ADR-0040 moved the
 | `X-Forwarded-For` with `TRUSTED_PROXY_HOPS=1` | Inconclusive | Two spoofed leftmost values gave the same `replay_admitted` hash, and an IPv6 request from the same laptop gave the same hash as IPv4. Either the rightmost entry is not the visitor address, or the key falls back to a constant connection address. The app does not log the header, so the cause is not visible. Kept 0 (fail-safe). The second-network test is in DEPLOYMENT.md, section 5. |
 | `SANDBOX_BASE_IMAGE` | Needed for live scans | Not required at startup (default `None`), but the sandbox executor raises `SANDBOX_BASE_IMAGE is not set` at scan time. It was added with `LIVE_SCANS_ENABLED=true`. |
 | Cloud Run startup CPU boost | On | `run.googleapis.com/startup-cpu-boost: true` on the service; the deploy did not set it. |
+
+## Real-money cap facts (2026-10-26, M2-TASK-08-COSTCAP, kill switch)
+
+| Check | Result | Facts for the cap |
+|---|---|---|
+| `gcloud billing budgets update` thresholds | Use `--clear-threshold-rules` and `--add-threshold-rule` | `--threshold-rule` (valid on `create`) is rejected by `update` with "unrecognized arguments". |
+| Budgets API with the active ADC | Needs `--billing-project` | Without it: `SERVICE_DISABLED` for quota project `32555940559`, the ADC quota project. Pass `--billing-project=<project>`. |
+| Google's "Disable billing usage with notifications" doc | Grants account-level admin | Step 6 grants `roles/billing.admin` on the billing account, which covers every project on that account. The doc names no narrower role for unlinking. We used `roles/billing.projectManager` at project level instead (the user's choice). Its two permissions are `resourcemanager.projects.createBillingAssignment` and `deleteBillingAssignment`. Whether that is enough to unlink is not yet verified. |
+| Cloud Run functions gen2, python313, 128 MiB | Fails at startup | "Memory limit of 128 MiB exceeded with 130 MiB used". 256 MiB works. |
+| `GOOGLE_CLOUD_PROJECT` in gen2 python313 | Not set | The doc says it may be set automatically. In this run the function raised `KeyError` on it. Reading the project ID from the metadata server (`/computeMetadata/v1/project/project-id`, header `Metadata-Flavor: Google`) works. |
+| Gen2 Pub/Sub trigger with a dedicated service account | No invoker binding | The deploy did not grant `roles/run.invoker` on the function service to the trigger service account. No function runs happened until the binding was added by hand (inferred from the logs; the refused push was not captured). |
+| Pub/Sub push subscription backlog | Seek is the only purge | The trigger subscription is push, so `subscriptions pull` cannot drain it. `subscriptions seek --time=<now>` cleared it. Backlog read from `pubsub.googleapis.com/subscription/num_undelivered_messages` (Cloud Monitoring, about 1 to 2 minutes behind). |
+| Billing-info read with a project-level `billing.projectManager` | PermissionDenied | The role does not include a billing-info read. The function's fallback ("assume enabled") runs in that case. |
+| Policy Troubleshooter REST (`iam:troubleshoot`) | Returned 404 for a known permission | `resourcemanager.projects.get` gave 404 "Requested entity was not found" with `principal` set to the service account. `updateBillingInfo` was refused as an invalid permission. The read-only check could not be used. |
+| gcloud ADC quota project | Needs `x-goog-user-project` | `gcloud policy-troubleshoot` has no billing-project flag and `CLOUDSDK_BILLING_PROJECT` did not change the quota project. The API had to be called with the header. |

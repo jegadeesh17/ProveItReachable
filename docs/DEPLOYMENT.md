@@ -23,7 +23,7 @@ Hosting per ARCHITECTURE section 18 (ADR-0040, which supersedes ADR-0013; ADR-00
 - **Secrets:** Secret Manager, one enabled version each, injected as environment variables with `--set-secrets NAME=NAME:latest`: `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `TAVILY_API_KEY`, `HF_TOKEN`, `LANGSMITH_API_KEY`. `GITHUB_TOKEN` was not set in `.env`, so it was not stored. Each secret grants `roles/secretmanager.secretAccessor` to `pir-run` only.
 - **Plain environment variables:** `SPEND_LEDGER_BACKEND`, `SPEND_LEDGER_HF_REPO`, `TRUSTED_PROXY_HOPS`, `NEBIUS_PRICE_INPUT_PER_MTOK`, `NEBIUS_PRICE_OUTPUT_PER_MTOK`, `TAVILY_PRICE_PER_CREDIT_USD`, `LANGSMITH_TRACING`, `LOG_LEVEL`, `LIVE_SCANS_ENABLED` and `SANDBOX_BASE_IMAGE` (section 9 explains the last one, which was added after the first deploy). Values are in ARCHITECTURE section 18 and in `.env.example`; none is a secret.
 - **Logs:** the app's JSON lines go to Cloud Logging. The Cloud Logging exclusion `exclude-run-request-logs` (`log_id("run.googleapis.com/requests")`) on `_Default` drops Cloud Run request logs, which hold raw client IP addresses.
-- **Cost guards:** budget `proveitreachable-5usd` on project `760189264289` (see section 3); Artifact Registry repository `cloud-run-source-deploy` with a cleanup policy (keep the 2 newest images, delete the rest).
+- **Cost guards:** budget `proveitreachable-100inr` (INR 100; it replaced `proveitreachable-5usd`, see section 13) on project `760189264289`, plus the kill switch function (section 13); Artifact Registry repository `cloud-run-source-deploy` with a cleanup policy (keep the 2 newest images, delete the rest).
 
 ## 2. Commands run
 
@@ -141,3 +141,220 @@ Live scans were enabled after this, and `/api/health` reports `budget_remaining`
 - Live scans are enabled with the caps above. Confirm before the first live scan.
 - The local `.env` should have `SPEND_LEDGER_BACKEND=hf_dataset` (see the attempt 1 notes in `docs/PLATFORM_FEEDBACK.md`). The agent did not edit `.env`.
 - Nothing has been made public, and no GitHub setting or workflow was changed.
+## 13. Real-money cap (₹100)
+
+**Status (2026-10-26, after M2-TASK-08-COSTCAP attempt 2): ARMED.** The kill switch is live with `DRY_RUN=false` and `KILL_AT_COST=80`. Any budget message with `costAmount` of 80 or more unlinks billing on `proveitreachable`. Billing is still enabled. The unlink itself was **not tested**, because testing it would unlink billing (section 13.6).
+
+### 13.1 Budget
+
+| Item | Value |
+|---|---|
+| Name | `proveitreachable-100inr` (budget ID `d814a266-4b54-4ca8-aced-88995c04f0ae`, updated in place; it replaced `proveitreachable-5usd`) |
+| Amount | INR 100 (the billing account's currency is INR) |
+| Scope | project `proveitreachable` (`projects/760189264289`), calendar month, all credits included |
+| Thresholds | 50%, 80%, 90% and 100% of `CURRENT_SPEND` (actual spend) |
+| Notifications | Pub/Sub topic `projects/proveitreachable/topics/billing-kill`. Email alerts to billing admins stay on (the default recipients were not disabled). |
+
+Commands run:
+- `gcloud services enable cloudfunctions.googleapis.com eventarc.googleapis.com cloudbilling.googleapis.com --project=proveitreachable` (Pub/Sub, Cloud Build, Run and Artifact Registry were already on).
+- `gcloud pubsub topics create billing-kill --project=proveitreachable`.
+- `gcloud billing budgets update d814a266-4b54-4ca8-aced-88995c04f0ae --billing-account=0156C0-992061-82318D --billing-project=proveitreachable --display-name=proveitreachable-100inr --budget-amount=100INR --clear-threshold-rules --add-threshold-rule=percent=0.5,basis=current-spend --add-threshold-rule=percent=0.8,basis=current-spend --add-threshold-rule=percent=0.9,basis=current-spend --add-threshold-rule=percent=1.0,basis=current-spend --notifications-rule-pubsub-topic=projects/proveitreachable/topics/billing-kill`. Checked with `gcloud billing budgets describe`.
+- `--billing-project=proveitreachable` is needed because the active application-default quota project (`32555940559`) does not have the Budgets API enabled.
+
+### 13.2 Kill switch (Google's "Disable billing usage with notifications" pattern)
+
+Pattern from `https://cloud.google.com/billing/docs/how-to/disable-billing-with-notifications` (last updated 2026-10-22). The IAM step differs from the doc, as described in 13.2.1.
+
+| Item | Value |
+|---|---|
+| Function | `billing-kill-switch`, Cloud Run functions gen2, region `us-central1`, runtime `python313`, entry point `stop_billing`, revision `billing-kill-switch-00004-zav` (armed 2026-10-26 09:40:53 UTC) |
+| Trigger | Pub/Sub topic `billing-kill` (budget notifications). Subscription `eventarc-us-central1-billing-kill-switch-164276-sub-684`. |
+| Runtime service account | `billing-kill@proveitreachable.iam.gserviceaccount.com` |
+| Project role | **`roles/billing.projectManager` on project `proveitreachable` only** (`gcloud projects add-iam-policy-binding proveitreachable --member=serviceAccount:billing-kill@proveitreachable.iam.gserviceaccount.com --role=roles/billing.projectManager`). The role contains two permissions: `resourcemanager.projects.createBillingAssignment` and `resourcemanager.projects.deleteBillingAssignment` (checked with `gcloud iam roles describe`). |
+| Billing account role | **None.** Nothing was granted on billing account `0156C0-992061-82318D` (checked: no binding for the service account). |
+| Invoker | `roles/run.invoker` on the function's own Cloud Run service `billing-kill-switch` only. The Pub/Sub push needs it, and the deploy did not grant it. |
+| Scaling and resources | min 0, max 1, 256 MiB (128 MiB failed at startup, 130 MiB used), timeout 60 s, `--no-allow-unauthenticated`, retry policy from the trigger |
+| Environment | `KILL_AT_COST=80` (INR), `DRY_RUN=false` (armed). A missing `DRY_RUN` means dry run. |
+| Project ID | Read from the metadata server (`http://metadata.google.internal/computeMetadata/v1/project/project-id`, header `Metadata-Flavor: Google`). `GOOGLE_CLOUD_PROJECT` is the fallback. |
+| Logic | Parse `costAmount` and `budgetAmount`. If cost is below `KILL_AT_COST`, log "no action". If billing reads as disabled, log "no action". If `DRY_RUN` is true, log "would disable billing". Otherwise call `update_project_billing_info` with an empty billing account. If the call is refused, log `ERROR failed to disable billing: permission denied` and re-raise. |
+| Failure of the billing read | The function assumes billing is enabled (Google's doc fallback). The service account cannot read billing info, so this path is what runs today (see the DRY_RUN evidence). |
+| Cost | Min 0 means no idle charge. Each budget message is one short invocation. Pub/Sub, Cloud Run functions, Cloud Build and Artifact Registry should stay inside their free tiers at this volume. |
+| Image cleanup | Repository `gcf-artifacts` (us-central1): cleanup policy `keep-newest-2` (KEEP the 2 most recent) and `delete-rest` (DELETE, tag state any), applied with `--no-dry-run`, the same policy as `cloud-run-source-deploy`. |
+| APIs enabled for this | `cloudfunctions`, `eventarc`, `cloudbilling`. Also `policytroubleshooter` (for the read-only IAM check in 13.6, which did not work). |
+
+#### 13.2.1 Why the project role and not Google's billing.admin
+
+Google's doc grants `roles/billing.admin` on the billing account. That is account-level admin over every project on the account. The coordinator and the user chose `roles/billing.projectManager` bound at project level only, so nothing is granted on the billing account. Whether this is enough to unlink is not verified (13.6).
+
+Deploy command used for the armed state (the same source folder, `DRY_RUN=false`):
+
+```
+gcloud functions deploy billing-kill-switch --gen2 --project=proveitreachable --region=us-central1 --runtime=python313 --source=<folder with main.py and requirements.txt> --entry-point=stop_billing --trigger-topic=billing-kill --trigger-service-account=billing-kill@proveitreachable.iam.gserviceaccount.com --service-account=billing-kill@proveitreachable.iam.gserviceaccount.com --min-instances=0 --max-instances=1 --memory=256Mi --timeout=60s --no-allow-unauthenticated --set-env-vars=KILL_AT_COST=80,DRY_RUN=false --quiet
+gcloud run services add-iam-policy-binding billing-kill-switch --region=us-central1 --project=proveitreachable --member=serviceAccount:billing-kill@proveitreachable.iam.gserviceaccount.com --role=roles/run.invoker
+```
+
+Source (`main.py`, the deployed version; it holds no secret). `requirements.txt` follows.
+
+```python
+"""Budget kill switch: disable billing on this project when spend reaches KILL_AT_COST.
+
+Pattern: Google Cloud "Disable billing usage with notifications"
+(cloud.google.com/billing/docs/how-to/disable-billing-with-notifications).
+Trigger: Pub/Sub topic `billing-kill`, which receives the budget notifications.
+"""
+
+import base64
+import json
+import os
+import urllib.request
+
+import functions_framework
+from cloudevents.http.event import CloudEvent
+from google.api_core import exceptions
+from google.cloud import billing_v1
+
+KILL_AT_COST = float(os.environ.get("KILL_AT_COST", "80"))
+# Fail safe: a missing DRY_RUN means dry run, so the function never acts by accident.
+DRY_RUN = os.environ.get("DRY_RUN", "true").strip().lower() == "true"
+METADATA_PROJECT_ID_URL = "http://metadata.google.internal/computeMetadata/v1/project/project-id"
+
+billing_client = billing_v1.CloudBillingClient()
+
+
+def _project_id() -> str:
+    # Read the project ID from the metadata server (as in Google's doc sample).
+    # Fall back to GOOGLE_CLOUD_PROJECT if the metadata server cannot be reached.
+    try:
+        request = urllib.request.Request(
+            METADATA_PROJECT_ID_URL, headers={"Metadata-Flavor": "Google"}
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            project_id = response.read().decode("utf-8").strip()
+        if project_id:
+            return project_id
+    except OSError as exc:
+        print(f"WARNING metadata server unavailable ({type(exc).__name__})", flush=True)
+    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
+    if not project_id:
+        raise RuntimeError("project ID not found in metadata server or GOOGLE_CLOUD_PROJECT")
+    return project_id
+
+
+def _billing_enabled(project_name: str) -> bool:
+    try:
+        response = billing_client.get_project_billing_info(name=project_name)
+        return response.billing_enabled
+    except Exception as exc:  # same fallback as the Google doc: assume enabled
+        print(
+            f"WARNING could not read billing info ({type(exc).__name__}); "
+            "assuming billing is enabled",
+            flush=True,
+        )
+        return True
+
+
+def _disable_billing(project_name: str) -> None:
+    try:
+        billing_client.update_project_billing_info(
+            name=project_name,
+            project_billing_info=billing_v1.ProjectBillingInfo(billing_account_name=""),
+        )
+    except exceptions.PermissionDenied:
+        print("ERROR failed to disable billing: permission denied", flush=True)
+        raise
+    print(f"billing disabled on {project_name}", flush=True)
+
+
+@functions_framework.cloud_event
+def stop_billing(cloud_event: CloudEvent) -> None:
+    try:
+        payload = json.loads(
+            base64.b64decode(cloud_event.data["message"]["data"]).decode("utf-8")
+        )
+        cost = float(payload["costAmount"])
+        budget = float(payload["budgetAmount"])
+    except (KeyError, TypeError, ValueError) as exc:
+        print(f"invalid budget message ({type(exc).__name__}): no action", flush=True)
+        return
+
+    print(
+        f"costAmount={cost} budgetAmount={budget} "
+        f"KILL_AT_COST={KILL_AT_COST} DRY_RUN={DRY_RUN}",
+        flush=True,
+    )
+    if cost < KILL_AT_COST:
+        print("no action: costAmount is below KILL_AT_COST", flush=True)
+        return
+
+    project_name = f"projects/{_project_id()}"
+    if not _billing_enabled(project_name):
+        print(f"no action: billing is already disabled on {project_name}", flush=True)
+        return
+    if DRY_RUN:
+        print(f"would disable billing on {project_name} (DRY_RUN=true, nothing changed)", flush=True)
+        return
+    _disable_billing(project_name)
+```
+
+`requirements.txt`:
+
+```
+functions-framework==3.10.2
+google-cloud-billing==1.21.0
+```
+
+### 13.3 DRY_RUN test evidence
+
+**Attempt 1 (FAILED, kept as history):** the function read `GOOGLE_CLOUD_PROJECT`, which this python313 gen2 runtime does not set. The costAmount-85 message raised `KeyError: 'GOOGLE_CLOUD_PROJECT'` at `main.py` line 26 (`08:43:23.868251Z`, retry at `08:44:49`). "would disable billing" was never logged. The costAmount-10 test passed then (`08:43:58.850546Z no action: costAmount is below KILL_AT_COST`). Nothing was unlinked.
+
+**Attempt 2 (PASS, metadata fix, DRY_RUN=true, project ID resolved from the metadata server):** the test messages were published with `gcloud pubsub topics publish billing-kill`. The log lines are from `gcloud logging read` (stdout and stderr):
+
+| Test | Expected | Result |
+|---|---|---|
+| costAmount 10, budgetAmount 100 | "no action" | **PASS.** `2026-10-26T09:34:36.202051Z costAmount=10.0 budgetAmount=100.0 KILL_AT_COST=80.0 DRY_RUN=True`, then `2026-10-26T09:34:36.202127Z no action: costAmount is below KILL_AT_COST`. |
+| costAmount 85, budgetAmount 100 | "would disable billing", project resolved | **PASS.** `2026-10-26T09:35:30.907462Z costAmount=85.0 budgetAmount=100.0 KILL_AT_COST=80.0 DRY_RUN=True`, then `2026-10-26T09:35:31.568971Z WARNING could not read billing info (PermissionDenied); assuming billing is enabled`, then `2026-10-26T09:35:31.569208Z would disable billing on projects/proveitreachable (DRY_RUN=true, nothing changed)`. |
+
+The billing-info read returns PermissionDenied for this service account. The projectManager role does not include a billing-info read, so the function assumes billing is enabled. The unlink call would then be the first real billing call.
+
+Another budget message with costAmount 0.0 arrived at 09:08:30 and 09:30:23 (real budget messages, not tests). Each logged "no action".
+
+### 13.4 Backlog (subscription) evidence
+
+Trigger subscription `eventarc-us-central1-billing-kill-switch-164276-sub-684` is a push subscription, so the backlog was purged by seeking it to a time:
+- Seek to `2026-10-26T09:31:16Z`. Metric `pubsub.googleapis.com/subscription/num_undelivered_messages` read 0 for 09:30 to 09:33.
+- DRY_RUN tests published at 09:34 and 09:35 (both acked and logged).
+- Seek to `2026-10-26T09:37:09Z`. Metric read 0 for 09:34 to 09:38, and 0 for 09:39 to 09:42 after arming.
+
+No message at or above 80 was pending when the switch was armed.
+
+### 13.5 Final state (2026-10-26, about 09:43 UTC)
+
+| Check | Result |
+|---|---|
+| Billing on `proveitreachable` | **Enabled.** `gcloud billing projects describe proveitreachable --format="value(billingAccountName,billingEnabled)"` gives `billingAccounts/0156C0-992061-82318D True`. |
+| Project IAM for `billing-kill` | `roles/billing.projectManager` only (`gcloud projects get-iam-policy`). |
+| Billing account IAM for `billing-kill` | None. |
+| Function env | `DRY_RUN: 'false'`, `KILL_AT_COST: '80'`, state `ACTIVE`, service account `billing-kill@...`. |
+| App | `GET /api/health` on the Cloud Run service, with an identity token: HTTP 200, `{"status":"ok","version":"0.1.0","live_scans":"enabled","budget_remaining":{"nebius":0.876351227,"tavily":1.0}}`. |
+| Backlog | 0 (metric, 09:39 to 09:42). |
+| Budget | INR 100, thresholds 50/80/90/100 (current spend), topic `billing-kill`. |
+
+**Nebius `budget_remaining`.** The value was 1.0 in section 4 (check 4) and section 7. It was 0.923 at about 08:50 UTC and is 0.876 at 09:43 UTC. The 0.923 is explained by the M2-TASK-15 eval, which spent $0.7686 on the shared HF ledger: 1 − 0.7686/10 ≈ 0.923. The further drop to 0.876 is not covered by that figure (it implies about $1.24 spent on the $10 cap). This task ran no scan. Check the ledger before the next live scan.
+
+### 13.6 Re-enabling billing after a trip
+
+If the kill switch fires, billing must be re-linked manually. Services stay stopped until then:
+
+```
+gcloud billing projects link proveitreachable --billing-account=0156C0-992061-82318D
+```
+
+Caveat: budget data can lag a few hours behind actual spend, and spend keeps accruing until billing is actually disabled. That is why the kill threshold is INR 80 (not INR 100): the gap leaves INR 20 for the lag. The threshold alone does not guarantee the total stays under INR 100.
+
+### 13.7 What is not verified
+
+- **The unlink itself has not been tested.** Testing it would unlink billing on the real project. The read-only IAM check was attempted with Policy Troubleshooter (`policytroubleshooter.googleapis.com`, enabled on `proveitreachable`, quota project set in the request header). It returned HTTP 404 "Requested entity was not found" even for `resourcemanager.projects.get`, so it could not confirm `resourcemanager.projects.deleteBillingAssignment` or `updateBillingInfo`. The gcloud `policy-troubleshoot` command failed with the default ADC quota project.
+- **Whether `roles/billing.projectManager` at project level is enough** for `projects.updateBillingInfo` (with an empty account) is not verified. The role's two permissions are the link and unlink assignment permissions. Google's doc grants billing-account-level admin instead.
+- **Risk:** if the unlink is refused, billing stays on and the function logs `ERROR failed to disable billing: permission denied`. The kill switch then fails silently for the user, apart from the log line. Watch the logs after any budget alert at or above 80.
+- Budget messages come from the budget service, not from the function. A cost reading that lags spend can still let spend pass INR 100 (see 13.6).
+- To disarm: `gcloud functions deploy ... --set-env-vars=KILL_AT_COST=80,DRY_RUN=true` (same flags as above) or remove the project binding with `gcloud projects remove-iam-policy-binding proveitreachable --member=serviceAccount:billing-kill@proveitreachable.iam.gserviceaccount.com --role=roles/billing.projectManager`.
