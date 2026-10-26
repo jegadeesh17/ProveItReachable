@@ -59,7 +59,9 @@ _GROUP_RE = re.compile(r"[A-Za-z0-9._-]{1,100}")
 _ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
 _SHIM = "import sys\nfrom pir.sandbox_agent.__main__ import run\n\nsys.exit(run())\n"
 
-Step = Literal["selfcheck", "fetch", "unpack", "resolve", "index", "proof-install", "proof-run"]
+Step = Literal[
+    "selfcheck", "fetch", "unpack", "resolve", "index", "proof-install", "proof-build", "proof-run"
+]
 
 
 class SandboxTimeout(Exception):
@@ -199,15 +201,111 @@ def _check_pins(values: list[str]) -> list[str]:
     return values
 
 
+_SDIST_FILE_RE = re.compile(r"/work/sdists/[A-Za-z0-9][A-Za-z0-9._+-]{0,200}\.(?:tar\.gz|zip)")
+_SHA256_RE = re.compile(r"[0-9a-f]{64}")
+MAX_SDISTS = 10
+
+
+class SdistEntry(Strict):
+    """A source package `proof-install` saved (never opened): `{spec, file, sha256}` (ADR-0041)."""
+
+    spec: str
+    file: str
+    sha256: str
+
+    @field_validator("spec")
+    @classmethod
+    def _spec(cls, value: str) -> str:
+        _check_pins([value])
+        return value
+
+    @field_validator("file")
+    @classmethod
+    def _file(cls, value: str) -> str:
+        if not _SDIST_FILE_RE.fullmatch(value):
+            raise ValueError("file must be a source package directly under /work/sdists")
+        return value
+
+    @field_validator("sha256")
+    @classmethod
+    def _sha(cls, value: str) -> str:
+        if not _SHA256_RE.fullmatch(value):
+            raise ValueError("sha256 must be 64 lowercase hex characters")
+        return value
+
+
+class UnfetchedEntry(Strict):
+    """A pin without a wheel whose source package could not be saved, and why."""
+
+    spec: str
+    reason: Literal[
+        "no_sdist",
+        "too_large",
+        "hash_mismatch",
+        "pypi_error",
+        "limit",
+        "time_limit",
+        "backend_unavailable",
+    ]
+
+    @field_validator("spec")
+    @classmethod
+    def _spec(cls, value: str) -> str:
+        _check_pins([value])
+        return value
+
+
+class BuildFailure(Strict):
+    """A source package `proof-build` could not build, and why."""
+
+    spec: str
+    reason: Literal["build_failed", "build_timeout"]
+
+    @field_validator("spec")
+    @classmethod
+    def _spec(cls, value: str) -> str:
+        _check_pins([value])
+        return value
+
+
 class ProofInstallResult(Strict):
-    """`proof-install` output: the pins installed from wheels and the pins with no wheel."""
+    """`proof-install` output: the pins installed from wheels, the pins with no wheel, and for
+    each of those either the saved source package or the reason it is missing (ADR-0041)."""
 
     installed: list[str]
     no_wheel: list[str]
+    sdists: list[SdistEntry]
+    unfetched: list[UnfetchedEntry]
 
     @field_validator("installed", "no_wheel")
     @classmethod
     def _pins(cls, value: list[str]) -> list[str]:
+        return _check_pins(value)
+
+    @field_validator("sdists")
+    @classmethod
+    def _sdist_count(cls, value: list[SdistEntry]) -> list[SdistEntry]:
+        if len(value) > MAX_SDISTS:
+            raise ValueError(f"at most {MAX_SDISTS} source packages")
+        return value
+
+    @model_validator(mode="after")
+    def _accounted(self) -> "ProofInstallResult":
+        accounted = [s.spec for s in self.sdists] + [u.spec for u in self.unfetched]
+        if len(accounted) != len(set(accounted)) or set(accounted) != set(self.no_wheel):
+            raise ValueError("every no_wheel pin is in exactly one of sdists and unfetched")
+        return self
+
+
+class ProofBuildResult(Strict):
+    """`proof-build` output: the specs built and the specs that failed."""
+
+    built: list[str]
+    failed: list[BuildFailure]
+
+    @field_validator("built")
+    @classmethod
+    def _built(cls, value: list[str]) -> list[str]:
         return _check_pins(value)
 
 
@@ -241,11 +339,19 @@ class ProofRunResult(Strict):
 
 @dataclass
 class ProofImage:
-    """Image P (A plus the installed wheels) and what `proof-install` reported."""
+    """The image `proof-run` starts from and what the steps before it reported.
+
+    From `proof_install`: image P (A plus the installed wheels and the saved source packages).
+    From `proof_build`: image P-prime (P plus the built packages), with `built` and `failed` set.
+    """
 
     image: ImageRef
     installed: list[str]
     no_wheel: list[str]
+    sdists: list[SdistEntry] = field(default_factory=list)
+    unfetched: list[UnfetchedEntry] = field(default_factory=list)
+    built: list[str] = field(default_factory=list)
+    failed: list[BuildFailure] = field(default_factory=list)
 
 
 @dataclass
@@ -584,7 +690,59 @@ class SandboxAgentClient:
             raise SandboxFailed("proof-install", "no image was saved")
         if set(installed.installed + installed.no_wheel) != set(specs):
             raise SandboxFailed("proof-install", "the result does not match the requested pins")
-        return ProofImage(result.image, installed.installed, installed.no_wheel)
+        return ProofImage(
+            result.image,
+            installed.installed,
+            installed.no_wheel,
+            installed.sdists,
+            installed.unfetched,
+        )
+
+    async def proof_build(self, ws: Workspace, proof_image: ProofImage) -> ProofImage:
+        """Build the saved source packages offline (network OFF, from P, saves P-prime; ADR-0041).
+
+        Returns the image `proof-run` starts from (P-prime) with `built` and `failed` filled in.
+        With nothing to build, nothing runs and `proof_image` is returned. P-prime is closed with
+        the workspace, like P. Raises ValueError when a source package was not saved.
+        """
+        if proof_image.unfetched:
+            raise ValueError("proof_build needs every source package to be saved")
+        if not proof_image.sdists:
+            return proof_image
+        requested = [entry.spec for entry in proof_image.sdists]
+        builds = []
+        for entry in proof_image.sdists:
+            name, version = entry.spec.split("==", 1)
+            builds.append(
+                {"name": name, "version": version, "file": entry.file, "sha256": entry.sha256}
+            )
+        result = await self._run(
+            "proof-build",
+            proof_image.image,
+            "proof-build",
+            {"builds": builds},
+            network=False,
+            timeout_s=self._settings.timeout_proof_build_s,
+            budget=ws.budget,
+            save=True,
+        )
+        if result.image is not None:
+            ws.saved.append(result.image)
+        build = self._validate("proof-build", ProofBuildResult, parse_result("proof-build", result))
+        if result.image is None:
+            raise SandboxFailed("proof-build", "no image was saved")
+        reported = build.built + [failure.spec for failure in build.failed]
+        if sorted(reported) != sorted(requested):
+            raise SandboxFailed("proof-build", "the result does not match the requested packages")
+        return ProofImage(
+            result.image,
+            proof_image.installed,
+            proof_image.no_wheel,
+            proof_image.sdists,
+            proof_image.unfetched,
+            build.built,
+            build.failed,
+        )
 
     async def proof_run(
         self,
@@ -644,6 +802,8 @@ __all__ = [
     "ENTRY_ENDED_REASON",
     "FetchResult",
     "LocalFixtureTarget",
+    "BuildFailure",
+    "ProofBuildResult",
     "ProofImage",
     "ProofInstallResult",
     "ProofRunResult",
@@ -652,6 +812,8 @@ __all__ = [
     "SandboxAgentClient",
     "SandboxFailed",
     "SandboxTimeout",
+    "SdistEntry",
+    "UnfetchedEntry",
     "Workspace",
     "build_agent_pyz",
     "build_fixture_tarball",

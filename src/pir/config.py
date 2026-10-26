@@ -91,6 +91,7 @@ class Settings(BaseSettings):
     timeout_sandbox_compile_s: float = 180
     timeout_sandbox_index_s: float = 120
     timeout_proof_install_s: float = 300
+    timeout_proof_build_s: float = 300
     timeout_proof_run_s: float = 60
 
     # Spend

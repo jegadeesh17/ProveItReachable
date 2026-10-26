@@ -1,14 +1,17 @@
-"""Call-chain proof, agent and client side (M2-TASK-09).
+"""Call-chain proof, agent and client side (M2-TASK-09, M2-TASK-16).
 
 AC-66 (wheels-only install argv, uv isolation), AC-67 and AC-82 (the harness: reached, not reached,
 main block, argparse, exit), AC-68 (no wheel, timeout), AC-69 (sentinel placeholders only), AC-70
-(network ON only for proof-install, OFF for proof-run, asserted on the REST body).
+(network ON only for proof-install, OFF for proof-run, asserted on the REST body). M2-TASK-16
+(ADR-0041, AC-83): proof-install downloads the source package of a pin without a wheel (never
+opened), proof-build builds it offline, and the client and the REST body for both.
 
 The harness tests run `proof_run_command` in-process against the fixture repositories (each has a
 `repo/` and a stub `deps/` folder), with `finish` captured instead of `os._exit`. The tests marked
 `slow` run the real harness in a subprocess, where it leaves with `os._exit(0)`.
 """
 
+import base64
 import io
 import json
 import os
@@ -16,9 +19,11 @@ import runpy
 import shlex
 import subprocess
 import sys
+import tarfile
 import textwrap
 import time
 import uuid
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -27,7 +32,20 @@ import httpx
 import pytest
 from fakes.contree import FakeContree
 from fakes.http import fixture_json
-from fakes.proof import REPOS, fixture, line_of, run_harness_subprocess
+from fakes.proof import (
+    REPOS,
+    SDIST_BYTES,
+    SDIST_FILE,
+    FakePyPI,
+    FakeResponse,
+    fake_release,
+    fixture,
+    good_pypi,
+    json_url,
+    line_of,
+    run_harness_subprocess,
+    sha256,
+)
 
 from pir import agent_client
 from pir.agent_client import (
@@ -46,6 +64,7 @@ from pir.executor.contree import ContreeExecutor
 from pir.executor.fake import FakeExecutor
 from pir.github import RepoCoordinates, ValidatedTarget
 from pir.sandbox_agent import proof, protocol, resolve
+from pir.sandbox_agent.protocol import AgentError
 from pir.spend import ScanBudget, SpendDenied
 
 SRC = Path(__file__).resolve().parents[2] / "src"
@@ -140,16 +159,35 @@ class RecordingRunner:
 PINS = {"pins": [{"name": "pyyaml", "version": "6.0.2"}, {"name": "requests", "version": "2.32.3"}]}
 
 
-def install(tmp_path, runner, args=PINS):
+class NoNetwork:
+    """An opener for tests that must not download anything."""
+
+    def __call__(self, url):
+        raise AssertionError(f"unexpected download: {url}")
+
+
+def install(tmp_path, runner, args=PINS, opener=None):
     return proof.proof_install_command(
-        args, deps_root="/work/deps", tmp_root=str(tmp_path), runner=runner
+        args,
+        deps_root="/work/deps",
+        tmp_root=str(tmp_path),
+        runner=runner,
+        opener=opener or NoNetwork(),
+        sdists_root=str(tmp_path / "sdists"),
+        wheels_root=str(tmp_path / "buildwheels"),
     )
 
 
 def test_ac66_install_argv_is_wheels_only_with_the_pin_after_double_dash(tmp_path):
     runner = RecordingRunner()
     result = install(tmp_path, runner)
-    assert result == {"installed": ["pyyaml==6.0.2", "requests==2.32.3"], "no_wheel": []}
+    assert result == {
+        "installed": ["pyyaml==6.0.2", "requests==2.32.3"],
+        "no_wheel": [],
+        "sdists": [],
+        "unfetched": [],
+    }
+    assert not (tmp_path / "sdists").exists()  # nothing to download: no folder either
     assert len(runner.calls) == 2  # one uv call per pin, so a missing wheel is attributed
     argv, _ = runner.calls[0]
     assert argv[:4] == ["/usr/local/bin/uv", "pip", "install", "--no-deps"]
@@ -182,14 +220,21 @@ def test_uv_install_refuses_a_working_directory_that_already_exists(tmp_path):
         install(tmp_path, RecordingRunner())
 
 
-def test_ac68_a_pin_with_no_wheel_is_listed_not_built(tmp_path):
+def test_ac68_a_pin_with_no_wheel_is_listed_and_the_others_are_still_installed(tmp_path):
     runner = RecordingRunner((1, PROOF_STDERR), (0, ""))
+    opener = FakePyPI({})  # PyPI answers 404 for every page: the source package is unfetched
     result = install(
         tmp_path,
         runner,
         {"pins": [{"name": "antlr4-python3-runtime", "version": "4.9.3"}, *PINS["pins"][:1]]},
+        opener=opener,
     )
-    assert result == {"installed": ["pyyaml==6.0.2"], "no_wheel": ["antlr4-python3-runtime==4.9.3"]}
+    assert result["installed"] == ["pyyaml==6.0.2"]
+    assert result["no_wheel"] == ["antlr4-python3-runtime==4.9.3"]
+    assert result["sdists"] == []
+    assert result["unfetched"] == [
+        {"spec": "antlr4-python3-runtime==4.9.3", "reason": "pypi_error"}
+    ]
     assert len(runner.calls) == 2  # the others are still installed
 
 
@@ -670,8 +715,17 @@ PIN_LIST = [("pyyaml", "6.0.2"), ("requests", "2.32.3")]
 P_IMAGE = ImageRef(kind="fake", ref="/stub/p")
 
 
+EMPTY_LISTS = {"installed": [], "no_wheel": [], "sdists": [], "unfetched": []}
+
+
 def installed_ok(**kw) -> ExecResult:
-    payload = {"installed": ["pyyaml==6.0.2", "requests==2.32.3"], "no_wheel": [], **kw}
+    payload = {
+        "installed": ["pyyaml==6.0.2", "requests==2.32.3"],
+        "no_wheel": [],
+        "sdists": [],
+        "unfetched": [],
+        **kw,
+    }
     return exec_result(stdout=line(payload), image=P_IMAGE)
 
 
@@ -701,20 +755,28 @@ async def test_proof_install_with_no_pins_runs_nothing_and_a_is_p():
 
 
 async def test_ac68_proof_install_reports_the_pin_with_no_wheel():
-    stub = Scripted(installed_ok(installed=["pyyaml==6.0.2"], no_wheel=["requests==2.32.3"]))
+    stub = Scripted(
+        installed_ok(
+            installed=["pyyaml==6.0.2"],
+            no_wheel=["requests==2.32.3"],
+            unfetched=[{"spec": "requests==2.32.3", "reason": "no_sdist"}],
+        )
+    )
     result = await SandboxAgentClient(stub, SETTINGS).proof_install(workspace(), PIN_LIST)
     assert result.no_wheel == ["requests==2.32.3"] and result.installed == ["pyyaml==6.0.2"]
+    assert [u.reason for u in result.unfetched] == ["no_sdist"] and result.sdists == []
 
 
 @pytest.mark.parametrize(
     "outcome",
     [
-        exec_result(stdout=line({"installed": ["pyyaml==6.0.2"], "no_wheel": []}), image=P_IMAGE),
-        exec_result(stdout=line({"installed": ["bad pin"], "no_wheel": []}), image=P_IMAGE),
+        exec_result(stdout=line({**EMPTY_LISTS, "installed": ["pyyaml==6.0.2"]}), image=P_IMAGE),
+        exec_result(stdout=line({**EMPTY_LISTS, "installed": ["bad pin"]}), image=P_IMAGE),
         exec_result(stdout=line({"installed": []}), image=P_IMAGE),
-        exec_result(stdout=line({"installed": [], "no_wheel": [], "x": 1}), image=P_IMAGE),
+        exec_result(stdout=line({"installed": ["pyyaml==6.0.2"], "no_wheel": []}), image=P_IMAGE),
+        exec_result(stdout=line({**EMPTY_LISTS, "x": 1}), image=P_IMAGE),
         exec_result(
-            stdout=line({"installed": ["pyyaml==6.0.2", "requests==2.32.3"], "no_wheel": []})
+            stdout=line({**EMPTY_LISTS, "installed": ["pyyaml==6.0.2", "requests==2.32.3"]})
         ),  # no image saved
         exec_result(exit_code=1, stderr="pir-agent: failure"),
         exec_result(truncated=True, image=P_IMAGE),
@@ -851,7 +913,7 @@ async def test_ac70_rest_networking_is_on_for_proof_install_and_off_for_proof_ru
                 "py_files": 1,
                 "manifests": [],
             },
-            "proof-install": {"installed": ["pyyaml==5.3"], "no_wheel": []},
+            "proof-install": {**EMPTY_LISTS, "installed": ["pyyaml==5.3"]},
             "proof-run": PROVEN,
         }
     )
@@ -894,17 +956,954 @@ async def test_ac70_rest_networking_is_on_for_proof_install_and_off_for_proof_ru
 
 
 async def test_the_fake_executor_saves_a_copy_of_the_image_for_a_recorded_proof_install():
-    fake = FakeExecutor(recorded={"proof-install": exec_result(stdout=line({"installed": []}))})
+    fake = FakeExecutor(recorded={"proof-install": exec_result(stdout=line(EMPTY_LISTS))})
     client = SandboxAgentClient(fake, SETTINGS)
     ws = await client.open_workspace(
         LocalFixtureTarget(path=str(REPOS / "proof_reached" / "repo"), commit_sha=SHA), budget()
     )
     pins = [("pyyaml", "6.0.2")]
     fake.recorded["proof-install"] = exec_result(
-        stdout=line({"installed": ["pyyaml==6.0.2"], "no_wheel": []})
+        stdout=line({**EMPTY_LISTS, "installed": ["pyyaml==6.0.2"]})
     )
     installed = await client.proof_install(ws, pins)
     assert installed.image.kind == "fake" and installed.image != ws.image
     assert os.path.isdir(installed.image.ref)
     await client.close(ws)
     assert not os.path.exists(installed.image.ref)  # discarded with the workspace
+
+
+# ---- ADR-0041, AC-83: proof-install saves source packages, proof-build builds them offline -----
+
+PYPI_FIXTURES = REPOS.parent / "http" / "pypi"
+SDIST_PINS = {"pins": [{"name": "pyyaml", "version": "5.3.1"}]}
+SDIST_SPEC = "pyyaml==5.3.1"
+BACKEND_FILES = ["setuptools-75.8.0-py3-none-any.whl", "wheel-0.45.1-py3-none-any.whl"]
+SDIST_URL = next(
+    u["url"]
+    for u in fixture_json("pypi", "pyyaml-5.3.1.json")["urls"]
+    if u["filename"] == SDIST_FILE
+)
+
+
+@pytest.fixture
+def pypi(monkeypatch):
+    """Routes for pyyaml 5.3.1 and the two build tools. The committed hash constants are swapped
+    for the hashes of the fake wheels, since the fake bytes cannot match PyPI's real ones."""
+    routes, constants = good_pypi()
+    monkeypatch.setattr(proof, "BUILD_BACKEND_WHEELS", constants)
+    return routes
+
+
+def simple_release(routes, name, content, *, version="1.0", declared_size=None):
+    """A minimal PyPI page for `name` with one sdist whose bytes are `content`."""
+    filename = f"{name}-{version}.tar.gz"
+    url = f"https://files.pythonhosted.org/packages/aa/bb/{filename}"
+    entry = {
+        "filename": filename,
+        "packagetype": "sdist",
+        "url": url,
+        "size": len(content) if declared_size is None else declared_size,
+        "digests": {"sha256": sha256(content)},
+    }
+    routes[json_url(name, version)] = json.dumps({"urls": [entry]}).encode("utf-8")
+    routes[url] = content
+    return filename
+
+
+def pins_of(*names):
+    return [{"name": name, "version": "1.0"} for name in names]
+
+
+def install_sdists(tmp_path, routes, pins=None, *, runner=None):
+    """proof-install where uv refuses every pin for lack of a wheel."""
+    pins = pins or SDIST_PINS["pins"]
+    opener = FakePyPI(routes)
+    runner = runner or RecordingRunner(*[(1, PROOF_STDERR)] * len(pins))
+    return install(tmp_path, runner, {"pins": pins}, opener=opener), runner, opener
+
+
+def test_ac83_a_pin_without_a_wheel_has_its_source_package_saved_and_never_opened(
+    tmp_path, monkeypatch, pypi
+):
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("the source package must never be opened")
+
+    monkeypatch.setattr(tarfile, "open", refuse)
+    monkeypatch.setattr(zipfile, "ZipFile", refuse)
+    result, runner, opener = install_sdists(tmp_path, pypi)
+    sdist = tmp_path / "sdists" / SDIST_FILE
+    assert result == {
+        "installed": [],
+        "no_wheel": [SDIST_SPEC],
+        "sdists": [{"spec": SDIST_SPEC, "file": str(sdist), "sha256": sha256(SDIST_BYTES)}],
+        "unfetched": [],
+    }
+    assert sdist.read_bytes() == SDIST_BYTES
+    assert sorted(p.name for p in (tmp_path / "buildwheels").iterdir()) == BACKEND_FILES
+    assert len(runner.calls) == 1 and runner.calls[0][0][-2:] == ["--", SDIST_SPEC]
+    for called, _ in runner.calls:  # neither uv nor pip is given the source package
+        assert not any(SDIST_FILE in part or "sdists" in part for part in called)
+    wheel_urls = [
+        u["url"]
+        for name, version in (("setuptools", "75.8.0"), ("wheel", "0.45.1"))
+        for u in fixture_json("pypi", f"{name}-{version}.json")["urls"]
+        if u["filename"].endswith(".whl")
+    ]
+    assert opener.urls == [
+        json_url("pyyaml", "5.3.1"),
+        SDIST_URL,
+        json_url("setuptools", "75.8.0"),
+        wheel_urls[0],
+        json_url("wheel", "0.45.1"),
+        wheel_urls[1],
+    ]
+    assert all(
+        u.startswith(("https://pypi.org/pypi/", "https://files.pythonhosted.org/packages/"))
+        for u in opener.urls
+    )
+
+
+def test_ac83_the_committed_build_tool_hashes_are_the_ones_recorded_from_pypi():
+    assert {n: v for n, (v, _) in proof.BUILD_BACKEND_WHEELS.items()} == {
+        "setuptools": "75.8.0",
+        "wheel": "0.45.1",
+    }
+    for name, (version, sha) in proof.BUILD_BACKEND_WHEELS.items():
+        urls = fixture_json("pypi", f"{name}-{version}.json")["urls"]
+        wheel = next(u for u in urls if u["filename"] == f"{name}-{version}-py3-none-any.whl")
+        assert wheel["digests"]["sha256"] == sha and len(sha) == 64
+
+
+def change(**changes):
+    def apply(entry):
+        entry.update(changes)
+
+    return apply
+
+
+def remove(key):
+    def apply(entry):
+        entry.pop(key)
+
+    return apply
+
+
+NO_SDIST_CASES = {
+    "foreign host": change(url="https://evil.example/packages/aa/PyYAML-5.3.1.tar.gz"),
+    "plain http": change(url=SDIST_URL.replace("https", "http")),
+    "userinfo": change(
+        url="https://files.pythonhosted.org@evil.example/packages/aa/PyYAML-5.3.1.tar.gz"
+    ),
+    "port": change(url=SDIST_URL.replace(".org/", ".org:8443/")),
+    "query": change(url=SDIST_URL + "?token=1"),
+    "fragment": change(url=SDIST_URL + "#x"),
+    "not under /packages/": change(url="https://files.pythonhosted.org/other/x.tar.gz"),
+    "dot-dot segment": change(
+        url="https://files.pythonhosted.org/packages/../x/PyYAML-5.3.1.tar.gz"
+    ),
+    "filename with a path": change(filename="../x.tar.gz"),
+    "filename with a space": change(filename="bad name.tar.gz"),
+    "filename not an archive": change(filename="pkg.exe"),
+    "filename starts with a dot": change(filename=".hidden.tar.gz"),
+    "filename too long": change(filename="a" * 300 + ".tar.gz"),
+    "filename is a bz2": change(filename="pkg.tar.bz2"),
+    "not an sdist": change(packagetype="bdist_wheel"),
+    "sha256 not hex": change(digests={"sha256": "xyz"}),
+    "sha256 uppercase": change(digests={"sha256": "A" * 64}),
+    "no digests": remove("digests"),
+    "size not an int": change(size="269377"),
+}
+
+
+@pytest.mark.parametrize("case", list(NO_SDIST_CASES))
+def test_ac83_a_page_with_no_acceptable_source_package_is_no_sdist(tmp_path, pypi, case):
+    page = json.loads((PYPI_FIXTURES / "pyyaml-5.3.1.json").read_text(encoding="utf-8"))
+    entry = next(u for u in page["urls"] if u["filename"] == SDIST_FILE)
+    NO_SDIST_CASES[case](entry)
+    pypi[json_url("pyyaml", "5.3.1")] = json.dumps(page).encode("utf-8")
+    result, _, opener = install_sdists(tmp_path, pypi)
+    assert result["unfetched"] == [{"spec": SDIST_SPEC, "reason": "no_sdist"}]
+    assert result["sdists"] == []
+    assert opener.urls == [json_url("pyyaml", "5.3.1")]  # nothing was downloaded
+    assert list((tmp_path / "sdists").iterdir()) == []
+    assert not (tmp_path / "buildwheels").exists()  # no source package: no build tools either
+
+
+def test_ac83_a_tar_gz_is_preferred_to_a_zip_and_a_zip_alone_is_accepted(tmp_path, pypi):
+    page = {"urls": []}
+    for filename in ("pkg-1.0.zip", "pkg-1.0.tar.gz"):
+        url = f"https://files.pythonhosted.org/packages/aa/bb/{filename}"
+        content = filename.encode()
+        page["urls"].append(
+            {
+                "filename": filename,
+                "packagetype": "sdist",
+                "url": url,
+                "size": len(content),
+                "digests": {"sha256": sha256(content)},
+            }
+        )
+        pypi[url] = content
+    pypi[json_url("pkg", "1.0")] = json.dumps(page).encode("utf-8")
+    result, _, _ = install_sdists(tmp_path, pypi, pins_of("pkg"))
+    assert [Path(s["file"]).name for s in result["sdists"]] == ["pkg-1.0.tar.gz"]
+
+    page["urls"].pop()  # only the zip is left
+    pypi[json_url("pkg", "1.0")] = json.dumps(page).encode("utf-8")
+    other = tmp_path / "zip"
+    other.mkdir()
+    result, _, _ = install_sdists(other, pypi, pins_of("pkg"))
+    assert [Path(s["file"]).name for s in result["sdists"]] == ["pkg-1.0.zip"]
+
+
+def breaks_mid_read():
+    class Broken(FakeResponse):
+        def read(self, n=-1):
+            raise OSError("connection reset")
+
+    return Broken(b"")
+
+
+PYPI_ERROR_CASES = {
+    "a redirect": (json_url("pyyaml", "5.3.1"), AgentError("unexpected redirect (302)")),
+    "status 500": (json_url("pyyaml", "5.3.1"), 500),
+    "status 204": (json_url("pyyaml", "5.3.1"), 204),
+    "a timeout": (json_url("pyyaml", "5.3.1"), TimeoutError("timed out")),
+    "invalid json": (json_url("pyyaml", "5.3.1"), b"{not json"),
+    "json that is a list": (json_url("pyyaml", "5.3.1"), b"[]"),
+    "json without urls": (json_url("pyyaml", "5.3.1"), b'{"info": {}}'),
+    "urls that is not a list": (json_url("pyyaml", "5.3.1"), b'{"urls": "x"}'),
+    "not utf-8": (json_url("pyyaml", "5.3.1"), b"\xff\xfe{}"),
+    "a page that fails mid-read": (json_url("pyyaml", "5.3.1"), breaks_mid_read),
+    "the file is a 503": (SDIST_URL, 503),
+    "the file is a redirect": (SDIST_URL, AgentError("unexpected redirect (301)")),
+    "the file fails mid-read": (SDIST_URL, breaks_mid_read),
+}
+
+
+@pytest.mark.parametrize("case", list(PYPI_ERROR_CASES))
+def test_ac83_http_errors_redirects_and_bad_json_are_pypi_error(tmp_path, pypi, case):
+    url, route = PYPI_ERROR_CASES[case]
+    pypi[url] = route
+    result, _, _ = install_sdists(tmp_path, pypi)
+    assert result["unfetched"] == [{"spec": SDIST_SPEC, "reason": "pypi_error"}]
+    assert result["sdists"] == []
+    assert list((tmp_path / "sdists").iterdir()) == []  # no partial file is left behind
+
+
+def test_ac83_a_json_page_over_the_cap_is_pypi_error(tmp_path, monkeypatch, pypi):
+    monkeypatch.setattr(proof, "MAX_PYPI_JSON_BYTES", 10)
+    result, _, _ = install_sdists(tmp_path, pypi)
+    assert result["unfetched"] == [{"spec": SDIST_SPEC, "reason": "pypi_error"}]
+
+
+def test_ac83_a_declared_size_over_20_mib_is_too_large_and_nothing_is_downloaded(tmp_path, pypi):
+    assert proof.MAX_SDIST_BYTES == 20 * 1024 * 1024
+    declared = proof.MAX_SDIST_BYTES + 1
+    fake_release(
+        pypi,
+        "pyyaml-5.3.1.json",
+        "pyyaml",
+        "5.3.1",
+        SDIST_FILE,
+        SDIST_BYTES,
+        declared_size=declared,
+    )
+    result, _, opener = install_sdists(tmp_path, pypi)
+    assert result["unfetched"] == [{"spec": SDIST_SPEC, "reason": "too_large"}]
+    assert SDIST_URL not in opener.urls
+
+
+def test_ac83_a_stream_over_the_cap_is_too_large_even_when_the_page_understates_it(
+    tmp_path, monkeypatch, pypi
+):
+    monkeypatch.setattr(proof, "MAX_SDIST_BYTES", 64)
+    fake_release(
+        pypi, "pyyaml-5.3.1.json", "pyyaml", "5.3.1", SDIST_FILE, b"x" * 200, declared_size=10
+    )
+    result, _, _ = install_sdists(tmp_path, pypi)
+    assert result["unfetched"] == [{"spec": SDIST_SPEC, "reason": "too_large"}]
+    assert list((tmp_path / "sdists").iterdir()) == []
+
+
+def test_ac83_a_sha256_mismatch_is_hash_mismatch_and_the_file_is_deleted(tmp_path, pypi):
+    # PyPI's recorded page, but bytes that do not hash to its sha256
+    recorded = (PYPI_FIXTURES / "pyyaml-5.3.1.json").read_text(encoding="utf-8")
+    pypi[json_url("pyyaml", "5.3.1")] = recorded.encode("utf-8")
+    pypi[SDIST_URL] = SDIST_BYTES
+    result, _, opener = install_sdists(tmp_path, pypi)
+    assert result["unfetched"] == [{"spec": SDIST_SPEC, "reason": "hash_mismatch"}]
+    assert SDIST_URL in opener.urls
+    assert list((tmp_path / "sdists").iterdir()) == []
+    assert not (tmp_path / "buildwheels").exists()
+
+
+def test_ac83_the_eleventh_source_package_is_over_the_limit(tmp_path, pypi):
+    names = [f"pkg-{n}" for n in range(11)]
+    for name in names:
+        simple_release(pypi, name, name.encode())
+    result, runner, opener = install_sdists(tmp_path, pypi, pins_of(*names))
+    assert [s["spec"] for s in result["sdists"]] == [f"{n}==1.0" for n in names[:10]]
+    assert result["unfetched"] == [{"spec": "pkg-10==1.0", "reason": "limit"}]
+    assert json_url("pkg-10", "1.0") not in opener.urls
+    assert len(runner.calls) == 11  # every pin still went through uv
+
+
+def test_ac83_the_total_over_50_mib_is_limit_by_declared_and_by_streamed_size(
+    tmp_path, monkeypatch, pypi
+):
+    assert proof.MAX_SDIST_TOTAL_BYTES == 50 * 1024 * 1024
+    monkeypatch.setattr(proof, "MAX_SDIST_TOTAL_BYTES", 150)
+    simple_release(pypi, "pkg-a", b"a" * 100)
+    simple_release(pypi, "pkg-b", b"b" * 100)  # declared 100: 100 + 100 is over 150
+    simple_release(pypi, "pkg-c", b"c" * 100, declared_size=10)  # says 10, streams 100
+    result, _, opener = install_sdists(tmp_path, pypi, pins_of("pkg-a", "pkg-b"))
+    assert [s["spec"] for s in result["sdists"]] == ["pkg-a==1.0"]
+    assert result["unfetched"] == [{"spec": "pkg-b==1.0", "reason": "limit"}]
+    assert "https://files.pythonhosted.org/packages/aa/bb/pkg-b-1.0.tar.gz" not in opener.urls
+    other = tmp_path / "streamed"
+    other.mkdir()
+    result, _, _ = install_sdists(other, pypi, pins_of("pkg-a", "pkg-c"))
+    assert result["unfetched"] == [{"spec": "pkg-c==1.0", "reason": "limit"}]
+    assert not (other / "sdists" / "pkg-c-1.0.tar.gz").exists()
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+
+def test_ac83_downloads_share_the_install_budget_and_report_time_limit(tmp_path, monkeypatch, pypi):
+    clock = Clock()
+    monkeypatch.setattr(proof, "time", SimpleNamespace(monotonic=clock.monotonic))
+
+    def slow_uv(argv, **_kwargs):
+        clock.now += 300  # the budget is spent before the download phase starts
+        return subprocess.CompletedProcess(argv, 1, stdout="", stderr=PROOF_STDERR)
+
+    result, _, opener = install_sdists(tmp_path, pypi, runner=slow_uv)
+    assert result["unfetched"] == [{"spec": SDIST_SPEC, "reason": "time_limit"}]
+    assert opener.urls == []
+
+
+def test_ac83_a_download_that_outlasts_the_budget_is_time_limit_and_deleted(
+    tmp_path, monkeypatch, pypi
+):
+    clock = Clock()
+    monkeypatch.setattr(proof, "time", SimpleNamespace(monotonic=clock.monotonic))
+
+    class Slow(FakeResponse):
+        def read(self, n=-1):
+            clock.now += 1000
+            return super().read(n)
+
+    pypi[SDIST_URL] = lambda: Slow(SDIST_BYTES)
+    result, _, _ = install_sdists(tmp_path, pypi)
+    assert result["unfetched"] == [{"spec": SDIST_SPEC, "reason": "time_limit"}]
+    assert list((tmp_path / "sdists").iterdir()) == []
+
+
+def test_ac83_a_build_tool_that_does_not_match_its_constant_makes_every_package_unavailable(
+    tmp_path, monkeypatch, pypi
+):
+    constants = dict(proof.BUILD_BACKEND_WHEELS)
+    constants["setuptools"] = ("75.8.0", "0" * 64)  # PyPI's page and the file differ from this
+    monkeypatch.setattr(proof, "BUILD_BACKEND_WHEELS", constants)
+    simple_release(pypi, "pkg-0", b"zero")
+    pins = [*SDIST_PINS["pins"], *pins_of("pkg-0")]
+    result, _, _ = install_sdists(tmp_path, pypi, pins)
+    assert result["sdists"] == []
+    assert result["unfetched"] == [
+        {"spec": SDIST_SPEC, "reason": "backend_unavailable"},
+        {"spec": "pkg-0==1.0", "reason": "backend_unavailable"},
+    ]
+    assert list((tmp_path / "sdists").iterdir()) == []  # the saved packages were removed
+
+
+def test_ac83_a_build_tool_file_whose_bytes_differ_from_its_hash_is_unavailable(
+    tmp_path, monkeypatch, pypi
+):
+    original = b"the reviewed wheel"
+    wheel = "wheel-0.45.1-py3-none-any.whl"
+    fake_release(
+        pypi,
+        "wheel-0.45.1.json",
+        "wheel",
+        "0.45.1",
+        wheel,
+        b"a tampered wheel",
+        sha=sha256(original),
+    )
+    constants = dict(proof.BUILD_BACKEND_WHEELS)
+    constants["wheel"] = ("0.45.1", sha256(original))  # PyPI's page and the constant agree
+    monkeypatch.setattr(proof, "BUILD_BACKEND_WHEELS", constants)
+    result, _, _ = install_sdists(tmp_path, pypi)
+    assert result["unfetched"] == [{"spec": SDIST_SPEC, "reason": "backend_unavailable"}]
+    assert not (tmp_path / "buildwheels" / wheel).exists()  # the bytes do not
+
+
+def test_ac83_an_unreachable_build_tool_page_is_unavailable_and_other_reasons_are_kept(
+    tmp_path, pypi
+):
+    del pypi[json_url("wheel", "0.45.1")]
+    pins = [*SDIST_PINS["pins"], *pins_of("pkg-0")]  # pkg-0 has no page at all
+    result, _, _ = install_sdists(tmp_path, pypi, pins)
+    assert result["unfetched"] == [
+        {"spec": SDIST_SPEC, "reason": "backend_unavailable"},
+        {"spec": "pkg-0==1.0", "reason": "pypi_error"},
+    ]
+    assert result["sdists"] == []
+
+
+def test_ac83_every_no_wheel_pin_is_in_exactly_one_list(tmp_path, pypi):
+    simple_release(pypi, "pkg-0", b"zero")
+    pins = [*SDIST_PINS["pins"], *pins_of("pkg-0", "pkg-1")]
+    result, _, _ = install_sdists(tmp_path, pypi, pins)
+    listed = [s["spec"] for s in result["sdists"]] + [u["spec"] for u in result["unfetched"]]
+    assert sorted(listed) == sorted(result["no_wheel"]) and len(listed) == 3
+    assert [u["spec"] for u in result["unfetched"]] == ["pkg-1==1.0"]
+
+
+def test_ac83_nothing_is_downloaded_for_a_pin_that_has_a_wheel(tmp_path, pypi):
+    opener = FakePyPI(pypi)
+    result = install(tmp_path, RecordingRunner((0, "")), SDIST_PINS, opener=opener)
+    assert result["installed"] == [SDIST_SPEC] and result["sdists"] == []
+    assert opener.urls == []
+
+
+# ---- proof-build: the agent command ------------------------------------------------------------
+
+
+def build_roots(tmp_path):
+    (tmp_path / "tmp").mkdir(exist_ok=True)
+    return {
+        "deps_root": "/work/deps",
+        "tmp_root": str(tmp_path / "tmp"),
+        "sdists_root": str(tmp_path / "sdists"),
+        "wheels_root": str(tmp_path / "buildwheels"),
+    }
+
+
+def build(tmp_path, runner, args):
+    return proof.proof_build_command(args, runner=runner, **build_roots(tmp_path))
+
+
+def staged(tmp_path, pypi, names=()):
+    """Run proof-install against the fake PyPI and return the `proof-build` args for its result."""
+    for name in names:
+        simple_release(pypi, name, name.encode())
+    result, _, _ = install_sdists(tmp_path, pypi, [*SDIST_PINS["pins"], *pins_of(*names)])
+    assert result["unfetched"] == []
+    builds = []
+    for entry in result["sdists"]:
+        name, version = entry["spec"].split("==")
+        builds.append(
+            {"name": name, "version": version, "file": entry["file"], "sha256": entry["sha256"]}
+        )
+    return {"builds": builds}
+
+
+def test_ac83_proof_build_runs_the_adr_argv_in_a_fresh_directory_with_the_build_environment(
+    tmp_path, pypi
+):
+    args = staged(tmp_path, pypi, names=("pkg-0",))
+    runner = RecordingRunner((0, ""), (0, ""))
+    result = build(tmp_path, runner, args)
+    assert result == {"built": [SDIST_SPEC, "pkg-0==1.0"], "failed": []}
+    constraints = tmp_path / "tmp" / "pirbuild" / "build-constraints.txt"
+    assert constraints.read_text(encoding="ascii") == "setuptools==75.8.0\nwheel==0.45.1\n"
+    assert len(runner.calls) == 2
+    for number, (argv, kwargs) in enumerate(runner.calls):
+        assert argv == [
+            "/usr/local/bin/uv",
+            "pip",
+            "install",
+            "--no-deps",
+            "--target",
+            "/work/deps",
+            "--python",
+            "/usr/local/bin/python3.13",
+            "--no-config",
+            "--no-sources",
+            "--offline",
+            "--no-index",
+            "--find-links",
+            str(tmp_path / "buildwheels"),
+            "--build-constraints",
+            str(constraints),
+            "--",
+            args["builds"][number]["file"],
+        ]
+        for flag in ("--no-build", "--index-url", "--only-binary"):
+            assert flag not in argv  # the build is allowed, and no index is configured
+        env = kwargs["env"]
+        assert "UV_NO_BUILD" not in env and env["UV_OFFLINE"] == "1"
+        assert env == {
+            **{k: v for k, v in resolve.UV_ENV.items() if k != "UV_NO_BUILD"},
+            "UV_OFFLINE": "1",
+        }
+        assert kwargs["cwd"] == str(tmp_path / "tmp" / f"uvbuild-{number}")  # fresh, per package
+        assert os.listdir(kwargs["cwd"]) == []
+        assert kwargs["stdin"] == kwargs["stdout"] == kwargs["stderr"] == subprocess.DEVNULL
+        assert "capture_output" not in kwargs  # build output is never read
+        assert kwargs["check"] is False and kwargs["timeout"] <= proof.BUILD_TIMEOUT_S == 120
+
+
+def test_ac83_proof_build_reports_built_build_failed_and_build_timeout(tmp_path, pypi):
+    args = staged(tmp_path, pypi, names=("pkg-0", "pkg-1"))
+    runner = RecordingRunner((0, ""), (1, "ignored"), subprocess.TimeoutExpired(["uv"], 120))
+    result = build(tmp_path, runner, args)
+    assert result == {
+        "built": [SDIST_SPEC],
+        "failed": [
+            {"spec": "pkg-0==1.0", "reason": "build_failed"},
+            {"spec": "pkg-1==1.0", "reason": "build_timeout"},
+        ],
+    }
+    assert "ignored" not in json.dumps(result)  # build output never reaches a result
+
+
+def test_ac83_a_spent_budget_is_build_timeout_for_the_packages_not_started(
+    tmp_path, monkeypatch, pypi
+):
+    args = staged(tmp_path, pypi, names=("pkg-0",))
+    clock = Clock()
+    monkeypatch.setattr(proof, "time", SimpleNamespace(monotonic=clock.monotonic))
+
+    def slow(argv, **kwargs):
+        assert kwargs["timeout"] == proof.BUILD_TIMEOUT_S  # min(120, 270)
+        clock.now += proof.BUILD_BUDGET_S  # the first build uses the whole budget
+        return subprocess.CompletedProcess(argv, 0)
+
+    result = build(tmp_path, slow, args)
+    assert result == {
+        "built": [SDIST_SPEC],
+        "failed": [{"spec": "pkg-0==1.0", "reason": "build_timeout"}],
+    }
+    assert not (tmp_path / "tmp" / "uvbuild-1").exists()  # it never started
+
+
+def test_ac83_the_per_package_timeout_never_exceeds_the_remaining_budget(
+    tmp_path, monkeypatch, pypi
+):
+    args = staged(tmp_path, pypi)
+    clock = Clock()
+    monkeypatch.setattr(proof, "time", SimpleNamespace(monotonic=clock.monotonic))
+    monkeypatch.setattr(proof, "BUILD_BUDGET_S", 30.0)
+    runner = RecordingRunner((0, ""))
+    build(tmp_path, runner, args)
+    assert runner.calls[0][1]["timeout"] == 30.0
+
+
+def test_ac83_proof_build_with_no_time_budget_runs_nothing(tmp_path, monkeypatch, pypi):
+    args = staged(tmp_path, pypi)
+    monkeypatch.setattr(proof, "BUILD_BUDGET_S", 0.0)
+    runner = RecordingRunner()
+    result = build(tmp_path, runner, args)
+    assert result == {"built": [], "failed": [{"spec": SDIST_SPEC, "reason": "build_timeout"}]}
+    assert runner.calls == []
+
+
+def test_proof_build_a_missing_uv_fails_the_command(tmp_path, pypi):
+    args = staged(tmp_path, pypi)
+    with pytest.raises(protocol.AgentError, match="cannot start uv"):
+        build(tmp_path, RecordingRunner(OSError()), args)
+
+
+def bad_builds(tmp_path, args):
+    first = args["builds"][0]
+    sdists = tmp_path / "sdists"
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    (other / SDIST_FILE).write_bytes(SDIST_BYTES)
+    (sdists / "sub").mkdir()
+    (sdists / "sub" / SDIST_FILE).write_bytes(SDIST_BYTES)
+    (sdists / "tool.exe").write_bytes(SDIST_BYTES)
+
+    def one(**changes):
+        return {"builds": [{**first, **changes}]}
+
+    return {
+        "empty": {"builds": []},
+        "not a list": {"builds": first},
+        "missing": {},
+        "too many": {"builds": [first] * 11},
+        "duplicate": {"builds": [first, first]},
+        "extra key": one(extra=1),
+        "missing key": {"builds": [{k: v for k, v in first.items() if k != "sha256"}]},
+        "name not normalized": one(name="PyYAML"),
+        "version not pep 440": one(version="latest"),
+        "sha256 uppercase": one(sha256=first["sha256"].upper()),
+        "sha256 mismatch": one(sha256="0" * 64),
+        "outside the folder": one(file=str(other / SDIST_FILE)),
+        "system path": one(file="/etc/passwd"),
+        "dot-dot": one(file=str(sdists / ".." / "sdists" / SDIST_FILE)),
+        "subfolder": one(file=str(sdists / "sub" / SDIST_FILE)),
+        "not an archive name": one(file=str(sdists / "tool.exe")),
+        "missing file": one(file=str(sdists / "nothing.tar.gz")),
+        "file is a number": one(file=5),
+    }
+
+
+BAD_BUILD_CASES = [
+    "empty",
+    "not a list",
+    "missing",
+    "too many",
+    "duplicate",
+    "extra key",
+    "missing key",
+    "name not normalized",
+    "version not pep 440",
+    "sha256 uppercase",
+    "sha256 mismatch",
+    "outside the folder",
+    "system path",
+    "dot-dot",
+    "subfolder",
+    "not an archive name",
+    "missing file",
+    "file is a number",
+]
+
+
+@pytest.mark.parametrize("case", BAD_BUILD_CASES)
+def test_ac83_proof_build_refuses_bad_arguments_with_exit_2_and_runs_nothing(tmp_path, pypi, case):
+    args = staged(tmp_path, pypi)
+    runner = RecordingRunner()
+    with pytest.raises(protocol.BadInput) as caught:
+        build(tmp_path, runner, bad_builds(tmp_path, args)[case])
+    assert caught.value.exit_code == 2
+    assert runner.calls == []
+    assert not (tmp_path / "tmp" / "pirbuild").exists()  # nothing was written either
+
+
+def test_ac83_proof_build_exits_2_through_the_agent_protocol(tmp_path, pypi):
+    args = staged(tmp_path, pypi)
+    args["builds"][0]["sha256"] = "0" * 64
+    handlers = {"proof-build": lambda a: proof.proof_build_command(a, **build_roots(tmp_path))}
+    encoded = base64.b64encode(json.dumps(args).encode()).decode()
+    code = protocol.run_command(
+        ["proof-build", "--args-b64", encoded], handlers, io.StringIO(), io.StringIO()
+    )
+    assert code == 2
+
+
+def test_ac83_a_source_package_that_changed_after_download_is_refused(tmp_path, pypi):
+    args = staged(tmp_path, pypi)
+    path = Path(args["builds"][0]["file"])
+    path.write_bytes(path.read_bytes() + b"x")
+    with pytest.raises(protocol.BadInput, match="does not match its sha256"):
+        build(tmp_path, RecordingRunner(), args)
+
+
+def test_ac83_a_symlink_in_place_of_the_source_package_is_refused(tmp_path, pypi):
+    args = staged(tmp_path, pypi)
+    link = tmp_path / "sdists" / "link.tar.gz"
+    try:
+        link.symlink_to(Path(args["builds"][0]["file"]))
+    except (OSError, NotImplementedError):
+        pytest.skip("this platform cannot create symbolic links here")
+    bad = {"builds": [{**args["builds"][0], "file": str(link)}]}
+    with pytest.raises(protocol.BadInput, match="not a regular file"):
+        build(tmp_path, RecordingRunner(), bad)
+
+
+def test_ac83_a_source_package_over_the_size_cap_is_refused(tmp_path, monkeypatch, pypi):
+    args = staged(tmp_path, pypi)
+    monkeypatch.setattr(proof, "MAX_SDIST_BYTES", 5)
+    with pytest.raises(protocol.BadInput, match="over"):
+        build(tmp_path, RecordingRunner(), args)
+
+
+def test_ac83_missing_altered_or_extra_build_tool_wheels_are_refused(tmp_path, pypi):
+    args = staged(tmp_path, pypi)
+    wheels = tmp_path / "buildwheels"
+    runner = RecordingRunner()
+    altered = wheels / BACKEND_FILES[0]
+    altered.write_bytes(altered.read_bytes() + b"x")
+    with pytest.raises(protocol.BadInput, match="pinned sha256"):
+        build(tmp_path, runner, args)
+    altered.unlink()  # missing
+    with pytest.raises(protocol.BadInput, match="exactly the pinned wheels"):
+        build(tmp_path, runner, args)
+    altered.write_bytes(b"restored")
+    (wheels / "extra-1.0-py3-none-any.whl").write_bytes(b"x")  # extra
+    with pytest.raises(protocol.BadInput, match="exactly the pinned wheels"):
+        build(tmp_path, runner, args)
+    for child in wheels.iterdir():
+        child.unlink()
+    wheels.rmdir()  # the folder itself is gone
+    with pytest.raises(protocol.BadInput, match="folder is missing"):
+        build(tmp_path, runner, args)
+    assert runner.calls == []
+
+
+def test_ac83_proof_build_refuses_to_reuse_its_working_folders(tmp_path, pypi):
+    args = staged(tmp_path, pypi)
+    (tmp_path / "tmp" / "pirbuild").mkdir(parents=True)
+    with pytest.raises(protocol.AgentError, match="already exists"):
+        build(tmp_path, RecordingRunner(), args)
+
+
+def test_ac83_the_real_subprocess_runner_discards_build_output(tmp_path, pypi):
+    """A real `subprocess.run` with a stand-in for uv: its output goes nowhere."""
+    args = staged(tmp_path, pypi)
+    stand_in = tmp_path / "uv.py"
+    stand_in.write_text("print('SECRET build output')\n", encoding="utf-8")
+    seen = []
+
+    def run_stand_in(_argv, **kwargs):
+        done = subprocess.run([sys.executable, "-I", str(stand_in)], **kwargs)
+        seen.append(done)
+        return done
+
+    assert build(tmp_path, run_stand_in, args) == {"built": [SDIST_SPEC], "failed": []}
+    assert seen[0].stdout is None and seen[0].stderr is None  # nothing was captured
+
+
+# ---- the client: proof_build (AC-83) ------------------------------------------------------------
+
+P2_IMAGE = ImageRef(kind="fake", ref="/stub/p2")
+SDIST_ENTRY = {"spec": SDIST_SPEC, "file": f"/work/sdists/{SDIST_FILE}", "sha256": "a" * 64}
+SDIST_PIN_LIST = [("pyyaml", "5.3.1")]
+
+
+def sdist_installed(**kw) -> ExecResult:
+    payload = {
+        "installed": [],
+        "no_wheel": [SDIST_SPEC],
+        "sdists": [SDIST_ENTRY],
+        "unfetched": [],
+        **kw,
+    }
+    return exec_result(stdout=line(payload), image=P_IMAGE)
+
+
+def build_ok(**kw) -> ExecResult:
+    return exec_result(stdout=line({"built": [SDIST_SPEC], "failed": [], **kw}), image=P2_IMAGE)
+
+
+class Discarding(Scripted):
+    def __init__(self, *outcomes) -> None:
+        super().__init__(*outcomes)
+        self.discarded: list[ImageRef] = []
+
+    async def discard(self, image):
+        self.discarded.append(image)
+
+
+async def test_ac83_proof_build_is_network_off_saves_p_prime_and_close_discards_both():
+    stub = Discarding(sdist_installed(), build_ok())
+    client = SandboxAgentClient(stub, SETTINGS)
+    ws = workspace()
+    installed = await client.proof_install(ws, SDIST_PIN_LIST)
+    assert [s.spec for s in installed.sdists] == [SDIST_SPEC] and installed.unfetched == []
+    built = await client.proof_build(ws, installed)
+
+    call = stub.calls[1]
+    assert call.argv[3:6] == [AGENT_PATH, "proof-build", "--args-b64"]
+    assert (call.network, call.save, call.image) == (False, True, P_IMAGE)
+    assert call.timeout_s == SETTINGS.timeout_proof_build_s == 300
+    assert args_of(call) == {
+        "builds": [
+            {
+                "name": "pyyaml",
+                "version": "5.3.1",
+                "file": SDIST_ENTRY["file"],
+                "sha256": SDIST_ENTRY["sha256"],
+            }
+        ]
+    }
+    assert built.image == P2_IMAGE and built.built == [SDIST_SPEC] and built.failed == []
+    assert P_IMAGE in ws.saved and P2_IMAGE in ws.saved
+    await client.close(ws)
+    assert P_IMAGE in stub.discarded and P2_IMAGE in stub.discarded  # P and P' both go
+
+
+async def test_ac83_proof_build_returns_the_failed_builds_with_their_reasons():
+    failed = [{"spec": SDIST_SPEC, "reason": "build_failed"}]
+    stub = Scripted(sdist_installed(), build_ok(built=[], failed=failed))
+    client = SandboxAgentClient(stub, SETTINGS)
+    ws = workspace()
+    built = await client.proof_build(ws, await client.proof_install(ws, SDIST_PIN_LIST))
+    assert [(f.spec, f.reason) for f in built.failed] == [(SDIST_SPEC, "build_failed")]
+    assert built.built == []
+
+
+async def test_ac83_proof_build_with_nothing_to_build_runs_nothing():
+    stub = Scripted(installed_ok())
+    client = SandboxAgentClient(stub, SETTINGS)
+    ws = workspace()
+    installed = await client.proof_install(ws, PIN_LIST)
+    assert await client.proof_build(ws, installed) is installed
+    assert len(stub.calls) == 1
+
+
+async def test_ac83_proof_build_refuses_a_proof_image_with_an_unfetched_package():
+    unfetched = [{"spec": SDIST_SPEC, "reason": "pypi_error"}]
+    stub = Scripted(sdist_installed(sdists=[], unfetched=unfetched))
+    client = SandboxAgentClient(stub, SETTINGS)
+    ws = workspace()
+    installed = await client.proof_install(ws, SDIST_PIN_LIST)
+    assert [u.reason for u in installed.unfetched] == ["pypi_error"]
+    with pytest.raises(ValueError):
+        await client.proof_build(ws, installed)
+    assert len(stub.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        build_ok(built=[], failed=[]),  # a requested package is in neither list
+        build_ok(built=[SDIST_SPEC, SDIST_SPEC]),  # reported twice
+        build_ok(built=["other==1.0"]),  # not the requested set
+        build_ok(failed=[{"spec": SDIST_SPEC, "reason": "build_failed"}]),  # in both lists
+        build_ok(built=[], failed=[{"spec": SDIST_SPEC, "reason": "weird"}]),  # unknown reason
+        build_ok(extra=1),
+        exec_result(stdout=line({"built": [SDIST_SPEC], "failed": []})),  # no image saved
+        exec_result(exit_code=2, stderr="pir-agent: BadInput"),
+        exec_result(truncated=True, image=P2_IMAGE),
+        exec_result(stdout="", image=P2_IMAGE),  # no result line
+    ],
+)
+async def test_ac83_proof_build_refuses_a_result_that_does_not_match_the_request(outcome):
+    stub = Scripted(sdist_installed(), outcome)
+    client = SandboxAgentClient(stub, SETTINGS)
+    ws = workspace()
+    installed = await client.proof_install(ws, SDIST_PIN_LIST)
+    with pytest.raises(SandboxFailed):
+        await client.proof_build(ws, installed)
+
+
+@pytest.mark.parametrize(
+    ("last", "expected"),
+    [
+        (exec_result(timed_out=True, exit_code=-1), SandboxTimeout),
+        (ExecutorSpendDenied(SpendDenied("nebius", "scan_budget_reached")), ExecutorSpendDenied),
+    ],
+)
+async def test_ac83_proof_build_timeout_and_spend_denial_pass_through(last, expected):
+    client = SandboxAgentClient(Scripted(sdist_installed(), last), SETTINGS)
+    ws = workspace()
+    installed = await client.proof_install(ws, SDIST_PIN_LIST)
+    with pytest.raises(expected):
+        await client.proof_build(ws, installed)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"no_wheel": [SDIST_SPEC], "sdists": [], "unfetched": []},  # in neither list
+        {
+            "no_wheel": [SDIST_SPEC],
+            "sdists": [SDIST_ENTRY],
+            "unfetched": [{"spec": SDIST_SPEC, "reason": "no_sdist"}],  # in both
+        },
+        {"no_wheel": [], "sdists": [SDIST_ENTRY], "unfetched": []},  # not a no_wheel pin
+        {"no_wheel": [SDIST_SPEC], "sdists": [{**SDIST_ENTRY, "file": "/tmp/evil.tar.gz"}]},
+        {"no_wheel": [SDIST_SPEC], "sdists": [{**SDIST_ENTRY, "file": "/work/sdists/../x.zip"}]},
+        {"no_wheel": [SDIST_SPEC], "sdists": [{**SDIST_ENTRY, "sha256": "short"}]},
+        {"no_wheel": [SDIST_SPEC], "sdists": [{**SDIST_ENTRY, "extra": 1}]},
+    ],
+)
+async def test_ac83_proof_install_refuses_a_result_that_does_not_account_for_every_pin(payload):
+    full = {"installed": [], "sdists": [], "unfetched": [], **payload}
+    client = SandboxAgentClient(Scripted(exec_result(stdout=line(full), image=P_IMAGE)), SETTINGS)
+    with pytest.raises(SandboxFailed):
+        await client.proof_install(workspace(), SDIST_PIN_LIST)
+
+
+def test_ac83_the_build_timeout_setting_defaults_to_300_and_is_in_env_example():
+    assert Settings(_env_file=None).timeout_proof_build_s == 300
+    example = (Path(__file__).resolve().parents[2] / ".env.example").read_text(encoding="utf-8")
+    assert "\nTIMEOUT_PROOF_BUILD_S=300\n" in example
+
+
+# ---- AC-70 / ADR-0041: the REST body of proof-build, and the fake executor ---------------------
+
+
+async def test_ac70_rest_networking_is_off_for_proof_build_and_it_has_no_index_url():
+    scripted = ScriptedSandbox(
+        {
+            "fetch": {
+                "commit_sha": SHA,
+                "files_total": 1,
+                "bytes_total": 1,
+                "py_files": 1,
+                "manifests": [],
+            },
+            "proof-install": {
+                "installed": [],
+                "no_wheel": [SDIST_SPEC],
+                "sdists": [SDIST_ENTRY],
+                "unfetched": [],
+            },
+            "proof-build": {"built": [SDIST_SPEC], "failed": []},
+            "proof-run": PROVEN,
+        }
+    )
+    settings = Settings(_env_file=None)
+    executor = ContreeExecutor(settings, client=FakeContree(), transport=scripted)
+    client = SandboxAgentClient(executor, settings)
+    client._selfcheck_passed = True
+    github = ValidatedTarget(
+        coords=RepoCoordinates(owner="octo", name="demo", ref=None),
+        default_branch="main",
+        commit_sha=SHA,
+        files_total=1,
+        bytes_total=1,
+        py_files=1,
+        manifests=["requirements.txt"],
+    )
+    ws = await client.open_workspace(github, budget())
+    installed = await client.proof_install(ws, [("pyyaml", "5.3.1")])
+    built = await client.proof_build(ws, installed)
+    await client.proof_run(ws, built, entry="main:<module>", target="yaml.load", site="main.py:10")
+
+    def shape(body: dict) -> tuple[str, bool, bool]:
+        tokens = shlex.split(body["command"])
+        command = tokens[tokens.index(AGENT_PATH) + 1]
+        return command, body["networking"]["enabled"], body["disposable"]
+
+    assert [shape(b) for b in scripted.posts] == [
+        ("fetch", True, False),
+        ("proof-install", True, False),  # ON: downloads only, saves P
+        ("proof-build", False, False),  # OFF, saves P'
+        ("proof-run", False, True),  # OFF, from P'
+    ]
+    build_body = scripted.posts[2]
+    assert "--index-url" not in shlex.split(build_body["command"])
+    assert (build_body["uid"], build_body["gid"]) == (65534, 65534)
+    assert build_body["command"].startswith("env -i PATH=")
+    assert "--index-url" not in proof.build_build_argv("/a.tar.gz", "/c.txt")
+    assert built.image != installed.image  # proof-run starts from P', not P
+    await client.close(ws)
+
+
+async def test_the_fake_executor_saves_a_copy_of_the_image_for_a_recorded_proof_build():
+    install_payload = {
+        "installed": [],
+        "no_wheel": [SDIST_SPEC],
+        "sdists": [SDIST_ENTRY],
+        "unfetched": [],
+    }
+    fake = FakeExecutor(
+        recorded={
+            "proof-install": exec_result(stdout=line(install_payload)),
+            "proof-build": exec_result(stdout=line({"built": [SDIST_SPEC], "failed": []})),
+        }
+    )
+    client = SandboxAgentClient(fake, SETTINGS)
+    ws = await client.open_workspace(
+        LocalFixtureTarget(path=str(REPOS / "proof_reached" / "repo"), commit_sha=SHA), budget()
+    )
+    installed = await client.proof_install(ws, SDIST_PIN_LIST)
+    built = await client.proof_build(ws, installed)
+    assert built.image.kind == "fake" and built.image not in (installed.image, ws.image)
+    assert os.path.isdir(built.image.ref) and os.path.isdir(installed.image.ref)
+    await client.close(ws)
+    assert not os.path.exists(built.image.ref) and not os.path.exists(installed.image.ref)

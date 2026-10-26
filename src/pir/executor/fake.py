@@ -2,8 +2,9 @@
 
 Images are temp-directory copies. `run` handles only `unpack`, `resolve --lockfile-only` and
 `index`, in-process through the agent's pure functions; anything else returns a recorded
-`ExecResult` (a recorded `proof-install` also saves a copy of its image) or exit code 99. It never
-starts a subprocess, costs nothing and refuses GitHub targets (`fetch` is not handled).
+`ExecResult` (a recorded `proof-install` or `proof-build` also saves a copy of its image) or exit
+code 99. It never starts a subprocess, costs nothing and refuses GitHub targets (`fetch` is not
+handled).
 """
 
 import io
@@ -107,8 +108,10 @@ class FakeExecutor:
         key = parsed[0] if parsed else None
         if parsed is None or key not in HANDLED:
             result = self._unsupported(key, started)
-            if key == "proof-install" and save and result.exit_code == 0 and result.image is None:
-                # a recorded proof-install: save a copy of the image it ran from, as image P
+            saves = key in ("proof-install", "proof-build")
+            if saves and save and result.exit_code == 0 and result.image is None:
+                # a recorded proof-install or proof-build: save a copy of the image it ran from,
+                # as image P or P'
                 copy = self._new_dir()
                 shutil.copytree(source, copy, dirs_exist_ok=True)
                 result = result.model_copy(update={"image": ImageRef(kind="fake", ref=copy)})

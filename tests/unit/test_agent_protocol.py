@@ -169,6 +169,7 @@ def test_main_dispatches_the_part_one_and_two_commands():
         "resolve",
         "selfcheck",
         "proof-install",  # M2-TASK-09
+        "proof-build",  # M2-TASK-16
         "proof-run",
     }
     code = agent_main.main(["fetch", "--args-b64", _b64({"owner": "../x"})])

@@ -50,6 +50,11 @@ UV_ENV: dict[str, str] = {
     "UV_NO_CONFIG": "1",
     "UV_PYTHON_DOWNLOADS": "never",
 }
+# `proof-build` (network OFF, ADR-0041): the same environment without UV_NO_BUILD, plus UV_OFFLINE.
+UV_BUILD_ENV: dict[str, str] = {
+    **{key: value for key, value in UV_ENV.items() if key != "UV_NO_BUILD"},
+    "UV_OFFLINE": "1",
+}
 UV_COMMON_FLAGS: tuple[str, ...] = (
     "--python",
     UV_PYTHON,
@@ -58,6 +63,14 @@ UV_COMMON_FLAGS: tuple[str, ...] = (
     "--no-sources",
     "--index-url",
     UV_INDEX_URL,
+)
+
+# `proof-build` drops --no-build and --index-url: the build is fed only by local wheels (ADR-0041).
+UV_BUILD_COMMON_FLAGS: tuple[str, ...] = (
+    "--python",
+    UV_PYTHON,
+    "--no-config",
+    "--no-sources",
 )
 
 MAX_MANIFEST_BYTES = 1024 * 1024  # R3-2

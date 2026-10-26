@@ -24,6 +24,8 @@ from .protocol import AgentError, BadInput, LimitExceeded, UnsafeArchive, log, r
 REPO_ROOT = "/work/repo"
 TARBALL_PATH = "/opt/pir/src.tar.gz"
 CODELOAD_HOST = "codeload.github.com"
+PYPI_JSON_PREFIX = "https://pypi.org/pypi/"  # ADR-0041: proof-install's source-package download
+PYPI_FILES_PREFIX = "https://files.pythonhosted.org/packages/"
 CHUNK = 64 * 1024
 CONNECT_TIMEOUT_S = 30
 MAX_PATH_CHARS = 1024
@@ -62,13 +64,29 @@ def build_url(owner: object, repo: object, sha: object) -> str:
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise AgentError(f"unexpected redirect ({code}) from {CODELOAD_HOST}")
+        raise AgentError(f"unexpected redirect ({code})")
 
 
 def open_https(url: str) -> IO[bytes]:
     """Open `url` over HTTPS with no redirects. Only codeload URLs from `build_url` reach here."""
     if not url.startswith(f"https://{CODELOAD_HOST}/"):
         raise BadInput("refusing to fetch a URL outside codeload.github.com")
+    opener = urllib.request.build_opener(_NoRedirect, urllib.request.HTTPSHandler())
+    try:
+        return opener.open(url, timeout=CONNECT_TIMEOUT_S)  # scheme and host checked above
+    except urllib.error.HTTPError as exc:
+        raise AgentError(f"download failed: HTTP {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise AgentError(f"download failed: {exc.reason}") from exc
+
+
+def open_pypi(url: str) -> IO[bytes]:
+    """Open a PyPI JSON page or a `files.pythonhosted.org` file over HTTPS with no redirects.
+
+    The same opener as `open_https` (30 s per request); only these two URL prefixes are allowed.
+    """
+    if not url.startswith((PYPI_JSON_PREFIX, PYPI_FILES_PREFIX)):
+        raise BadInput("refusing to fetch a URL outside pypi.org and files.pythonhosted.org")
     opener = urllib.request.build_opener(_NoRedirect, urllib.request.HTTPSHandler())
     try:
         return opener.open(url, timeout=CONNECT_TIMEOUT_S)  # scheme and host checked above

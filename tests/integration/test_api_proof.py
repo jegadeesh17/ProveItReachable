@@ -1,6 +1,7 @@
 """The call-chain proof through the job runner and the HTTP route (M2-TASK-09).
 
-AC-65 (gated route and config), AC-66, AC-67, AC-68 and AC-82 (`run_proof` on the proof fixtures,
+AC-65 (gated route and config), AC-66, AC-67, AC-68, AC-82 and AC-83 (`run_proof` on the proof
+fixtures,
 with `FakeExecutor` returning recorded `ExecResult`s; the `proof-run` result is the real harness's
 output from a local subprocess), AC-69 and AC-70 (what the job asks the executor to run), request
 validation and admission of the route. The verdict never changes.
@@ -46,8 +47,35 @@ def result_line(payload: object, **kw) -> ExecResult:
     return ExecResult(**{**base, **kw})
 
 
-def installed(*specs: str, no_wheel: tuple[str, ...] = ()) -> ExecResult:
-    return result_line({"installed": list(specs), "no_wheel": list(no_wheel)})
+def installed(
+    *specs: str,
+    no_wheel: tuple[str, ...] = (),
+    sdists: tuple[str, ...] = (),
+    unfetched: tuple[tuple[str, str], ...] = (),
+) -> ExecResult:
+    """A recorded `proof-install` result: pins installed from wheels, pins with no wheel and, for
+    each of those, its saved source package (`sdists`) or why not (`unfetched`)."""
+    return result_line(
+        {
+            "installed": list(specs),
+            "no_wheel": list(no_wheel),
+            "sdists": [
+                {"spec": s, "file": f"/work/sdists/{s.split('==')[0]}.tar.gz", "sha256": "a" * 64}
+                for s in sdists
+            ],
+            "unfetched": [{"spec": spec, "reason": reason} for spec, reason in unfetched],
+        }
+    )
+
+
+def built(*specs: str, failed: tuple[tuple[str, str], ...] = ()) -> ExecResult:
+    """A recorded `proof-build` result."""
+    return result_line(
+        {
+            "built": list(specs),
+            "failed": [{"spec": spec, "reason": reason} for spec, reason in failed],
+        }
+    )
 
 
 def path_of(file: str, entry_symbol: str, entry_line: int, site_line: int, target: str):
@@ -204,6 +232,164 @@ async def test_ac82_a_script_that_exits_first_is_not_proven_with_its_exit_code(t
     assert_verdict_unchanged(report, proof)
 
 
+# ---- AC-83 (ADR-0041): a dependency without a wheel is built offline, then the proof runs -----
+
+SDIST_FIXTURE = "proof_main_block_sdist"
+SDIST_INSTALL = installed(no_wheel=("pyyaml==5.3.1",), sdists=("pyyaml==5.3.1",))
+
+
+def sdist_site() -> int:
+    return line_of(fixture(SDIST_FIXTURE)[0] / "main.py", "config = yaml.load(stream)")
+
+
+async def sdist_proof(tmp_path, recorded: dict[str, ExecResult], executor=None):
+    """`(scenario, report, proof)` for the sdist fixture with `recorded` Sandbox results."""
+    s = Scenario(tmp_path, recorded, executor)
+    report = await s.report(**main_block_report_kw(SDIST_FIXTURE, sdist_site()))
+    return s, report, await s.prove(SDIST_FIXTURE, report, ENTRY_MAIN)
+
+
+async def test_ac83_a_built_source_package_lets_proof_run_start_from_the_built_image(tmp_path):
+    site = sdist_site()
+    harness_output = recorded_exec_result(
+        SDIST_FIXTURE, ENTRY_MAIN, "yaml.load", site=f"main.py:{site}"
+    )
+    recorded = {
+        "proof-install": SDIST_INSTALL,
+        "proof-build": built("pyyaml==5.3.1"),
+        "proof-run": harness_output,
+    }
+    s, report, proof = await sdist_proof(tmp_path, recorded)
+
+    assert proof.status == "proven"
+    assert proof.recorded_call == f"yaml.load called from main.py:{site}"
+    assert s.commands() == ["unpack", "index", "proof-install", "proof-build", "proof-run"]
+    install_call, _ = s.call("proof-install")
+    build_call, build_args = s.call("proof-build")
+    run_call, _ = s.call("proof-run")
+    assert (install_call.network, install_call.save) == (True, True)  # downloads only
+    assert (build_call.network, build_call.save) == (False, True)  # AC-70: OFF, saves the image
+    assert (run_call.network, run_call.save) == (False, False)
+    assert build_args == {
+        "builds": [
+            {
+                "name": "pyyaml",
+                "version": "5.3.1",
+                "file": "/work/sdists/pyyaml.tar.gz",
+                "sha256": "a" * 64,
+            }
+        ]
+    }
+    # three different images: A (install starts here), P (build starts here), the built image
+    # (proof-run starts here); no network-ON step ever runs from the second or third
+    assert len({install_call.image.ref, build_call.image.ref, run_call.image.ref}) == 3
+    assert_verdict_unchanged(report, proof)
+
+
+async def test_ac83_a_failed_build_is_not_proven_and_proof_run_is_skipped(tmp_path):
+    failed = built(failed=(("pyyaml==5.3.1", "build_failed"),))
+    s, report, proof = await sdist_proof(
+        tmp_path, {"proof-install": SDIST_INSTALL, "proof-build": failed}
+    )
+    assert proof.status == "not_proven" and proof.recorded_call is None
+    assert proof.reason == "uncertain: could not build pyyaml 5.3.1 from source"
+    assert s.commands() == ["unpack", "index", "proof-install", "proof-build"]
+    assert_verdict_unchanged(report, proof)
+
+
+async def test_ac83_a_build_that_timed_out_in_the_agent_is_the_same_failed_build(tmp_path):
+    timed_out = built(failed=(("pyyaml==5.3.1", "build_timeout"),))
+    s, _, proof = await sdist_proof(
+        tmp_path, {"proof-install": SDIST_INSTALL, "proof-build": timed_out}
+    )
+    assert proof.reason == "uncertain: could not build pyyaml 5.3.1 from source"
+    assert "proof-run" not in s.commands()
+
+
+async def test_ac83_a_proof_build_that_hit_the_platform_timeout_is_sandbox_timeout(tmp_path):
+    timed_out = ExecResult(
+        exit_code=-1,
+        stdout="",
+        stderr="",
+        timed_out=True,
+        truncated=False,
+        duration_s=300.0,
+        cost_usd=0.0,
+        image=None,
+    )
+    s, report, proof = await sdist_proof(
+        tmp_path, {"proof-install": SDIST_INSTALL, "proof-build": timed_out}
+    )
+    assert (proof.status, proof.reason) == ("not_proven", "sandbox timeout")
+    assert "proof-run" not in s.commands()
+    assert_verdict_unchanged(report, proof)
+
+
+async def test_ac83_any_other_proof_build_failure_is_a_stated_reason_without_sandbox_text(
+    tmp_path,
+):
+    failed = ExecResult(
+        exit_code=2,
+        stdout="",
+        stderr="pir-agent: BadInput: SECRET",
+        timed_out=False,
+        truncated=False,
+        duration_s=1.0,
+        cost_usd=0.0,
+        image=None,
+    )
+    _, _, proof = await sdist_proof(
+        tmp_path, {"proof-install": SDIST_INSTALL, "proof-build": failed}
+    )
+    assert proof.reason == "the Sandbox could not complete the proof (proof-build)"
+    assert "SECRET" not in proof.reason
+
+
+async def test_ac83_a_spend_denial_in_proof_build_is_not_proven(tmp_path):
+    class Denying(FakeExecutor):
+        async def run(self, image, argv, **kwargs):
+            if "proof-build" in argv[-3]:
+                raise ExecutorSpendDenied(SpendDenied("nebius", "scan_budget_reached"))
+            return await super().run(image, argv, **kwargs)
+
+    _, _, proof = await sdist_proof(
+        tmp_path, {}, executor=Denying(recorded={"proof-install": SDIST_INSTALL})
+    )
+    assert (proof.status, proof.reason) == ("not_proven", "not run: the spend limit was reached")
+
+
+async def test_ac83_the_api_proof_job_completes_when_a_source_package_cannot_be_downloaded(
+    tmp_path, monkeypatch
+):
+    real = routes.run_proof
+
+    async def on_the_sdist_fixture(deps, target, budget, report, finding, entry):
+        local = LocalFixtureTarget(path=str(fixture(SDIST_FIXTURE)[0]), commit_sha=SHA)
+        return await real(deps, local, budget, report, finding, entry)
+
+    api = make_proof_api(tmp_path, monkeypatch, **PROOF_ON)
+    monkeypatch.setattr(routes, "run_proof", on_the_sdist_fixture)
+    unfetched = installed(no_wheel=("pyyaml==5.3.1",), unfetched=(("pyyaml==5.3.1", "no_sdist"),))
+    api.h.executor.recorded["proof-install"] = unfetched
+    async with client(api.app) as c:
+        accepted = await post_scan(c)
+        scan_id = await finish(api, accepted)
+        job = api.ctx.jobs.get(scan_id)
+        kw = main_block_report_kw(SDIST_FIXTURE, sdist_site())
+        job.report = proof_report(job.report, **kw)
+        finding = job.report.findings[0]
+        response = await c.post(proof_url(scan_id, finding.finding_id))
+        proof_id = await finish(api, response)
+        stored = (await c.get(f"/api/scans/{scan_id}/report")).json()
+
+    assert api.ctx.jobs.get(proof_id).state == "completed"
+    proof = stored["findings"][0]["proof"]
+    assert proof["status"] == "not_proven"
+    assert proof["reason"].startswith("uncertain: no wheel for pyyaml==5.3.1")
+    assert stored["findings"][0]["verdict"] == finding.verdict == "likely reachable"
+    assert stored["findings"][0]["confidence"] == finding.confidence
+
+
 # ---- AC-67, AC-68: not reached, timeout, no wheel, other failures -----------------------------
 
 
@@ -280,13 +466,19 @@ async def test_ac68_a_timed_out_install_is_also_a_sandbox_timeout(reached_scenar
     assert "proof-run" not in s.commands()
 
 
-async def test_ac68_a_pin_without_a_wheel_is_listed_and_proof_run_is_skipped(reached_scenario):
-    s = reached_scenario({"proof-install": installed(no_wheel=("pyyaml==6.0.2",))})
+async def test_ac68_a_pin_whose_source_package_was_not_downloaded_skips_the_build_and_the_run(
+    reached_scenario,
+):
+    recorded = installed(no_wheel=("pyyaml==6.0.2",), unfetched=(("pyyaml==6.0.2", "pypi_error"),))
+    s = reached_scenario({"proof-install": recorded})
     report = await reached_report(s)
     proof = await s.prove("proof_reached", report, "app.handler:handle")
     assert proof.status == "not_proven" and proof.recorded_call is None
-    assert proof.reason == "uncertain: no wheel for pyyaml==6.0.2; source builds are not run"
-    assert s.commands() == ["unpack", "index", "proof-install"]  # proof-run never ran
+    assert proof.reason == (
+        "uncertain: no wheel for pyyaml==6.0.2; its source package could not be downloaded"
+    )
+    assert proof.reason.startswith("uncertain: no wheel for")
+    assert s.commands() == ["unpack", "index", "proof-install"]  # no proof-build, no proof-run
     assert_verdict_unchanged(report, proof)
 
 

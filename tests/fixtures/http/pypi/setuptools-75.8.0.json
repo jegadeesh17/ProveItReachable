@@ -1,0 +1,26 @@
+{
+  "info": {
+    "name": "setuptools",
+    "version": "75.8.0"
+  },
+  "urls": [
+    {
+      "filename": "setuptools-75.8.0-py3-none-any.whl",
+      "packagetype": "bdist_wheel",
+      "url": "https://files.pythonhosted.org/packages/69/8a/b9dc7678803429e4a3bc9ba462fa3dd9066824d3c607490235c6a796be5a/setuptools-75.8.0-py3-none-any.whl",
+      "size": 1228782,
+      "digests": {
+        "sha256": "e3982f444617239225d675215d51f6ba05f845d4eec313da4418fdbb56fb27e3"
+      }
+    },
+    {
+      "filename": "setuptools-75.8.0.tar.gz",
+      "packagetype": "sdist",
+      "url": "https://files.pythonhosted.org/packages/92/ec/089608b791d210aec4e7f97488e67ab0d33add3efccb83a056cbafe3a2a6/setuptools-75.8.0.tar.gz",
+      "size": 1343222,
+      "digests": {
+        "sha256": "c5afc8f407c626b8313a86e10311dd3f661c6cd9c09d4bf8c15c0e11f9f2b0e6"
+      }
+    }
+  ]
+}

@@ -1,7 +1,8 @@
 """Agent entry point: `python3.13 -I -S agent.pyz <command> --args-b64 <base64 JSON>`.
 
-`proof-install` and `proof-run` (M2-TASK-09) belong to the call-chain proof; `proof-run` leaves
-the process itself after printing its one result line (see `proof.py`).
+`proof-install`, `proof-build` (M2-TASK-16, ADR-0041) and `proof-run` (M2-TASK-09) belong to the
+call-chain proof; `proof-run` leaves the process itself after printing its one result line (see
+`proof.py`).
 """
 
 import os
@@ -16,6 +17,7 @@ HANDLERS: dict[str, protocol.Handler] = {
     "resolve": resolve.resolve_command,
     "selfcheck": selfcheck.selfcheck_command,
     "proof-install": proof.proof_install_command,
+    "proof-build": proof.proof_build_command,
     "proof-run": proof.proof_run_command,
 }
 

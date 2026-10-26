@@ -219,7 +219,7 @@ class JobManager:
             del self._jobs[job.scan_id]
 
 
-# ---- call-chain proof (M2, cuttable; ARCHITECTURE section 16, ADR-0039) -------------------------
+# ---- call-chain proof (M2, cuttable; ARCHITECTURE section 16, ADR-0039, ADR-0041) ---------------
 
 _IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 PROOF_SANDBOX_TIMEOUT = "sandbox timeout"
@@ -254,8 +254,9 @@ async def run_proof(
     """Prove (or not) that the finding's call path is reached, in the Sandbox.
 
     Fetches the pinned commit again (image A), indexes it to find the call the repository makes at
-    the path's last step, installs the resolved pins from wheels only (image P), then runs the entry
-    with that call stubbed. Never raises for a Sandbox, timeout or spend problem: each ends as a
+    the path's last step, installs the resolved pins from wheels only (image P; a pin without a
+    wheel is downloaded there and built offline into image P'), then runs the entry with that
+    call stubbed. Never raises for a Sandbox, timeout or spend problem: each ends as a
     `not_proven` Proof with its reason, so the scan, the job and the verdict are unaffected.
     """
     last = (finding.call_path or [None])[-1]
@@ -296,9 +297,16 @@ async def run_proof(
             (d.name, d.version) for d in report.dependencies if d.resolved and d.version is not None
         ]
         installed = await deps.agent.proof_install(workspace, pins)
-        if installed.no_wheel:
-            missing = ", ".join(installed.no_wheel)
-            return not_proven(f"uncertain: no wheel for {missing}; source builds are not run")
+        if installed.unfetched:
+            missing = ", ".join(u.spec for u in installed.unfetched)
+            return not_proven(
+                f"uncertain: no wheel for {missing}; its source package could not be downloaded"
+            )
+        if installed.sdists:  # a source package is built offline; proof-run starts from the result
+            installed = await deps.agent.proof_build(workspace, installed)
+            if installed.failed:
+                names = ", ".join(f.spec.replace("==", " ") for f in installed.failed)
+                return not_proven(f"uncertain: could not build {names} from source")
         run = await deps.agent.proof_run(
             workspace,
             installed,
