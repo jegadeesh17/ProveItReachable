@@ -40,6 +40,8 @@ Each significant technical decision for ProveItReachable, with its reasons, the 
 | [ADR-0034](#adr-0034-sandbox-contract-corrections-from-the-live-platform-checks) | Sandbox contract corrections from the live platform checks | Accepted | 2026-10-25 |
 | [ADR-0035](#adr-0035-fixed-prompt-token-overhead-in-the-llm-spend-hold) | Fixed prompt-token overhead in the LLM spend hold | Accepted | 2026-10-25 |
 | [ADR-0036](#adr-0036-ship-the-published-eval-summary-in-the-space-image) | Ship the published eval summary in the Space image | Accepted | 2026-10-26 |
+| [ADR-0037](#adr-0037-call-path-matching-through-default-argument-equivalences-and-inferred-source-roots) | Call-path matching through default-argument equivalences and inferred source roots | Accepted | 2026-10-26 |
+| [ADR-0038](#adr-0038-a-langsmith-run-per-pipeline-step-finding-and-tool-call) | A LangSmith run per pipeline step, finding and tool call | Accepted | 2026-10-26 |
 
 ## ADR-0001: Python and FastAPI service with typed schemas
 
@@ -1012,3 +1014,66 @@ The security review (round 1) asked that the Space image never contain secrets o
 ### Consequences
 
 The deployed demo shows the evaluation figure whenever the committed `latest.json` is a scored run with a precision value, and shows none otherwise, as before. Updating the figure on the Space means committing a new `latest.json` and rebuilding the image. The image gains one small file that is already public; nothing secret or per-case enters it. The `.dockerignore` and Dockerfile packaging tests change to match.
+
+## ADR-0037: Call-path matching through default-argument equivalences and inferred source roots
+
+Date: 2026-10-26
+Status: Accepted
+
+### Context
+
+In the M1 user acceptance review (see [FEEDBACK](FEEDBACK.md), "M1 UAT round 1"), the tool said "no reachable path detected" for PyRL, although its `main.py` calls `yaml.load(f)` on PyYAML 5.3 every time it starts. The first suspicion was that code inside `if __name__ == "__main__":` does not count as an entry point. The code shows that it does: every module-level statement, including the body of that `if` and any `with` or `try` inside it, belongs to the module's entry point (`main_block`). A recorded run confirms it: the eval case for the same call under advisory GHSA-6757-jp84-gxfx was judged "likely reachable" with a valid path.
+
+The real causes are two others.
+
+1. **The vulnerable call is spelled differently.** The research step names the vulnerable functions from the advisory text. For the PyYAML advisories it finds `yaml.full_load` and `yaml.FullLoader`. PyRL never writes either name; it writes `yaml.load(f)` without a `Loader`, and in PyYAML 5.1 to 5.4.1 that call uses `FullLoader` by default. Matching by exact name cannot see this, so the call-path search found no use. This explains both the demo miss and the eval miss `pyrl-yaml-load-default-loader-14343` (the twin case passed only because that run's research happened to name `yaml.load`).
+2. **The project adds its own folder to the import path.** In PlaneSweepPose the vulnerable call sits in `lib/core/config.py`, and the scripts import it as `core.config` after a helper adds `lib/` to Python's search path. The index names the file `lib.core.config`, so the import `core.config` links to nothing, and the chain from the script's entry point stops there. The tool reported "no path within depth 8". This cause is inferred from the repository's layout and the recorded finding; it is confirmed with a fixture of the same shape and with the re-recorded demo.
+
+The eval miss `yaml-dynamic-getattr` has a third cause (the loader is chosen by name at run time) and is not addressed here.
+
+### Decision
+
+- **Entry points stay as they are** and are now written down in [ARCHITECTURE.md](ARCHITECTURE.md) section 6.3. A regression test with PyRL's shape (a call inside `if __name__ == "__main__":`, nested in `with` and `try`, and a helper function called from it) locks that in.
+- **Default-argument equivalences.** The index records, for each call of a watched library, how many positional arguments it passes and which keyword names. A small reviewed table says when a call with a missing argument is the same as another function. Its first rows: on PyYAML 5.1 up to 6.0, `yaml.load` and `yaml.load_all` without a `Loader` count as uses of `yaml.full_load` / `yaml.full_load_all` and `yaml.FullLoader`. The call-path search and the verdict check both use the same function to apply the table, so a path the search returns is accepted by the check, and a "no reachable path" answer is downgraded to "uncertain" when such a call exists. A call that passes any `Loader`, or that uses `*args` or `**kwargs`, never matches.
+- **Inferred source roots.** When an import matches no file in the repository, it is linked to the one repository module whose name ends with it (for example `core.config` to `lib.core.config`). This happens only if the repository itself changes Python's import path in its own code, exactly one module matches, and the name is neither a top-level module of the repository nor the vulnerable library. Links made this way count as heuristic, so a path through one is reported with at most medium confidence and says so.
+- No new dependency; the agent's protocol version stays 1, because the new index fields are optional.
+
+### Alternatives considered
+
+- **Treat more code as an entry point** (console scripts declared in `pyproject.toml`, `setup.cfg` or `setup.py`, or every public function): would not fix either miss, and "every public function" would invent paths that never run, which threatens the precision bar. Console scripts are a real but unobserved gap; deferred.
+- **Ask the research step to also name `yaml.load`:** the model's answer varies between runs, and a bare `yaml.load` symbol would also match safe calls such as `yaml.load(f, Loader=SafeLoader)` (the co2tools case), turning a correct "no path" into a false "reachable".
+- **Mark every `yaml.load` call as vulnerable:** the same false positive, without looking at the `Loader` argument.
+- **Read the folder added to the import path from the `sys.path` call:** the path is usually built at run time (`os.path.join(this_dir, "..", "lib")`), so static reading is fragile; the unique-suffix rule with the presence check is simpler and conservative.
+- **Raise the search depth above 8:** the depth was not the cause.
+
+### Consequences
+
+PyRL's `yaml.load(f)` is found for both PyYAML advisories, so a demo can show "likely reachable" with a real call path. Repositories laid out like PlaneSweepPose get call paths through their own helper modules, at medium confidence at most. The index model gains two optional fields; the ast tool is built per finding with the package and version; the verdict check uses the shared matcher. The three demo replays and the published eval result must be re-recorded to show the change. New library defaults need a new reviewed table row with a test. A wrong suffix link could in principle create a false path; it is limited by the conditions above, flagged as heuristic, and guarded by a golden-index test showing that the eval fixtures and the canary are indexed exactly as before.
+
+## ADR-0038: A LangSmith run per pipeline step, finding and tool call
+
+Date: 2026-10-26
+Status: Accepted
+
+### Context
+
+[ARCHITECTURE.md](ARCHITECTURE.md) promises that each eval case trace in LangSmith has child runs per step, LLM call and tool call. In the M1 user acceptance review the trace showed only the case, the scan and a flat list of model calls: no run for the six pipeline steps and none for the code-index tool calls the model made. The test for trace correlation (AC-74) checked only that the scan's trace carries its `scan_id`, so the gap went unnoticed. Without the tree, a reviewer cannot see which step was slow or which tool answers the model relied on, which is the point of the traces for judges and for debugging.
+
+### Decision
+
+- Beneath the scan run, the pipeline opens one run per step (`pir.step.resolve`, `osv`, `research`, `analysis`, `reasoning`, `report`), skipped steps included, in pipeline order.
+- Inside the research step, one run per advisory researched, holding the Tavily search as a tool run (none when the cached answer is used) and the model's extraction call.
+- Inside the reasoning step, one run per finding, holding its model calls and one tool run per code-index tool call, named after the tool, in call order. Tool runs record the arguments and the size of the answer, not the answer itself.
+- The exact tree is in [ARCHITECTURE.md](ARCHITECTURE.md) section 19.2 and is tested offline with the fake LangSmith client, using the real LLM client against a recorded fake Token Factory so the model-call runs appear.
+- With tracing off, nothing changes; tracing never changes a report. The same redaction applies to every run.
+
+### Alternatives considered
+
+- **Keep the flat trace and fix the documentation:** removes a promise that judges and the eval review rely on.
+- **Separate traces per step linked by metadata:** harder to read in LangSmith and breaks the one-trace-per-case read-back.
+- **A run for every Sandbox and OSV call as well:** more detail than the review needs; the step runs already show their duration and outcome. Can be added later without a contract change.
+- **Record full tool answers in tool runs:** the same code snippets already appear in the model's input; recording them twice adds volume without new information.
+
+### Consequences
+
+Each eval case and live scan shows a readable tree in LangSmith. The tracing helpers, the pipeline's step runner, the researcher and the tool-calling loop change; reports, logs and the API do not. A new acceptance criterion tests the tree's shape; one eval run is needed to confirm it in LangSmith.
