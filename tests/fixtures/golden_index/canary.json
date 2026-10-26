@@ -1,0 +1,134 @@
+{
+  "agent_protocol": 1,
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "defs": [
+    {
+      "decorators": [],
+      "end_line": 9,
+      "entry_kind": "module_level",
+      "file": "__init__.py",
+      "id": "__init__:<module>",
+      "line": 1
+    },
+    {
+      "decorators": [],
+      "end_line": 9,
+      "entry_kind": "main_block",
+      "file": "app.py",
+      "id": "app:<module>",
+      "line": 1
+    },
+    {
+      "decorators": [],
+      "end_line": 5,
+      "entry_kind": null,
+      "file": "app.py",
+      "id": "app:load_config",
+      "line": 4
+    },
+    {
+      "decorators": [],
+      "end_line": 13,
+      "entry_kind": "module_level",
+      "file": "setup.py",
+      "id": "setup:<module>",
+      "line": 1
+    }
+  ],
+  "edges": [
+    {
+      "callee": "app:load_config",
+      "caller": "app:<module>",
+      "file": "app.py",
+      "heuristic": false,
+      "line": 9
+    }
+  ],
+  "files": [
+    {
+      "is_test": false,
+      "lines": 9,
+      "parsed": true,
+      "path": "__init__.py",
+      "skip_reason": null
+    },
+    {
+      "is_test": false,
+      "lines": 9,
+      "parsed": true,
+      "path": "app.py",
+      "skip_reason": null
+    },
+    {
+      "is_test": false,
+      "lines": 13,
+      "parsed": true,
+      "path": "setup.py",
+      "skip_reason": null
+    }
+  ],
+  "imports": [
+    {
+      "asname": null,
+      "bound_as": "os",
+      "file": "__init__.py",
+      "line": 3,
+      "module": "os",
+      "name": null
+    },
+    {
+      "asname": null,
+      "bound_as": "yaml",
+      "file": "app.py",
+      "line": 1,
+      "module": "yaml",
+      "name": null
+    },
+    {
+      "asname": null,
+      "bound_as": "os",
+      "file": "setup.py",
+      "line": 3,
+      "module": "os",
+      "name": null
+    },
+    {
+      "asname": null,
+      "bound_as": "setup",
+      "file": "setup.py",
+      "line": 11,
+      "module": "setuptools",
+      "name": "setup"
+    }
+  ],
+  "stats": {
+    "defs": 4,
+    "dirs_skipped": 0,
+    "edges": 1,
+    "files_parsed": 3,
+    "files_skipped": 0,
+    "files_total": 3,
+    "imports": 4,
+    "lines_total": 31,
+    "names_skipped": 0,
+    "symlinks_skipped": 0,
+    "target_sites": 1
+  },
+  "target_modules": [
+    "yaml"
+  ],
+  "target_sites": [
+    {
+      "args": 1,
+      "caller": "app:load_config",
+      "col": 11,
+      "file": "app.py",
+      "keywords": [],
+      "kind": "call",
+      "line": 5,
+      "snippet": "return yaml.full_load(text)",
+      "target": "yaml.full_load"
+    }
+  ],
+  "truncated": false
+}

@@ -1,0 +1,193 @@
+{
+  "agent_protocol": 1,
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "defs": [
+    {
+      "decorators": [],
+      "end_line": 1,
+      "entry_kind": null,
+      "file": "shipper/__init__.py",
+      "id": "shipper:<module>",
+      "line": 1
+    },
+    {
+      "decorators": [],
+      "end_line": 14,
+      "entry_kind": "main_block",
+      "file": "shipper/cli.py",
+      "id": "shipper.cli:<module>",
+      "line": 1
+    },
+    {
+      "decorators": [],
+      "end_line": 10,
+      "entry_kind": null,
+      "file": "shipper/cli.py",
+      "id": "shipper.cli:main",
+      "line": 6
+    },
+    {
+      "decorators": [],
+      "end_line": 5,
+      "entry_kind": null,
+      "file": "shipper/parser.py",
+      "id": "shipper.parser:<module>",
+      "line": 1
+    },
+    {
+      "decorators": [],
+      "end_line": 5,
+      "entry_kind": null,
+      "file": "shipper/parser.py",
+      "id": "shipper.parser:parse_document",
+      "line": 4
+    },
+    {
+      "decorators": [],
+      "end_line": 6,
+      "entry_kind": null,
+      "file": "shipper/service.py",
+      "id": "shipper.service:<module>",
+      "line": 1
+    },
+    {
+      "decorators": [],
+      "end_line": 6,
+      "entry_kind": null,
+      "file": "shipper/service.py",
+      "id": "shipper.service:read_settings",
+      "line": 4
+    }
+  ],
+  "edges": [
+    {
+      "callee": "shipper.service:<module>",
+      "caller": "shipper.cli:<module>",
+      "file": "shipper/cli.py",
+      "heuristic": false,
+      "line": 3
+    },
+    {
+      "callee": "shipper.service:read_settings",
+      "caller": "shipper.cli:main",
+      "file": "shipper/cli.py",
+      "heuristic": false,
+      "line": 10
+    },
+    {
+      "callee": "shipper.cli:main",
+      "caller": "shipper.cli:<module>",
+      "file": "shipper/cli.py",
+      "heuristic": false,
+      "line": 14
+    },
+    {
+      "callee": "shipper.parser:<module>",
+      "caller": "shipper.service:<module>",
+      "file": "shipper/service.py",
+      "heuristic": false,
+      "line": 1
+    },
+    {
+      "callee": "shipper.parser:parse_document",
+      "caller": "shipper.service:read_settings",
+      "file": "shipper/service.py",
+      "heuristic": false,
+      "line": 6
+    }
+  ],
+  "files": [
+    {
+      "is_test": false,
+      "lines": 0,
+      "parsed": true,
+      "path": "shipper/__init__.py",
+      "skip_reason": null
+    },
+    {
+      "is_test": false,
+      "lines": 14,
+      "parsed": true,
+      "path": "shipper/cli.py",
+      "skip_reason": null
+    },
+    {
+      "is_test": false,
+      "lines": 5,
+      "parsed": true,
+      "path": "shipper/parser.py",
+      "skip_reason": null
+    },
+    {
+      "is_test": false,
+      "lines": 6,
+      "parsed": true,
+      "path": "shipper/service.py",
+      "skip_reason": null
+    }
+  ],
+  "imports": [
+    {
+      "asname": null,
+      "bound_as": "argparse",
+      "file": "shipper/cli.py",
+      "line": 1,
+      "module": "argparse",
+      "name": null
+    },
+    {
+      "asname": null,
+      "bound_as": "read_settings",
+      "file": "shipper/cli.py",
+      "line": 3,
+      "module": "shipper.service",
+      "name": "read_settings"
+    },
+    {
+      "asname": null,
+      "bound_as": "yaml",
+      "file": "shipper/parser.py",
+      "line": 1,
+      "module": "yaml",
+      "name": null
+    },
+    {
+      "asname": null,
+      "bound_as": "parse_document",
+      "file": "shipper/service.py",
+      "line": 1,
+      "module": "shipper.parser",
+      "name": "parse_document"
+    }
+  ],
+  "stats": {
+    "defs": 7,
+    "dirs_skipped": 0,
+    "edges": 5,
+    "files_parsed": 4,
+    "files_skipped": 0,
+    "files_total": 4,
+    "imports": 4,
+    "lines_total": 25,
+    "names_skipped": 0,
+    "symlinks_skipped": 0,
+    "target_sites": 1
+  },
+  "target_modules": [
+    "yaml"
+  ],
+  "target_sites": [
+    {
+      "args": 1,
+      "caller": "shipper.parser:parse_document",
+      "col": 11,
+      "file": "shipper/parser.py",
+      "keywords": [],
+      "kind": "call",
+      "line": 5,
+      "snippet": "return yaml.full_load(text)",
+      "target": "yaml.full_load"
+    }
+  ],
+  "truncated": false
+}

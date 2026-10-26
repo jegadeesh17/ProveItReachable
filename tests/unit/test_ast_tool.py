@@ -336,3 +336,81 @@ def test_bad_calls_return_an_error_result_and_never_raise(tool, name, arguments)
     assert "error" in json.loads(result.content)
     assert result.result_bytes <= MAX_RESULT_BYTES
     assert tool.seen_locations == set()
+
+
+# --- default-argument equivalences (ADR-0037, AC-80) ---
+
+
+@pytest.fixture(scope="module")
+def default_loader_index() -> AnalysisIndex:
+    raw = agent_index.build_index(str(FIXTURES / "pyyaml_default_loader"), SHA, ["yaml"])
+    return AnalysisIndex.model_validate(raw)
+
+
+def _full_load_paths(index: AnalysisIndex, version: str | None, package: str | None = "PyYAML"):
+    tool = AstTool(index, package=package, version=version)
+    return _ok(tool, "find_paths", {"symbol": "yaml.full_load"})["paths"]
+
+
+def test_find_paths_reaches_both_default_loader_calls_from_the_main_block(  # AC-80
+    default_loader_index,
+):
+    paths = _full_load_paths(default_loader_index, "5.3")
+    ends = {(p["steps"][-1]["file"], p["steps"][-1]["line"]) for p in paths}
+    assert ends == {("main.py", 13), ("main.py", 19)}
+    for path in paths:
+        assert path["steps"][0]["edge"] == "entry"
+        assert path["steps"][0]["symbol"] == "main:<module>"
+        assert path["steps"][-1]["edge"] == "vulnerable_call"
+        assert path["steps"][-1]["symbol"] == "yaml.load"  # the name the repo calls
+    helper = next(p for p in paths if p["steps"][-1]["line"] == 13)
+    assert [s["symbol"] for s in helper["steps"][1:-1]] == ["main:_get_config"]
+
+
+def test_find_paths_never_reaches_the_loader_or_unknown_argument_calls(  # AC-80
+    default_loader_index,
+):
+    for symbol in ("yaml.full_load", "yaml.FullLoader"):
+        tool = AstTool(default_loader_index, package="PyYAML", version="5.3")
+        paths = _ok(tool, "find_paths", {"symbol": symbol})["paths"]
+        ends = {(p["steps"][-1]["file"], p["steps"][-1]["line"]) for p in paths}
+        assert not {e for e in ends if e[0] in ("settings.py", "dynamic.py")}
+        assert ("main.py", 19) in ends
+
+
+def test_find_paths_returns_nothing_on_pyyaml_6(default_loader_index):  # AC-80
+    assert _full_load_paths(default_loader_index, "6.0") == []
+
+
+@pytest.mark.parametrize(("package", "version"), [(None, None), (None, "5.3"), ("PyYAML", None)])
+def test_no_package_or_version_applies_no_equivalence(  # AC-80
+    default_loader_index, package, version
+):
+    assert _full_load_paths(default_loader_index, version, package) == []
+
+
+def test_unparsable_version_finds_no_path(default_loader_index):  # AC-80
+    assert _full_load_paths(default_loader_index, "not-a-version") == []
+
+
+def test_find_call_sites_carries_implied_by_only_for_implied_sites(default_loader_index):  # AC-80
+    tool = AstTool(default_loader_index, package="PyYAML", version="5.3")
+    sites = _ok(tool, "find_call_sites", {"symbol": "yaml.full_load"})["sites"]
+    assert [(s["file"], s["line"]) for s in sites] == [("main.py", 13), ("main.py", 19)]
+    assert all(s["implied_by"] == "yaml.load" for s in sites)
+    plain = _ok(tool, "find_call_sites", {"symbol": "yaml.load"})["sites"]
+    assert len(plain) == 6 and all("implied_by" not in s for s in plain)
+
+
+def test_find_call_sites_never_matches_a_loader_call_through_the_table(  # AC-80
+    default_loader_index,
+):
+    tool = AstTool(default_loader_index, package="PyYAML", version="5.3")
+    for symbol in ("yaml.full_load", "yaml.FullLoader"):
+        sites = _ok(tool, "find_call_sites", {"symbol": symbol})["sites"]
+        assert all(s["file"] == "main.py" for s in sites)
+
+
+def test_find_call_sites_without_package_has_no_implied_sites(default_loader_index):  # AC-80
+    tool = AstTool(default_loader_index)
+    assert _ok(tool, "find_call_sites", {"symbol": "yaml.full_load"})["sites"] == []

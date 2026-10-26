@@ -1,0 +1,80 @@
+{
+  "agent_protocol": 1,
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "defs": [
+    {
+      "decorators": [],
+      "end_line": 12,
+      "entry_kind": "main_block",
+      "file": "client.py",
+      "id": "client:<module>",
+      "line": 1
+    },
+    {
+      "decorators": [],
+      "end_line": 8,
+      "entry_kind": null,
+      "file": "client.py",
+      "id": "client:fetch",
+      "line": 6
+    }
+  ],
+  "edges": [
+    {
+      "callee": "client:fetch",
+      "caller": "client:<module>",
+      "file": "client.py",
+      "heuristic": false,
+      "line": 12
+    }
+  ],
+  "files": [
+    {
+      "is_test": false,
+      "lines": 12,
+      "parsed": true,
+      "path": "client.py",
+      "skip_reason": null
+    }
+  ],
+  "imports": [
+    {
+      "asname": null,
+      "bound_as": "requests",
+      "file": "client.py",
+      "line": 3,
+      "module": "requests",
+      "name": null
+    }
+  ],
+  "stats": {
+    "defs": 2,
+    "dirs_skipped": 0,
+    "edges": 1,
+    "files_parsed": 1,
+    "files_skipped": 0,
+    "files_total": 1,
+    "imports": 1,
+    "lines_total": 12,
+    "names_skipped": 0,
+    "symlinks_skipped": 0,
+    "target_sites": 1
+  },
+  "target_modules": [
+    "requests"
+  ],
+  "target_sites": [
+    {
+      "args": 0,
+      "caller": "client:fetch",
+      "col": 14,
+      "file": "client.py",
+      "keywords": [],
+      "kind": "call",
+      "line": 7,
+      "snippet": "session = requests.Session()",
+      "target": "requests.Session"
+    }
+  ],
+  "truncated": false
+}

@@ -1,6 +1,9 @@
 """Verdict gate, confidence caps, ranking, step tools and report building (AC-18 to AC-23)."""
 
+import json
+from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -18,6 +21,7 @@ from pir.models.report import (
     StepStatus,
 )
 from pir.models.research import AdvisoryResearch
+from pir.reasoning.ast_tool import AstTool
 from pir.report_builder import (
     Candidate,
     ScanContext,
@@ -26,6 +30,7 @@ from pir.report_builder import (
     rank,
     step_tools,
 )
+from pir.sandbox_agent import index as agent_index
 
 SHA = "b" * 40
 OSV_URL = "https://osv.dev/vulnerability/GHSA-8q59-q68h-6hv4"
@@ -619,3 +624,104 @@ def test_build_report_validates_strictly():
     with pytest.raises(ValidationError, match="sorted|steps"):
         bad = context([dependency("a")])
         build_report(ScanContext(**{**bad.__dict__, "steps": list(reversed(bad.steps))}), [])
+
+
+# --- default-argument equivalences through the gate (ADR-0037, AC-80) ---
+
+DEFAULT_LOADER = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "repos" / "pyyaml_default_loader"
+)
+
+
+def _default_loader_index() -> AnalysisIndex:
+    raw = agent_index.build_index(str(DEFAULT_LOADER), SHA, ["yaml"])
+    return AnalysisIndex.model_validate(raw)
+
+
+def _full_load_research() -> AdvisoryResearch:
+    return research().model_copy(update={"symbols": ["yaml.full_load", "yaml.FullLoader"]})
+
+
+def _cand(version="5.3"):
+    return replace(candidate(), version=version)
+
+
+def _tool_path(idx, version, line):
+    """The path AstTool returns to the call at main.py:`line`, as the model would submit it."""
+    tool = AstTool(idx, package="PyYAML", version=version)
+    paths = json.loads(tool.call("find_paths", {"symbol": "yaml.full_load"}).content)["paths"]
+    chosen = [p for p in paths if p["steps"][-1]["line"] == line]
+    steps = [CallPathStep(**s) for s in chosen[0]["steps"]] if chosen else None
+    return steps, tool.seen_locations
+
+
+@pytest.mark.parametrize("line", [13, 19])
+def test_ac80_likely_reachable_path_to_an_implied_call_passes_the_gate(line):
+    idx = _default_loader_index()
+    steps, seen = _tool_path(idx, "5.3", line)
+    f = build_finding(
+        _cand(),
+        _full_load_research(),
+        outcome(path=steps, locations=[]),
+        idx,
+        seen_locations=seen,
+    )
+    assert f.verdict == "likely reachable"
+    assert f.reason_code is None
+    assert f.call_path[-1].line == line and f.call_path[-1].symbol == "yaml.load"
+    assert f.confidence == "high"
+
+
+def test_ac80_the_same_path_fails_the_gate_on_pyyaml_6():
+    idx = _default_loader_index()
+    steps, seen = _tool_path(idx, "5.3", 19)
+    f = build_finding(
+        _cand("6.0"),
+        _full_load_research(),
+        outcome(path=steps, locations=[]),
+        idx,
+        seen_locations=seen,
+    )
+    assert f.verdict == "uncertain"
+    assert f.reason_code == "unsupported_reachability_claim"
+    assert "not a use of the vulnerable symbol" in f.reason
+
+
+def test_ac80_a_path_to_the_loader_call_is_never_accepted():
+    idx = _default_loader_index()
+    steps, seen = _tool_path(idx, "5.3", 19)
+    safe = steps[:-1] + [
+        CallPathStep(file="settings.py", line=8, edge="vulnerable_call", symbol="yaml.load")
+    ]
+    f = build_finding(
+        _cand(),
+        _full_load_research(),
+        outcome(path=safe, locations=[]),
+        idx,
+        seen_locations=seen | {("settings.py", 8)},
+    )
+    assert f.verdict == "uncertain"
+    assert f.reason_code == "unsupported_reachability_claim"
+
+
+def test_ac80_no_path_answer_is_downgraded_when_an_implying_call_exists():
+    idx = _default_loader_index()
+    f = build_finding(_cand(), _full_load_research(), no_path(), idx, seen_locations=set())
+    assert f.verdict == "uncertain"
+    assert f.reason_code == "contradicted_by_index"
+    assert "main.py:" in f.reason and "yaml.load" in f.reason
+
+
+def test_ac80_no_path_answer_stands_on_pyyaml_6():
+    idx = _default_loader_index()
+    f = build_finding(_cand("6.0"), _full_load_research(), no_path(), idx, seen_locations=set())
+    assert f.verdict == "no reachable path detected"
+
+
+def test_ac80_no_path_answer_stands_when_only_loader_calls_exist():
+    idx = _default_loader_index()
+    only_safe = idx.model_copy(
+        update={"target_sites": [s for s in idx.target_sites if s.file == "settings.py"]}
+    )
+    f = build_finding(_cand(), _full_load_research(), no_path(), only_safe, seen_locations=set())
+    assert f.verdict == "no reachable path detected"

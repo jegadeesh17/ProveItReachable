@@ -16,6 +16,7 @@ from typing import Any
 
 from pir.llm import ToolSpec
 from pir.models.index import AnalysisIndex, DefRecord, Edge, TargetSite
+from pir.reasoning.equivalences import implied_symbols
 
 MAX_RESULT_BYTES = 8 * 1024
 DEFAULT_LIMIT = 20
@@ -216,8 +217,13 @@ def _module_matches(module: str, wanted: str) -> bool:
 class AstTool:
     """Deterministic, read-only. `seen_locations` collects every file:line a result returned."""
 
-    def __init__(self, index: AnalysisIndex) -> None:
+    def __init__(
+        self, index: AnalysisIndex, *, package: str | None = None, version: str | None = None
+    ) -> None:
+        # package and version select default-argument equivalences (ADR-0037); None applies none
         self._index = index
+        self._package = package
+        self._version = version
         self.seen_locations: set[tuple[str, int]] = set()
         self._tests = {f.path for f in index.files if f.is_test}
         self._defs: dict[str, DefRecord] = {}
@@ -298,9 +304,15 @@ class AstTool:
         offset = _int_arg(args, "offset", 0, 0, 1_000_000)
         return limit, offset
 
-    @staticmethod
-    def _site_item(site: TargetSite, in_test: bool) -> dict[str, Any]:
-        return {
+    def _site_matches(self, site: TargetSite, symbol: str) -> bool:
+        return _module_matches(site.target, symbol) or (
+            symbol in implied_symbols(site, self._package, self._version)
+        )
+
+    def _site_item(
+        self, site: TargetSite, in_test: bool, symbol: str | None = None
+    ) -> dict[str, Any]:
+        item = {
             "file": site.file,
             "line": site.line,
             "col": site.col,
@@ -310,6 +322,9 @@ class AstTool:
             "target": site.target,
             "in_test": in_test,
         }
+        if symbol is not None and not _module_matches(site.target, symbol):
+            item["implied_by"] = site.target  # the call stands for `symbol` (ADR-0037)
+        return item
 
     # ---- tools ------------------------------------------------------------------------
 
@@ -337,10 +352,10 @@ class AstTool:
         symbol = _text_arg(args, "symbol")
         limit, offset = self._limit_offset(args)
         sites = sorted(
-            (s for s in self._index.target_sites if _module_matches(s.target, symbol)),
+            (s for s in self._index.target_sites if self._site_matches(s, symbol)),
             key=lambda s: (s.file, s.line, s.col, s.target, s.kind),
         )
-        items = [self._site_item(s, s.file in self._tests) for s in sites]
+        items = [self._site_item(s, s.file in self._tests, symbol) for s in sites]
         return self._page("sites", items, offset, limit, self._file_line)
 
     def _find_callers(self, args: dict[str, Any]) -> str:
@@ -413,7 +428,7 @@ class AstTool:
         return best
 
     def _shortest_paths(self, symbol: str, max_depth: int) -> list[dict[str, Any]]:
-        sites = [s for s in self._index.target_sites if _module_matches(s.target, symbol)]
+        sites = [s for s in self._index.target_sites if self._site_matches(s, symbol)]
         entries = sorted({d.id for d in self._index.defs if d.entry_kind is not None})
         if not sites or not entries:
             return []

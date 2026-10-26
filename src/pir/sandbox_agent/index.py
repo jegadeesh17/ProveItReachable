@@ -87,6 +87,8 @@ class _Use:
     attrs: tuple[str, ...]
     kind: str
     scope: _Scope
+    args: int | None = None  # positional argument count of a call; None for a *args call
+    keywords: list[str] | None = None  # sorted keyword names of a call; None for a **kwargs call
 
 
 @dataclass
@@ -356,7 +358,15 @@ def _enter_call(node: ast.Call, scope: _Scope, facts: _Facts, stack: list) -> No
     func = node.func
     chain = _chain(func)
     if chain is not None:
-        facts.uses.append(_Use(func.lineno, func.col_offset, chain[0], chain[1], "call", scope))
+        positional = None if any(isinstance(a, ast.Starred) for a in node.args) else len(node.args)
+        names = (
+            None
+            if any(k.arg is None for k in node.keywords)
+            else sorted(k.arg for k in node.keywords if k.arg is not None)
+        )
+        facts.uses.append(
+            _Use(func.lineno, func.col_offset, chain[0], chain[1], "call", scope, positional, names)
+        )
         facts.calls.append(_Call(node.lineno, chain[0], chain[1], None, scope))
     else:
         attr_name = func.attr if isinstance(func, ast.Attribute) else None
@@ -431,6 +441,8 @@ def _emit_sites(facts: _Facts, targets: frozenset[str], data: bytes) -> None:
                     "kind": use.kind,
                     "snippet": snippet[:SNIPPET_CHARS],
                     "target": full,
+                    "args": use.args,
+                    "keywords": None if use.keywords is None else list(use.keywords),
                 }
             )
 

@@ -33,6 +33,7 @@ from pir.models.report import (
     expected_outcome,
 )
 from pir.models.research import AdvisoryResearch
+from pir.reasoning.equivalences import implied_symbols
 
 _CONFIDENCE_RANK: dict[str, int] = {"high": 0, "medium": 1, "low": 2}
 _SEVERITY_RANK: dict[str, int] = {"critical": 0, "high": 1, "moderate": 2, "low": 3, "unknown": 4}
@@ -149,6 +150,8 @@ def _first_failed_reachability_rule(
     symbols: set[str],
     index: AnalysisIndex,
     seen: Collection[tuple[str, int]],
+    package: str | None = None,
+    version: str | None = None,
 ) -> tuple[str | None, TargetSite | None]:
     """Gate rule 2. Returns (failed rule text or None, the TargetSite the path ends on)."""
     if not path:
@@ -163,7 +166,11 @@ def _first_failed_reachability_rule(
             return f"rule 2: step {step.file}:{step.line} was never returned by the ast tool", None
     last = path[-1]
     for site in index.target_sites:
-        if site.file == last.file and site.line == last.line and site.target in symbols:
+        if (
+            site.file == last.file
+            and site.line == last.line
+            and _matches(site, symbols, package, version)
+        ):
             return None, site
     return f"rule 2: last step {last.file}:{last.line} is not a use of the vulnerable symbol", None
 
@@ -175,10 +182,17 @@ def _starts_at_entry(path: list[CallPathStep], index: AnalysisIndex) -> bool:
     return first.edge == "entry" and (first.symbol in entry_ids or module_level)
 
 
-def _contradicting_site(symbols: set[str], index: AnalysisIndex) -> TargetSite | None:
+def _matches(site: TargetSite, symbols: set[str], package: str | None, version: str | None) -> bool:
+    """A use of a vulnerable symbol, by name or through a default argument (ADR-0037)."""
+    return site.target in symbols or not symbols.isdisjoint(implied_symbols(site, package, version))
+
+
+def _contradicting_site(
+    symbols: set[str], index: AnalysisIndex, package: str | None = None, version: str | None = None
+) -> TargetSite | None:
     test_files = {f.path for f in index.files if f.is_test}
     for site in index.target_sites:
-        if site.target in symbols and site.file not in test_files:
+        if _matches(site, symbols, package, version) and site.file not in test_files:
             return site
     return None
 
@@ -310,7 +324,9 @@ def _gate(
             "unsupported_reachability_claim", "the model could not establish a reachability claim"
         )
     if verdict.verdict == "likely reachable":
-        failed, site = _first_failed_reachability_rule(verdict.call_path, symbols, index, seen)
+        failed, site = _first_failed_reachability_rule(
+            verdict.call_path, symbols, index, seen, base.candidate.package, base.candidate.version
+        )
         if failed is not None or site is None or verdict.call_path is None:
             return downgrade("unsupported_reachability_claim", failed or "rule 2: no call path")
         path = verdict.call_path
@@ -331,7 +347,7 @@ def _gate(
             source_locations=locations,
             call_path=path,
         )
-    site = _contradicting_site(symbols, index)
+    site = _contradicting_site(symbols, index, base.candidate.package, base.candidate.version)
     if site is not None:
         return downgrade(
             "contradicted_by_index",

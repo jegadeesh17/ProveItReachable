@@ -1,0 +1,80 @@
+{
+  "agent_protocol": 1,
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "defs": [
+    {
+      "decorators": [],
+      "end_line": 11,
+      "entry_kind": "main_block",
+      "file": "inspect_wheel.py",
+      "id": "inspect_wheel:<module>",
+      "line": 1
+    },
+    {
+      "decorators": [],
+      "end_line": 7,
+      "entry_kind": null,
+      "file": "inspect_wheel.py",
+      "id": "inspect_wheel:describe",
+      "line": 6
+    }
+  ],
+  "edges": [
+    {
+      "callee": "inspect_wheel:describe",
+      "caller": "inspect_wheel:<module>",
+      "file": "inspect_wheel.py",
+      "heuristic": false,
+      "line": 11
+    }
+  ],
+  "files": [
+    {
+      "is_test": false,
+      "lines": 11,
+      "parsed": true,
+      "path": "inspect_wheel.py",
+      "skip_reason": null
+    }
+  ],
+  "imports": [
+    {
+      "asname": null,
+      "bound_as": "wheel",
+      "file": "inspect_wheel.py",
+      "line": 3,
+      "module": "wheel",
+      "name": null
+    }
+  ],
+  "stats": {
+    "defs": 2,
+    "dirs_skipped": 0,
+    "edges": 1,
+    "files_parsed": 1,
+    "files_skipped": 0,
+    "files_total": 1,
+    "imports": 1,
+    "lines_total": 11,
+    "names_skipped": 0,
+    "symlinks_skipped": 0,
+    "target_sites": 1
+  },
+  "target_modules": [
+    "wheel"
+  ],
+  "target_sites": [
+    {
+      "args": null,
+      "caller": "inspect_wheel:describe",
+      "col": 20,
+      "file": "inspect_wheel.py",
+      "keywords": null,
+      "kind": "reference",
+      "line": 7,
+      "snippet": "return f\"wheel {wheel.__version__}\"",
+      "target": "wheel.__version__"
+    }
+  ],
+  "truncated": false
+}

@@ -1,0 +1,88 @@
+{
+  "agent_protocol": 1,
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "defs": [
+    {
+      "decorators": [],
+      "end_line": 14,
+      "entry_kind": "main_block",
+      "file": "app.py",
+      "id": "app:<module>",
+      "line": 1
+    },
+    {
+      "decorators": [],
+      "end_line": 10,
+      "entry_kind": null,
+      "file": "app.py",
+      "id": "app:load_config",
+      "line": 8
+    }
+  ],
+  "edges": [
+    {
+      "callee": "app:load_config",
+      "caller": "app:<module>",
+      "file": "app.py",
+      "heuristic": false,
+      "line": 14
+    }
+  ],
+  "files": [
+    {
+      "is_test": false,
+      "lines": 14,
+      "parsed": true,
+      "path": "app.py",
+      "skip_reason": null
+    }
+  ],
+  "imports": [
+    {
+      "asname": null,
+      "bound_as": "os",
+      "file": "app.py",
+      "line": 3,
+      "module": "os",
+      "name": null
+    },
+    {
+      "asname": null,
+      "bound_as": "yaml",
+      "file": "app.py",
+      "line": 5,
+      "module": "yaml",
+      "name": null
+    }
+  ],
+  "stats": {
+    "defs": 2,
+    "dirs_skipped": 0,
+    "edges": 1,
+    "files_parsed": 1,
+    "files_skipped": 0,
+    "files_total": 1,
+    "imports": 2,
+    "lines_total": 14,
+    "names_skipped": 0,
+    "symlinks_skipped": 0,
+    "target_sites": 1
+  },
+  "target_modules": [
+    "yaml"
+  ],
+  "target_sites": [
+    {
+      "args": null,
+      "caller": "app:load_config",
+      "col": 21,
+      "file": "app.py",
+      "keywords": null,
+      "kind": "reference",
+      "line": 9,
+      "snippet": "loader = getattr(yaml, os.environ.get(\"YAML_LOADER\", \"safe_load\"))",
+      "target": "yaml"
+    }
+  ],
+  "truncated": false
+}

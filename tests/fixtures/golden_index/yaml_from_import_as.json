@@ -1,0 +1,80 @@
+{
+  "agent_protocol": 1,
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "defs": [
+    {
+      "decorators": [],
+      "end_line": 11,
+      "entry_kind": "main_block",
+      "file": "app.py",
+      "id": "app:<module>",
+      "line": 1
+    },
+    {
+      "decorators": [],
+      "end_line": 7,
+      "entry_kind": null,
+      "file": "app.py",
+      "id": "app:load_config",
+      "line": 6
+    }
+  ],
+  "edges": [
+    {
+      "callee": "app:load_config",
+      "caller": "app:<module>",
+      "file": "app.py",
+      "heuristic": false,
+      "line": 11
+    }
+  ],
+  "files": [
+    {
+      "is_test": false,
+      "lines": 11,
+      "parsed": true,
+      "path": "app.py",
+      "skip_reason": null
+    }
+  ],
+  "imports": [
+    {
+      "asname": "parse_settings",
+      "bound_as": "parse_settings",
+      "file": "app.py",
+      "line": 3,
+      "module": "yaml",
+      "name": "full_load"
+    }
+  ],
+  "stats": {
+    "defs": 2,
+    "dirs_skipped": 0,
+    "edges": 1,
+    "files_parsed": 1,
+    "files_skipped": 0,
+    "files_total": 1,
+    "imports": 1,
+    "lines_total": 11,
+    "names_skipped": 0,
+    "symlinks_skipped": 0,
+    "target_sites": 1
+  },
+  "target_modules": [
+    "yaml"
+  ],
+  "target_sites": [
+    {
+      "args": 1,
+      "caller": "app:load_config",
+      "col": 11,
+      "file": "app.py",
+      "keywords": [],
+      "kind": "call",
+      "line": 7,
+      "snippet": "return parse_settings(text)",
+      "target": "yaml.full_load"
+    }
+  ],
+  "truncated": false
+}

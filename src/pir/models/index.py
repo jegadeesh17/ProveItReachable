@@ -58,6 +58,8 @@ class TargetSite(Strict):
     kind: Literal["call", "reference"]
     snippet: str = Field(max_length=200)
     target: str
+    args: int | None = Field(default=None, ge=0)  # kind="call": positional count; None otherwise
+    keywords: list[str] | None = None  # kind="call": sorted keyword names; None otherwise
 
 
 class Edge(Strict):

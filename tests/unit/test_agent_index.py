@@ -380,3 +380,64 @@ def test_module_name_for_paths():
     assert agent_index.module_name_for("src/pkg/mod.py") == ("pkg.mod", False)
     assert agent_index.module_name_for("setup.py") == ("setup", False)
     assert agent_index.module_name_for("__init__.py") == ("__init__", True)
+
+
+# --- ADR-0037 / AC-80: argument facts and the main block as an entry point ---
+
+
+@pytest.fixture(scope="module")
+def default_loader() -> dict:
+    return _build("pyyaml_default_loader", ["yaml"])
+
+
+def _by_caller_line(index: dict) -> dict[tuple[str, int, str], dict]:
+    return {(s["file"], s["line"], s["kind"]): s for s in index["target_sites"]}
+
+
+def test_call_sites_record_positional_count_and_sorted_keywords(default_loader):  # AC-80
+    sites = _by_caller_line(default_loader)
+    assert (sites[("main.py", 19, "call")]["args"], sites[("main.py", 19, "call")]["keywords"]) == (
+        1,
+        [],
+    )
+    keyword_call = sites[("settings.py", 8, "call")]
+    assert (keyword_call["args"], keyword_call["keywords"]) == (1, ["Loader"])
+    positional_call = sites[("settings.py", 9, "call")]
+    assert (positional_call["args"], positional_call["keywords"]) == (2, [])
+
+
+def test_star_args_and_star_star_kwargs_are_recorded_as_unknown(default_loader):  # AC-80
+    sites = _by_caller_line(default_loader)
+    spread = sites[("dynamic.py", 8, "call")]
+    assert (spread["args"], spread["keywords"]) == (None, [])
+    keyed = sites[("dynamic.py", 9, "call")]
+    assert (keyed["args"], keyed["keywords"]) == (1, None)
+
+
+def test_references_carry_no_argument_facts(default_loader):  # AC-80
+    refs = [s for s in default_loader["target_sites"] if s["kind"] == "reference"]
+    assert refs
+    assert all(s["args"] is None and s["keywords"] is None for s in refs)
+
+
+def test_keywords_are_sorted(tmp_path):  # AC-80
+    (tmp_path / "m.py").write_text("import yaml\nyaml.load(f, zeta=1, alpha=2, Loader=L)\n")
+    index = _build("", ["yaml"], root=tmp_path)
+    (call,) = [s for s in index["target_sites"] if s["kind"] == "call"]
+    assert call["keywords"] == ["Loader", "alpha", "zeta"]
+    assert call["args"] == 1
+    AnalysisIndex.model_validate(index)
+
+
+def test_main_block_is_an_entry_and_nested_calls_are_its_edges(default_loader):  # AC-80
+    kinds = {d["id"]: d["entry_kind"] for d in default_loader["defs"]}
+    assert kinds["main:<module>"] == "main_block"
+    edges = {(e["caller"], e["callee"]) for e in default_loader["edges"]}
+    assert ("main:<module>", "main:_get_config") in edges  # called inside with/try in the guard
+    sites = _by_caller_line(default_loader)
+    assert sites[("main.py", 19, "call")]["caller"] == "main:<module>"  # inside with/try
+    assert sites[("main.py", 13, "call")]["caller"] == "main:_get_config"
+
+
+def test_default_loader_fixture_index_validates(default_loader):  # AC-80
+    AnalysisIndex.model_validate(default_loader)

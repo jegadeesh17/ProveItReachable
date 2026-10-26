@@ -531,7 +531,7 @@ class _Scan:
                 target_modules=tops,
                 direct=item.candidate.direct,
             )
-            tool = AstTool(index)
+            tool = AstTool(index, package=item.candidate.package, version=item.candidate.version)
             async with gate:
                 try:
                     item.outcome = await self.deps.strategy.run(
