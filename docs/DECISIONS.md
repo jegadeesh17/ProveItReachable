@@ -33,12 +33,13 @@ Each significant technical decision for ProveItReachable, with its reasons, the 
 | [ADR-0027](#adr-0027-sandbox-steps-with-network-on-never-run-repository-code) | Sandbox steps with network on never run repository code | Superseded by ADR-0032 | 2026-10-25 |
 | [ADR-0028](#adr-0028-dependency-resolution-order-compiled-without-builds) | Dependency resolution order, compiled without builds | Accepted, amended by ADR-0032 and ADR-0034 | 2026-10-25 |
 | [ADR-0029](#adr-0029-one-spend-ledger-for-every-spender-with-allowances-and-a-daily-ceiling) | One spend ledger for every spender, with allowances and a daily ceiling | Accepted | 2026-10-25 |
-| [ADR-0030](#adr-0030-images-pinned-by-digest-and-hash-checked-installs) | Images pinned by digest and hash-checked installs | Accepted, amended by ADR-0033 (Sandbox image) | 2026-10-25 |
+| [ADR-0030](#adr-0030-images-pinned-by-digest-and-hash-checked-installs) | Images pinned by digest and hash-checked installs | Accepted, amended by ADR-0033 (Sandbox image); image contents partly superseded by ADR-0036 (`eval/results/latest.json`) | 2026-10-25 |
 | [ADR-0031](#adr-0031-tavily-research-with-exact-source-urls-and-a-7-day-cache) | Tavily research with exact source URLs and a 7-day cache | Accepted | 2026-10-25 |
 | [ADR-0032](#adr-0032-no-repository-file-influences-a-network-on-step) | No repository file influences a network-on step | Accepted | 2026-10-25 |
 | [ADR-0033](#adr-0033-sandbox-base-image-imported-by-version-tag-and-checked-against-a-reviewed-fingerprint) | Sandbox base image imported by version tag and checked against a reviewed fingerprint | Accepted (amended 2026-10-25: measured on GitHub Actions) | 2026-10-25 |
 | [ADR-0034](#adr-0034-sandbox-contract-corrections-from-the-live-platform-checks) | Sandbox contract corrections from the live platform checks | Accepted | 2026-10-25 |
 | [ADR-0035](#adr-0035-fixed-prompt-token-overhead-in-the-llm-spend-hold) | Fixed prompt-token overhead in the LLM spend hold | Accepted | 2026-10-25 |
+| [ADR-0036](#adr-0036-ship-the-published-eval-summary-in-the-space-image) | Ship the published eval summary in the Space image | Accepted | 2026-10-26 |
 
 ## ADR-0001: Python and FastAPI service with typed schemas
 
@@ -788,7 +789,7 @@ Spending stays within the real balance whoever spends it, and the hosted budget 
 ## ADR-0030: Images pinned by digest and hash-checked installs
 
 Date: 2026-10-25
-Status: Accepted (amended by ADR-0033 for the Sandbox base image only)
+Status: Accepted (amended by ADR-0033 for the Sandbox base image only; the image-contents rule recorded with it is partly superseded by ADR-0036 for `eval/results/latest.json`)
 
 ### Context
 
@@ -981,3 +982,33 @@ The hold's prompt tokens become `ceil(chars / CHARS_PER_TOKEN) + PROMPT_OVERHEAD
 ### Consequences
 
 Each hold grows by 64 prompt tokens, a fraction of a cent at the configured prices, so the budget slightly over-reserves during a scan and releases the difference when the call is recorded. Overruns caused by the template overhead stop. The LLM client's hold calculation and its unit test change; no other contract changes.
+
+## ADR-0036: Ship the published eval summary in the Space image
+
+Date: 2026-10-26
+Status: Accepted (partly supersedes the image-contents rule recorded with ADR-0030, for `eval/results/latest.json` only)
+
+### Context
+
+The security review (round 1) asked that the Space image never contain secrets or local output, and the hosting section of [ARCHITECTURE.md](ARCHITECTURE.md) (section 18), written alongside ADR-0030, turned that into a rule: `.dockerignore` excludes all of `eval/results/`. M2-TASK-08 part A (commit 9a013b7) followed the rule. But the web page's evaluation figure ("precision on N cases") is read at runtime from `eval/results/latest.json`, so the deployed demo would show no figure at all, even after a scored evaluation run. The rule's own text in ADR-0030 is about pinning images and checking package hashes; the blanket exclusion of `eval/results/` lives in section 18 and the security review's test list.
+
+`eval/results/latest.json` is different from the rest of that folder. It is committed to git, so it is already public with the repository. It holds only aggregate figures (the `EvalRunSummary` model: whether the run was scored, run date, model name, LangSmith experiment name, case count, errored count, precision, recall, abstention rate, the bar and whether it was met). It holds no per-case traces, no repository code, no prompts or model text, and no keys. The other files in `eval/results/` (timestamped per-run JSON and Markdown) are gitignored and may hold per-case detail; `latest.md` is committed but the app does not read it.
+
+### Decision
+
+- The Space image contains exactly one file from `eval/results/`: `latest.json`, at `/app/eval/results/latest.json`, where the app looks for it.
+- `.dockerignore` keeps excluding `eval/results/` and adds the exception `!eval/results/latest.json` after it. Every other file in that folder, including `latest.md` and the timestamped run files, stays out of the build context.
+- The Dockerfile copies that single file by name (`COPY eval/results/latest.json ./eval/results/latest.json`); no other `eval/` path is copied.
+- Tests check that the exception is the only re-included path under `eval/results/`, that other result files stay excluded, and that the Dockerfile copies only that one file from `eval/`.
+- Everything else in ADR-0030 (digest-pinned images, hash-checked installs) and every other `.dockerignore` entry is unchanged.
+
+### Alternatives considered
+
+- Keep excluding the whole folder: the deployed demo would never show the evaluation figure, which is the project's main credibility signal.
+- Move the summary out of `eval/results/` (for example into `web/` or `demo/`): changes a path the evaluation runner, the "Expensive to change" list and the UI contract already depend on, for no security gain.
+- Bake the figure into the page or into an environment variable at build time: a second copy of the same numbers that can drift from the committed file.
+- Re-include the whole folder: would let per-run files with per-case detail into the image.
+
+### Consequences
+
+The deployed demo shows the evaluation figure whenever the committed `latest.json` is a scored run with a precision value, and shows none otherwise, as before. Updating the figure on the Space means committing a new `latest.json` and rebuilding the image. The image gains one small file that is already public; nothing secret or per-case enters it. The `.dockerignore` and Dockerfile packaging tests change to match.
