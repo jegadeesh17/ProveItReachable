@@ -402,3 +402,68 @@ def test_adr0033_checker_flags_artifact_that_warns_or_keeps_too_long():
     }
     assert not artifact_config_ok(warn)
     assert not artifact_config_ok(long_lived)
+
+
+# NFR-13 and AC-77 (ARCHITECTURE 19.3): keepalive.yml runs the spend check on a schedule.
+
+KEEPALIVE_WORKFLOW = WORKFLOW_DIR / "keepalive.yml"
+KEEPALIVE_CRON = "17 */6 * * *"
+KEEPALIVE_RUN = 'python -I src/pir/keepalive.py "$PIR_HEALTH_URL"'
+
+
+def test_nfr13_keepalive_workflow_file_exists():
+    assert KEEPALIVE_WORKFLOW.is_file()
+
+
+def test_nfr13_keepalive_runs_on_schedule_and_workflow_dispatch_only():
+    doc = parse(KEEPALIVE_WORKFLOW.read_text(encoding="utf-8"))
+    assert triggers(doc) == {"schedule", "workflow_dispatch"}
+    on = doc.get("on", doc.get(True))
+    assert on["schedule"] == [{"cron": KEEPALIVE_CRON}]
+
+
+def test_nfr13_keepalive_is_one_ubuntu_job_with_read_only_token():
+    doc = parse(KEEPALIVE_WORKFLOW.read_text(encoding="utf-8"))
+    assert len(jobs_of(doc)) == 1
+    assert jobs_of(doc)[0]["runs-on"] == "ubuntu-latest"
+    assert permissions_are_read_only(doc)
+
+
+def test_nfr13_keepalive_runs_check_with_health_url_from_repository_variable():
+    doc = parse(KEEPALIVE_WORKFLOW.read_text(encoding="utf-8"))
+    assert KEEPALIVE_RUN in run_lines(doc)
+    env_steps = [step for step in steps_of(doc) if KEEPALIVE_RUN in str(step.get("run", ""))]
+    assert env_steps[0]["env"] == {"PIR_HEALTH_URL": "${{ vars.PIR_HEALTH_URL }}"}
+
+
+def test_nfr13_keepalive_failure_is_not_ignored():
+    text = KEEPALIVE_WORKFLOW.read_text(encoding="utf-8")
+    assert "continue-on-error" not in text
+    assert "|| true" not in text
+
+
+def test_nfr13_keepalive_uses_python_313_and_no_secrets():
+    doc = parse(KEEPALIVE_WORKFLOW.read_text(encoding="utf-8"))
+    setups = [
+        s for s in steps_of(doc) if str(s.get("uses", "")).startswith("actions/setup-python@")
+    ]
+    assert len(setups) == 1
+    assert setups[0]["with"]["python-version"] == "3.13"
+    assert secret_lines(KEEPALIVE_WORKFLOW.read_text(encoding="utf-8")) == []
+
+
+def test_nfr13_keepalive_reuses_ci_checkout_and_setup_python_pins():
+    ci_pins = {
+        ref.split("@")[0]: ref for ref in uses_refs(parse(CI_WORKFLOW.read_text(encoding="utf-8")))
+    }
+    keepalive_refs = uses_refs(parse(KEEPALIVE_WORKFLOW.read_text(encoding="utf-8")))
+    assert ci_pins["actions/checkout"] in keepalive_refs
+    assert ci_pins["actions/setup-python"] in keepalive_refs
+
+
+def test_nfr13_checker_flags_expression_in_keepalive_run():
+    doc = parse(
+        "on:\n  schedule:\n    - cron: '17 */6 * * *'\njobs:\n  k:\n    runs-on: ubuntu-latest\n"
+        "    steps:\n      - run: python x.py ${{ vars.PIR_HEALTH_URL }}\n"
+    )
+    assert runs_with_expressions(doc) == ["python x.py ${{ vars.PIR_HEALTH_URL }}"]

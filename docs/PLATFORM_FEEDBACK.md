@@ -33,3 +33,14 @@ A running log of friction and wins with Nebius Token Factory, Sandboxes and Nemo
 | d. Tavily | PASS | `POST https://api.tavily.com/search` with `Authorization: Bearer`; response keys `query, follow_up_questions, answer, images, results, response_time, request_id`; result keys `url, title, content, score, raw_content, id`; 3.5 s for basic depth. |
 | e. OSV | PASS | `/v1/query` returns `vulns[]` with keys `id, summary, details, aliases, modified, published, database_specific, references, affected, schema_version, severity`; `severity` is a list of CVSS vectors (`CVSS_V3`, `CVSS_V4`); `database_specific.severity` holds the GitHub label. `/v1/querybatch` returns `results[].vulns[]` with IDs only. |
 | f. LangSmith | PASS | `wrap_openai` around the Token Factory client + `@traceable` produced a run found by name in project `ProveItReachable`. `Client.list_runs` is deprecated (removal after 2027-01-31); use `client.runs.query()`. |
+
+## Offline build facts (2026-10-26, M2-TASK-08 part A)
+
+| Check | Result | Facts for the deploy |
+|---|---|---|
+| Token Factory model catalog | Found | `https://tokenfactory.nebius.com/api/public/models_info` (JSON, no key) lists `nvidia/nemotron-3-super-120b-a12b` at 0.30 USD input and 0.90 USD output per million tokens (cached input 0.06). Read 2026-10-26. Our code defaults are the pessimistic 0.60 and 2.40, so the user must confirm the rate before setting `NEBIUS_PRICE_*`. |
+| Token Factory pricing page | Friction | `https://tokenfactory.nebius.com/pricing` is client-rendered. A plain HTTP fetch shows no prices, so the figures had to come from the catalog JSON. Suggestion: put the per-model prices and a date in the static HTML or the docs. |
+| Tavily pricing | Found | `https://tavily.com/pricing`: Pay As You Go at $0.008 per credit. Read 2026-10-26; matches our default. |
+| Base image for the Space | Verified | `python:3.13-slim` index digest `sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962` (Docker Hub registry API and `docker buildx imagetools inspect`, same value). |
+| Dependency lock | Generated | `uv pip compile pyproject.toml --universal --generate-hashes --python-version 3.13` (uv 0.13.5) wrote `requirements.lock` with a hash on every locked file. |
+| Docker on the build machine | Not run | Docker CLI present; daemon not running, so the image build and loopback run are pending (see `docs/DEPLOYMENT.md`, section 2). |

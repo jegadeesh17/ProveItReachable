@@ -1,0 +1,29 @@
+name: Keepalive
+
+# Pings /api/health every 6 hours so the free Space stays awake, and fails the run (GitHub
+# emails the owner) when a spend pool is below 0.25 (ARCHITECTURE 19.3, AC-77, NFR-13).
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Check /api/health and the spend pools
+        env:
+          PIR_HEALTH_URL: ${{ vars.PIR_HEALTH_URL }}
+        # -I keeps src/pir off sys.path, so src/pir/http.py cannot shadow the standard library.
+        run: python -I src/pir/keepalive.py "$PIR_HEALTH_URL"

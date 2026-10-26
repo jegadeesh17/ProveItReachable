@@ -1,0 +1,12 @@
+# Secrets: never in the build context or the image (ADR-0020, ADR-0030, finding 10).
+.env
+.env.*
+!.env.example
+
+# Local state and eval output (spend ledger cache, eval results).
+data/
+eval/results/
+
+# Tooling and history.
+.venv/
+.git/
