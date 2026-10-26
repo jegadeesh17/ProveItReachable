@@ -30,6 +30,7 @@ from pir.models import ReasonCode
 from pir.models.report import NOT_IDENTIFIED_PREFIX, Advisory, AdvisoryLink
 from pir.models.research import AdvisoryResearch, SearchResult
 from pir.osv import is_valid_osv_id, osv_page_url
+from pir.reasoning.equivalences import EQUIVALENCES
 from pir.reasoning.prompts import research_messages, research_text
 from pir.spend import ScanBudget, SpendDenied
 from pir.tracing import advisory_run, tool_run
@@ -202,6 +203,24 @@ def _qualify(symbol: str, root: str) -> str:
     return symbol
 
 
+def _candidates(named: str, root: str) -> list[str]:
+    """The symbols to check for one name the model drew, most useful first.
+
+    A class-qualified method (`yaml.FullLoader.full_load`) is also called as a module-level function
+    (`yaml.full_load`), and that is the call repository code writes, so it goes first. The extra
+    name matches only a call that exists, so it adds no false positive of its own. One exception: a
+    function whose meaning depends on its arguments (`yaml.load`, the equivalence table's calls) is
+    never added, because a bare `yaml.load` would also match its safe calls (ADR-0037).
+    """
+    symbol = _qualify(named, root)
+    parts = symbol.split(".")
+    if len(parts) == 3 and parts[0] == root and parts[1][:1].isupper() and parts[2]:
+        module_level = f"{root}.{parts[2]}"
+        if all(row.call != module_level for row in EQUIVALENCES):
+            return [module_level, symbol]
+    return [symbol]
+
+
 def _string_list(value: object) -> list[str]:
     return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
 
@@ -332,10 +351,11 @@ class AdvisoryResearcher:
         symbols: list[str] = []
         root = _import_root(package)
         for named in _string_list(data.get("symbols")):
-            symbol = _qualify(named, root)
-            if symbol not in symbols and _grounded(symbol, corpus):
-                symbols.append(symbol)
+            for symbol in _candidates(named, root):
+                if symbol not in symbols and _grounded(symbol, corpus):
+                    symbols.append(symbol)
             if len(symbols) >= _MAX_SYMBOLS:
+                symbols = symbols[:_MAX_SYMBOLS]
                 break
         returned = {result.url for result in results}
         evidence: list[str] = []

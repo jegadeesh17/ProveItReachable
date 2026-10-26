@@ -462,7 +462,9 @@ async def test_scan_runs_untraced_when_tracing_is_off(tmp_path):
     assert started[0]["trace_id"] is None
 
 
-def _model_following_the_listed_symbol() -> FakeLLM:
+def _model_following_the_listed_symbol(
+    drawn: tuple[str, ...] = ("full_load", "FullLoader.full_load"),
+) -> FakeLLM:
     """A scripted Nemotron that does what the real one did in the eval trace: it reads the
     "Vulnerable symbols" line of its prompt, asks the code index for the first symbol only, and
     answers from what the tools returned."""
@@ -480,7 +482,7 @@ def _model_following_the_listed_symbol() -> FakeLLM:
             return json_result(
                 {
                     "identified": True,
-                    "symbols": ["full_load", "FullLoader.full_load"],
+                    "symbols": list(drawn),
                     "evidence_urls": [NVD_URL],
                     "reason": "",
                 }
@@ -540,5 +542,22 @@ async def test_eval_regression_unqualified_research_symbols_still_reach_the_call
     assert finding.vulnerable_symbol is not None
     assert finding.vulnerable_symbol.symbols[0] == "yaml.full_load"
     assert all(s.startswith("yaml.") for s in finding.vulnerable_symbol.symbols)
+    assert finding.verdict == "likely reachable"
+    assert finding.call_path is not None and finding.call_path[-1].symbol == "yaml.full_load"
+
+
+async def test_eval_regression_class_qualified_research_draw_still_reaches_the_module_function(
+    tmp_path,
+):
+    # M2-TASK-15 attempt 4. In the 09:24Z eval the research reply was exactly
+    # ["FullLoader.full_load"] for GHSA-8q59-q68h-6hv4. It became `yaml.FullLoader.full_load`, a
+    # name no call site matches (the code calls the module-level `yaml.full_load`), so every
+    # yaml case read "no reachable path". The module-level function is now listed first.
+    h = make_harness(tmp_path, llm=_model_following_the_listed_symbol(("FullLoader.full_load",)))
+    report = await scan(h, tmp_path)
+
+    (finding,) = report.findings
+    assert finding.vulnerable_symbol is not None
+    assert finding.vulnerable_symbol.symbols == ["yaml.full_load", "yaml.FullLoader.full_load"]
     assert finding.verdict == "likely reachable"
     assert finding.call_path is not None and finding.call_path[-1].symbol == "yaml.full_load"

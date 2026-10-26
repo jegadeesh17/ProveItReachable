@@ -322,12 +322,29 @@ async def test_ac12_ungrounded_or_malformed_symbols_are_dropped(tmp_path, symbol
         # M2-TASK-15 attempt 2: the model leaves out the module the code imports the package by
         ("pyyaml", ["full_load"], ["yaml.full_load"]),
         ("PyYAML", ["full_load"], ["yaml.full_load"]),
-        ("pyyaml", ["FullLoader.full_load"], ["yaml.FullLoader.full_load"]),
+        # M2-TASK-15 attempt 4: a class-qualified draw also gives the module-level function the
+        # repository calls, first, once
+        (
+            "pyyaml",
+            ["FullLoader.full_load"],
+            ["yaml.full_load", "yaml.FullLoader.full_load"],
+        ),
+        (
+            "pyyaml",
+            ["yaml.FullLoader.full_load"],
+            ["yaml.full_load", "yaml.FullLoader.full_load"],
+        ),
         (
             "pyyaml",
             ["full_load", "FullLoader.full_load"],
             ["yaml.full_load", "yaml.FullLoader.full_load"],
         ),
+        (
+            "pyyaml",
+            ["FullLoader.full_load", "full_load"],
+            ["yaml.full_load", "yaml.FullLoader.full_load"],
+        ),
+        ("pyyaml", ["os.Path.full_load"], ["os.Path.full_load"]),  # another module: left alone
         ("pyyaml", ["yaml.full_load", "full_load"], ["yaml.full_load"]),  # no duplicate
         ("pyyaml", ["yaml.full_load"], ["yaml.full_load"]),  # already qualified: unchanged
         ("pyyaml", ["os.full_load"], ["os.full_load"]),  # a lower-case module path is left alone
@@ -350,6 +367,46 @@ async def test_ac12_a_bare_name_that_is_not_in_the_text_is_still_dropped_after_q
     researcher, _, _ = _researcher(tmp_path, llm=llm)
     result = await _research(researcher)
     assert result.symbols == ["yaml.full_load"]
+
+
+async def test_ac12_class_qualified_symbol_whose_method_is_not_in_the_text_gets_no_expansion(
+    tmp_path,
+):
+    llm = FakeLLM(
+        [json_result({"identified": True, "symbols": ["FullLoader.exec_everything", "FullLoader"]})]
+    )
+    researcher, _, _ = _researcher(tmp_path, llm=llm)
+    result = await _research(researcher)
+    assert result.symbols == ["yaml.FullLoader"]  # the bare class is a name in the text; no method
+
+
+async def test_ac12_method_not_in_the_text_gives_neither_the_expansion_nor_the_symbol(tmp_path):
+    llm = FakeLLM([json_result({"identified": True, "symbols": ["FullLoader.exec_everything"]})])
+    researcher, _, _ = _researcher(tmp_path, llm=llm)
+    result = await _research(researcher)
+    assert not result.identified and result.symbols == []
+
+
+async def test_ac12_expansion_never_names_an_argument_dependent_call_such_as_yaml_load(tmp_path):
+    # ADR-0037: a bare `yaml.load` would also match `yaml.load(f, Loader=SafeLoader)`
+    results = [SearchResult(url=EXACT_URL, title="t", content="FullLoader.load is unsafe.")]
+    llm = FakeLLM([json_result({"identified": True, "symbols": ["FullLoader.load"]})])
+    researcher, _, _ = _researcher(tmp_path, llm=llm, search=FakeSearch(results))
+    result = await _research(researcher)
+    assert result.symbols == ["yaml.FullLoader.load"]
+
+
+async def test_ac12_expansion_respects_the_symbol_limit(tmp_path):
+    named = [f"Cls.full_load{i}" for i in range(12)]
+    text = " ".join(f"full_load{i}" for i in range(12))
+    results = [SearchResult(url=EXACT_URL, title="t", content=text)]
+    llm = FakeLLM([json_result({"identified": True, "symbols": named})])
+    researcher, _, _ = _researcher(tmp_path, llm=llm, search=FakeSearch(results))
+    result = await _research(researcher)
+    assert len(result.symbols) == 10 and result.symbols[:2] == [
+        "yaml.full_load0",
+        "yaml.Cls.full_load0",
+    ]
 
 
 async def test_ac13_no_grounded_symbol_means_not_identified(tmp_path):
