@@ -7,12 +7,14 @@ value leaves the process in a trace. Tracing never decides the outcome of a scan
 """
 
 import asyncio
+import contextlib
 import logging
 import uuid
-from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, TypeVar
+from collections.abc import Awaitable, Callable, Iterator
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
-from langsmith import Client, traceable, tracing_context
+from langsmith import Client, trace, traceable, tracing_context
+from langsmith.run_helpers import get_current_run_tree
 from langsmith.run_trees import RunTree
 
 from pir.logs import redact
@@ -113,6 +115,74 @@ async def run_traced(
         extra["parent"] = parent
     with tracing_context(enabled=True, client=client, project_name=settings.langsmith_project):
         return await _root(scan_id, body, langsmith_extra=extra)
+
+
+class RunHandle:
+    """The run a helper below opened, or nothing when tracing is off (every method is a no-op)."""
+
+    def __init__(self, run: RunTree | None) -> None:
+        self._run = run
+
+    def set_outputs(self, outputs: dict[str, Any]) -> None:
+        if self._run is not None:
+            self._run.end(outputs=outputs)
+
+    def add_metadata(self, **metadata: Any) -> None:
+        if self._run is not None:
+            self._run.add_metadata(metadata)
+
+
+@contextlib.contextmanager
+def _child_run(
+    name: str,
+    run_type: Literal["chain", "tool"],
+    inputs: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> Iterator[RunHandle]:
+    """A child of the run that is open now (ADR-0038); a no-op with tracing off.
+
+    With no run open (tracing off, or called outside a scan) nothing is created, so a run is never
+    posted as a root. Inputs and outputs go through the client's `hide_inputs` / `hide_outputs`.
+    """
+    if get_current_run_tree() is None:
+        yield RunHandle(None)
+        return
+    with trace(name, run_type, inputs=inputs or {}, metadata=metadata) as run:
+        yield RunHandle(run)
+
+
+def step_run(name: str) -> contextlib.AbstractContextManager[RunHandle]:
+    """`pir.step.<name>`: one run per pipeline step; the caller sets `{"state": ...}`."""
+    return _child_run(f"pir.step.{name}", "chain")
+
+
+def advisory_run(advisory_id: str, package: str) -> contextlib.AbstractContextManager[RunHandle]:
+    """`pir.research.advisory`: one advisory researched (`from_cache` is added when known)."""
+    return _child_run(
+        "pir.research.advisory",
+        "chain",
+        {"advisory_id": advisory_id, "package": package},
+        {"advisory_id": advisory_id},
+    )
+
+
+def finding_run(
+    package: str, version: str, advisory_id: str
+) -> contextlib.AbstractContextManager[RunHandle]:
+    """`pir.reasoning.finding`: one finding reasoned, holding its LLM and tool runs."""
+    return _child_run(
+        "pir.reasoning.finding",
+        "chain",
+        {"package": package, "version": version, "advisory_id": advisory_id},
+        {"package": package, "version": version, "advisory_id": advisory_id},
+    )
+
+
+def tool_run(
+    name: str, inputs: dict[str, Any] | None = None
+) -> contextlib.AbstractContextManager[RunHandle]:
+    """`pir.tool.<name>` of run type tool: the arguments in, the size of the answer out."""
+    return _child_run(f"pir.tool.{name}", "tool", inputs)
 
 
 async def flush(client: Client | None) -> None:

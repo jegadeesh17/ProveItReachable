@@ -22,6 +22,7 @@ from pir.reasoning.ast_tool import AstTool, ToolResult
 from pir.reasoning.prompts import NO_TOOL_CALL_MESSAGE, RETRY_MESSAGE, reasoning_messages
 from pir.reasoning.strategy import FindingContext
 from pir.spend import ScanBudget
+from pir.tracing import tool_run
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,9 @@ class ToolCallingStrategy:
             if error is not None:
                 answer = ToolResult(False, json.dumps({"error": error}))
             else:
-                answer = tool.call(call.name, arguments)
+                with tool_run(call.name[:100], _record_arguments(arguments)) as span:
+                    answer = tool.call(call.name, arguments)
+                    span.set_outputs({"ok": answer.ok, "result_bytes": answer.result_bytes})
             state.tool_calls.append(
                 ToolCallRecord(
                     name=call.name[:100],

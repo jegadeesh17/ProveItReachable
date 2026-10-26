@@ -59,7 +59,7 @@ from pir.reasoning.strategy import FindingContext
 from pir.replay import EventSink
 from pir.report_builder import Candidate, ScanContext, build_finding, build_report, step_tools
 from pir.spend import ScanBudget, SpendDenied
-from pir.tracing import run_traced
+from pir.tracing import finding_run, run_traced, step_run
 
 logger = logging.getLogger("pir.pipeline")
 
@@ -260,6 +260,11 @@ class _Scan:
         rec.tools = []
 
     async def _skipped_stage(self, rec: _StepRec, message: str) -> None:
+        with step_run(rec.name) as span:
+            await self._skipped_stage_body(rec, message)
+            span.set_outputs({"state": rec.state})
+
+    async def _skipped_stage_body(self, rec: _StepRec, message: str) -> None:
         async with stage_timer(rec.name) as timer:
             timer.outcome = "skipped"
             await self._start(rec)
@@ -269,6 +274,13 @@ class _Scan:
     # ---- running a step ----------------------------------------------------------------
 
     async def _run_step(self, name: StepName, body: Callable[[_StepRec], Awaitable[None]]) -> None:
+        with step_run(name) as span:
+            await self._run_step_body(name, body)
+            span.set_outputs({"state": self.steps[name].state})
+
+    async def _run_step_body(
+        self, name: StepName, body: Callable[[_StepRec], Awaitable[None]]
+    ) -> None:
         rec = self.steps[name]
         await self._start(rec)
         try:
@@ -533,13 +545,22 @@ class _Scan:
             )
             tool = AstTool(index, package=item.candidate.package, version=item.candidate.version)
             async with gate:
-                try:
-                    item.outcome = await self.deps.strategy.run(
-                        ctx, tool, self.deps.llm, self.budget
+                with finding_run(ctx.package, ctx.version, advisory.id) as span:
+                    try:
+                        outcome = await self.deps.strategy.run(
+                            ctx, tool, self.deps.llm, self.budget
+                        )
+                    except Exception as exc:  # the strategy never raises; isolate the item
+                        logger.error("reasoning raised %s", type(exc).__name__, exc_info=True)
+                        return
+                    item.outcome = outcome
+                    span.set_outputs(
+                        {
+                            "verdict": outcome.verdict.verdict if outcome.verdict else None,
+                            "failure": outcome.failure,
+                            "tool_calls": len(outcome.tool_calls),
+                        }
                     )
-                except Exception as exc:  # the strategy never raises; isolate the item if it does
-                    logger.error("reasoning raised %s", type(exc).__name__, exc_info=True)
-                    return
             item.seen = frozenset(tool.seen_locations)
 
         await asyncio.gather(*(one(item) for item in pending[:limit]))
@@ -590,6 +611,12 @@ class _Scan:
         )
 
     async def _report(self) -> ScanReport:
+        with step_run("report") as span:
+            report = await self._report_body()
+            span.set_outputs({"state": self.steps["report"].state})
+        return report
+
+    async def _report_body(self) -> ScanReport:
         rec = self.steps["report"]
         await self._start(rec)
         async with stage_timer("report"):

@@ -1,0 +1,346 @@
+"""The LangSmith run tree of a scan (ADR-0038, AC-79; the AC-37 amendment).
+
+The full pipeline runs on the canary fixture with every external call faked: OSV and Tavily answer
+from recordings, the Sandbox is the `FakeExecutor`, and the LLM is the real `NebiusLLMClient` over
+an `httpx.MockTransport` Token Factory, so `wrap_openai` posts real LLM runs. A real `langsmith`
+client with a recording session (`FakeLangSmithClient`) stands in for LangSmith; nothing touches
+the network.
+"""
+
+import json
+from pathlib import Path
+from typing import Any
+
+import httpx
+import pytest
+from fakes.deps import (
+    GHSA,
+    RESEARCH_REPLY,
+    VERDICT,
+    Harness,
+    make_harness,
+    osv_routes,
+)
+from fakes.http import RecordingTransport, json_response
+from fakes.langsmith import FakeLangSmithClient, RunNode
+from langsmith import tracing_context
+from test_eval_runner import CASES, EvalFakeLangSmith, as_sandbox, make_suite
+from test_eval_runner import harness as eval_harness
+
+from pir.agent_client import LocalFixtureTarget
+from pir.config import Settings
+from pir.llm import NebiusLLMClient
+from pir.models.report import ScanReport
+from pir.pipeline import run_scan
+from pir.tracing import advisory_run, finding_run, step_run, tool_run
+
+CANARY = Path(__file__).resolve().parents[1] / "fixtures" / "repos" / "canary"
+CANARY_SHA = "c" * 40
+COMPLETIONS = "POST https://api.tokenfactory.nebius.com/v1/chat/completions"
+STEPS = ["resolve", "osv", "research", "analysis", "reasoning", "report"]
+STEP_RUNS = [f"pir.step.{name}" for name in STEPS]
+TIME_FIELDS = {"scan_id", "started_at", "finished_at", "generated_at", "ran_at"}
+FIND_PATHS = {"symbol": "yaml.full_load"}
+
+
+def _completion(message: dict[str, Any], finish: str) -> httpx.Response:
+    body = {
+        "id": "chatcmpl-1",
+        "object": "chat.completion",
+        "created": 1,
+        "model": "nvidia/nemotron-3-super-120b-a12b",
+        "choices": [{"index": 0, "message": message, "finish_reason": finish}],
+        "usage": {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120},
+    }
+    return json_response(200, body)
+
+
+def _tool_call(name: str, arguments: str, call_id: str) -> httpx.Response:
+    message = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {"id": call_id, "type": "function", "function": {"name": name, "arguments": arguments}}
+        ],
+    }
+    return _completion(message, "tool_calls")
+
+
+def token_factory(first_arguments: str | None = None) -> RecordingTransport:
+    """A fake Token Factory: JSON-mode calls get the research reply; reasoning calls find_paths
+    (first with `first_arguments` when given, which may be malformed) and then submit_verdict."""
+    state = {"reasoning": 0}
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if body.get("response_format") == {"type": "json_object"}:
+            return _completion({"role": "assistant", "content": json.dumps(RESEARCH_REPLY)}, "stop")
+        state["reasoning"] += 1
+        calls_so_far = state["reasoning"]
+        if first_arguments is not None and calls_so_far == 1:
+            return _tool_call("find_paths", first_arguments, "call_bad")
+        if calls_so_far <= (2 if first_arguments is not None else 1):
+            return _tool_call("find_paths", json.dumps(FIND_PATHS), f"call_{calls_so_far}")
+        return _tool_call("submit_verdict", json.dumps(VERDICT), "call_submit")
+
+    return RecordingTransport({COMPLETIONS: answer})
+
+
+def traced_harness(
+    tmp_path: Path,
+    *,
+    tracing: bool = True,
+    langsmith: FakeLangSmithClient | None = None,
+    transport: RecordingTransport | None = None,
+    **kw: Any,
+) -> Harness:
+    settings = Settings(_env_file=None, nebius_api_key="nebius-test-key", langsmith_tracing=tracing)
+    llm = NebiusLLMClient(settings, transport=transport or token_factory())
+    return make_harness(tmp_path, llm=llm, langsmith=langsmith, langsmith_tracing=tracing, **kw)  # type: ignore[arg-type]
+
+
+async def scan_canary(h: Harness, scan_id: str = "a" * 32) -> ScanReport:
+    budget = await h.reserve(scan_id)
+    report = await run_scan(
+        h.deps, LocalFixtureTarget(path=str(CANARY), commit_sha=CANARY_SHA), budget
+    )
+    await h.deps.llm.aclose()  # type: ignore[attr-defined]
+    return report
+
+
+def only_root(fake: FakeLangSmithClient) -> RunNode:
+    (root,) = fake.run_tree()
+    assert root.name == "pir.scan"
+    return root
+
+
+def step(root: RunNode, name: str) -> RunNode:
+    (node,) = [child for child in root.children if child.name == f"pir.step.{name}"]
+    return node
+
+
+# ---- AC-79: the shape of the tree --------------------------------------------------------
+
+
+async def test_ac79_the_canary_scan_uploads_one_tree_with_a_run_per_step(tmp_path):
+    fake = FakeLangSmithClient()
+    h = traced_harness(tmp_path, langsmith=fake)
+
+    report = await scan_canary(h)
+
+    root = only_root(fake)
+    assert root.child_names == STEP_RUNS  # exactly the six steps, in pipeline order
+    assert {child.run_type for child in root.children} == {"chain"}
+    # no LLM or tool run is a direct child of pir.scan
+    assert not [c for c in root.children if c.run_type in ("llm", "tool")]
+    # each step run says how its step ended, matching the report
+    assert [step(root, s).outputs for s in STEPS] == [
+        {"state": s.state} for s in sorted(report.steps, key=lambda s: STEPS.index(s.name))
+    ]
+    # every uploaded run belongs to the one tree
+    assert len(list(root.walk())) == len(fake.posted)
+
+
+async def test_ac79_research_has_a_run_per_advisory_holding_the_search_and_the_llm_call(tmp_path):
+    fake = FakeLangSmithClient()
+    h = traced_harness(tmp_path, langsmith=fake)
+
+    await scan_canary(h)
+
+    research = step(only_root(fake), "research")
+    assert research.child_names == ["pir.research.advisory"]  # one advisory (GHSA)
+    (advisory,) = research.children
+    assert advisory.metadata["advisory_id"] == GHSA
+    assert advisory.metadata["from_cache"] is False
+    assert [c.run_type for c in advisory.children] == ["tool", "llm"]
+    search, llm = advisory.children
+    assert search.name == "pir.tool.tavily_search"
+    assert "yaml" in search.inputs["query"].lower() or GHSA in search.inputs["query"]
+    # the answer is its size and URLs, not the page content
+    assert set(search.outputs) == {"result_count", "urls"}
+    assert search.outputs["result_count"] == len(search.outputs["urls"]) > 0
+    assert llm.name != "pir.tool.tavily_search"
+
+
+async def test_ac79_reasoning_has_a_run_per_finding_with_llm_runs_and_tool_runs_in_order(tmp_path):
+    fake = FakeLangSmithClient()
+    h = traced_harness(tmp_path, langsmith=fake)
+
+    report = await scan_canary(h)
+
+    reasoning = step(only_root(fake), "reasoning")
+    assert (
+        reasoning.child_names
+        == ["pir.reasoning.finding"] * len(report.findings)
+        == ["pir.reasoning.finding"]
+    )
+    (finding,) = reasoning.children
+    assert finding.metadata["advisory_id"] == GHSA
+    assert finding.metadata["package"] == "pyyaml"
+    assert finding.metadata["version"]
+    # find_paths is a tool run between the two LLM runs; submit_verdict is not a tool run
+    assert [c.run_type for c in finding.children] == ["llm", "tool", "llm"]
+    tool = finding.children[1]
+    assert tool.name == "pir.tool.find_paths"
+    assert tool.inputs == FIND_PATHS
+    assert tool.outputs["ok"] is True
+    assert isinstance(tool.outputs["result_bytes"], int) and tool.outputs["result_bytes"] > 0
+    assert set(tool.outputs) == {"ok", "result_bytes"}  # size, not the answer
+    assert not any(n.name == "pir.tool.submit_verdict" for n in finding.walk())
+
+
+async def test_ac79_a_cached_advisory_has_no_search_run(tmp_path):
+    first = FakeLangSmithClient()
+    h = traced_harness(tmp_path, langsmith=first)
+    await scan_canary(h)
+
+    second = FakeLangSmithClient()
+    h2 = traced_harness(tmp_path, langsmith=second)  # same data_dir: the 7-day cache is warm
+    await scan_canary(h2, "b" * 32)
+
+    (advisory,) = step(only_root(second), "research").children
+    assert advisory.metadata["from_cache"] is True
+    assert advisory.outputs["from_cache"] is True
+    assert [c.run_type for c in advisory.children] == []  # no search and no extraction call
+
+
+async def test_ac79_skipped_steps_still_get_a_step_run(tmp_path):
+    fake = FakeLangSmithClient()
+    h = traced_harness(tmp_path, langsmith=fake, osv=osv_routes({"pyyaml": []}))
+
+    report = await scan_canary(h)
+
+    root = only_root(fake)
+    assert root.child_names == STEP_RUNS
+    assert step(root, "research").outputs == {"state": "skipped"}
+    assert step(root, "analysis").outputs == {"state": "skipped"}
+    assert step(root, "reasoning").outputs == {"state": "skipped"}
+    assert step(root, "report").outputs == {"state": "done"}
+    assert step(root, "research").children == []  # nothing researched
+    assert not report.findings
+
+
+async def test_ac79_a_malformed_tool_call_is_not_executed_so_it_has_no_tool_run(tmp_path):
+    fake = FakeLangSmithClient()
+    h = traced_harness(tmp_path, langsmith=fake, transport=token_factory("{not json"))
+
+    await scan_canary(h)
+
+    (finding,) = step(only_root(fake), "reasoning").children
+    tools = [c for c in finding.children if c.run_type == "tool"]
+    assert [t.name for t in tools] == ["pir.tool.find_paths"]  # only the valid call ran
+    assert [c.run_type for c in finding.children] == ["llm", "llm", "tool", "llm"]
+
+
+# ---- tracing never changes a report; off posts nothing -----------------------------------
+
+
+def normalized(report: ScanReport) -> str:
+    def strip(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {k: strip(v) for k, v in value.items() if k not in TIME_FIELDS}
+        if isinstance(value, list):
+            return [strip(v) for v in value]
+        return value
+
+    return json.dumps(strip(report.model_dump(mode="json")), sort_keys=True)
+
+
+async def test_ac79_the_report_is_byte_identical_with_tracing_on_and_off(tmp_path):
+    fake = FakeLangSmithClient()
+    on = await scan_canary(traced_harness(tmp_path / "on", langsmith=fake))
+    off = await scan_canary(traced_harness(tmp_path / "off", tracing=False))
+
+    assert fake.posted, "the traced run uploaded runs"
+    assert on.findings and on.findings == off.findings
+    assert normalized(on) == normalized(off)
+
+
+async def test_ac79_with_tracing_off_no_run_is_posted_even_beside_an_enabled_client(tmp_path):
+    ambient = FakeLangSmithClient()
+    h = traced_harness(tmp_path, tracing=False)  # no client given: the scan runs untraced
+    with tracing_context(enabled=True, client=ambient):
+        report = await scan_canary(h)
+
+    assert report.findings
+    assert ambient.payloads == []
+
+
+def test_ac79_the_helpers_are_no_ops_with_no_run_open():
+    ambient = FakeLangSmithClient()
+    with tracing_context(enabled=True, client=ambient):
+        with step_run("resolve") as a:
+            a.set_outputs({"state": "done"})
+            a.add_metadata(x=1)
+        with advisory_run(GHSA, "pyyaml") as b, finding_run("pyyaml", "5.3.1", GHSA) as c:
+            b.set_outputs({"x": 1})
+            c.add_metadata(y=2)
+        with tool_run("find_paths", {"symbol": "s"}) as d:
+            d.set_outputs({"ok": True, "result_bytes": 1})
+    assert ambient.payloads == []  # a run is never posted as a root
+
+
+def test_ac79_a_helper_run_records_an_error_and_lets_it_propagate(tmp_path):
+    fake = FakeLangSmithClient()
+    with tracing_context(enabled=True, client=fake):
+        from langsmith import traceable
+
+        @traceable(name="pir.scan")
+        def parent() -> None:
+            with pytest.raises(ValueError):  # noqa: PT012
+                with tool_run("find_paths", {"symbol": "s"}):
+                    raise ValueError("boom")
+
+        parent()
+    (root,) = fake.run_tree()
+    (tool,) = root.children
+    assert tool.name == "pir.tool.find_paths" and tool.run_type == "tool"
+    errors = [
+        json.loads(data).get("error")
+        for method, _url, data in fake._recording.calls
+        if method == "PATCH" and data
+    ]
+    assert any(e and "boom" in e for e in errors)
+
+
+async def test_ac79_no_secret_and_no_repository_source_is_in_the_tool_runs(tmp_path):
+    fake = FakeLangSmithClient()
+    await scan_canary(traced_harness(tmp_path, langsmith=fake))
+
+    root = only_root(fake)
+    tools = [n for n in root.walk() if n.run_type == "tool"]
+    assert [t.name for t in tools] == ["pir.tool.tavily_search", "pir.tool.find_paths"]
+    blob = json.dumps([(t.inputs, t.outputs) for t in tools])
+    assert "return yaml.full_load" not in blob  # the repository's lines are not copied in
+    assert "nebius-test-key" not in fake.text()
+    assert "tavily-test-key" not in fake.text()
+
+
+# ---- AC-37 (amended): under the eval runner the scan is a child of the case ---------------
+
+
+async def test_ac37_the_eval_scan_is_a_child_of_the_case_and_has_the_six_step_runs(tmp_path):
+    from pir.evaluation.runner import CASE_RUN_NAME, run_eval
+
+    suite = make_suite(tmp_path, CASES[:1])
+    h = eval_harness(tmp_path)
+    as_sandbox(h)
+    client = EvalFakeLangSmith()
+
+    await run_eval(suite, h.deps, client=client, results_dir=tmp_path / "r")
+
+    (case_run,) = client.got_case_runs
+    assert case_run["name"] == CASE_RUN_NAME == "pir.eval_case"
+    runs = client.got_other_run_info
+    (scan,) = [r for r in runs if r["name"] == "pir.scan"]
+    assert scan["parent_run_id"] == str(case_run["id"])
+    steps = [r["name"] for r in runs if r["parent_run_id"] == scan["id"]]
+    assert steps == STEP_RUNS
+    # the finding and tool runs sit beneath their steps in the same trace
+    assert {r["trace_id"] for r in runs} == {str(case_run["id"])}
+    reasoning = next(r for r in runs if r["name"] == "pir.step.reasoning")
+    finding = [r for r in runs if r["parent_run_id"] == reasoning["id"]]
+    assert [r["name"] for r in finding] == ["pir.reasoning.finding"]
+    assert [r["name"] for r in runs if r["parent_run_id"] == finding[0]["id"]] == [
+        "pir.tool.find_call_sites"
+    ]

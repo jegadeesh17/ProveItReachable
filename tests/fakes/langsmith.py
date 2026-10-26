@@ -6,7 +6,8 @@ available decoded in `payloads`.
 """
 
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from dataclasses import dataclass, field
 from typing import Any
 
 import requests
@@ -31,6 +32,34 @@ def check_feedback_args(
         raise ValueError("One of run_id, trace_id, or project_id  must be provided")
     if (run_id is not None or trace_id is not None) and project_id is not None:
         raise ValueError("project_id cannot be provided if run_id or trace_id is provided")
+
+
+@dataclass
+class RunNode:
+    """One uploaded run with its children (ADR-0038), built by `FakeLangSmithClient.run_tree`."""
+
+    id: str
+    name: str
+    run_type: str
+    parent_id: str | None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    inputs: dict[str, Any] = field(default_factory=dict)
+    outputs: dict[str, Any] = field(default_factory=dict)
+    children: list["RunNode"] = field(default_factory=list)
+
+    @property
+    def child_names(self) -> list[str]:
+        return [child.name for child in self.children]
+
+    def walk(self) -> Iterator["RunNode"]:
+        """This run, then every descendant, depth first in upload order."""
+        yield self
+        for child in self.children:
+            yield from child.walk()
+
+    def find(self, name: str) -> list["RunNode"]:
+        """Every run named `name` in this subtree, in upload order."""
+        return [node for node in self.walk() if node.name == name]
 
 
 class _RecordingSession(requests.Session):
@@ -105,6 +134,39 @@ class FakeLangSmithClient(Client):
             for method, url, data in self._recording.calls
             if method == "POST" and "/runs" in url and data
         ]
+
+    def run_tree(self) -> list[RunNode]:
+        """The uploaded runs as trees (one per root run), children in the order they were created.
+
+        A run's outputs and the metadata added while it ran come from its PATCH, as in LangSmith.
+        """
+        nodes: dict[str, RunNode] = {}
+        for body in self.posted:
+            parent = body.get("parent_run_id")
+            nodes[str(body["id"])] = RunNode(
+                id=str(body["id"]),
+                name=body["name"],
+                run_type=body.get("run_type", ""),
+                parent_id=str(parent) if parent else None,
+                metadata=dict(body.get("extra", {}).get("metadata", {})),
+                inputs=dict(body.get("inputs") or {}),
+            )
+        for method, url, data in self._recording.calls:
+            if method != "PATCH" or "/runs/" not in url or not data:
+                continue
+            node = nodes.get(url.rsplit("/", 1)[-1])
+            if node is None:
+                continue
+            body = json.loads(data)
+            node.outputs.update(body.get("outputs") or {})
+            node.metadata.update(body.get("extra", {}).get("metadata", {}))
+        roots: list[RunNode] = []
+        for node in nodes.values():
+            if node.parent_id and node.parent_id in nodes:
+                nodes[node.parent_id].children.append(node)
+            else:
+                roots.append(node)
+        return roots
 
     @property
     def runs(self) -> FakeRuns:  # type: ignore[override]

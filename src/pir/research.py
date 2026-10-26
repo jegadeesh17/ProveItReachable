@@ -32,6 +32,7 @@ from pir.models.research import AdvisoryResearch, SearchResult
 from pir.osv import is_valid_osv_id, osv_page_url
 from pir.reasoning.prompts import research_messages, research_text
 from pir.spend import ScanBudget, SpendDenied
+from pir.tracing import advisory_run, tool_run
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +199,21 @@ class AdvisoryResearcher:
     async def research(
         self, advisory: Advisory, package: str, osv_links: list[AdvisoryLink], budget: ScanBudget
     ) -> AdvisoryResearch:
+        with advisory_run(advisory.id, package) as span:
+            research = await self._research(advisory, package, osv_links, budget)
+            span.add_metadata(from_cache=research.from_cache)
+            span.set_outputs(
+                {
+                    "from_cache": research.from_cache,
+                    "failure": research.failure,
+                    "symbols": len(research.symbols),
+                }
+            )
+        return research
+
+    async def _research(
+        self, advisory: Advisory, package: str, osv_links: list[AdvisoryLink], budget: ScanBudget
+    ) -> AdvisoryResearch:
         stage: ReasonCode = "tavily_failed"
         osv = self._osv_links(advisory.id, osv_links)
         results: list[SearchResult] = []
@@ -236,12 +252,19 @@ class AdvisoryResearcher:
         ]
         query = " ".join(part for part in parts if part)
         try:
-            results = await self._search.search(
-                query,
-                max_results=self._settings.tavily_max_results,
-                depth=depth,
-                timeout_s=self._settings.timeout_tavily_s,
-            )
+            with tool_run(
+                "tavily_search",
+                {"query": query, "max_results": self._settings.tavily_max_results, "depth": depth},
+            ) as span:
+                results = await self._search.search(
+                    query,
+                    max_results=self._settings.tavily_max_results,
+                    depth=depth,
+                    timeout_s=self._settings.timeout_tavily_s,
+                )
+                span.set_outputs(
+                    {"result_count": len(results), "urls": [result.url for result in results]}
+                )
         except SearchFailed as exc:
             # A timeout may still have been billed: keep the hold. Other failures cost nothing.
             billed = self._bill_search and exc.kind == "timeout"
