@@ -7,19 +7,25 @@ after `JOB_TTL_S`, and at most `MAX_JOBS` finished ones are kept (oldest finishe
 
 import asyncio
 import logging
+import re
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime
 from typing import Literal
 
 from pir import messages
+from pir.agent_client import LocalFixtureTarget, SandboxFailed, SandboxTimeout
+from pir.deps import PipelineDeps
+from pir.executor.base import ExecutorSpendDenied
+from pir.github import ValidatedTarget
 from pir.logs import bind_scan
 from pir.models import Mode, StepName
 from pir.models.api import ProgressEvent, ScanStatusResponse
-from pir.models.report import ScanReport, StepStatus
+from pir.models.report import Finding, Proof, ScanReport, StepStatus
 from pir.pipeline import STEP_ORDER
+from pir.reasoning.equivalences import implied_symbols
 from pir.replay import EventSink
-from pir.spend import Clock
+from pir.spend import Clock, ScanBudget
 
 logger = logging.getLogger("pir.jobs")
 
@@ -211,3 +217,106 @@ class JobManager:
         )
         for job in remaining[: max(0, len(remaining) - self._max_jobs)]:
             del self._jobs[job.scan_id]
+
+
+# ---- call-chain proof (M2, cuttable; ARCHITECTURE section 16, ADR-0039) -------------------------
+
+_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+PROOF_SANDBOX_TIMEOUT = "sandbox timeout"
+
+
+def proof_entries(finding: Finding) -> list[str]:
+    """The repository steps of the call path, in order: the allowed `ProofRequest.entry` values."""
+    return [s.symbol for s in finding.call_path or [] if s.edge != "vulnerable_call"]
+
+
+def with_proof(report: ScanReport, finding_id: str, proof: Proof) -> ScanReport:
+    """`report` with `proof` set on one finding. Nothing else changes, the verdict included."""
+    findings = [
+        f.model_copy(update={"proof": proof}) if f.finding_id == finding_id else f
+        for f in report.findings
+    ]
+    return report.model_copy(update={"findings": findings})
+
+
+def _module_matches(target: str, symbol: str) -> bool:
+    return target == symbol or target.startswith(symbol + ".")
+
+
+async def run_proof(
+    deps: PipelineDeps,
+    target: ValidatedTarget | LocalFixtureTarget,
+    budget: ScanBudget,
+    report: ScanReport,
+    finding: Finding,
+    entry: str,
+) -> Proof:
+    """Prove (or not) that the finding's call path is reached, in the Sandbox.
+
+    Fetches the pinned commit again (image A), indexes it to find the call the repository makes at
+    the path's last step, installs the resolved pins from wheels only (image P), then runs the entry
+    with that call stubbed. Never raises for a Sandbox, timeout or spend problem: each ends as a
+    `not_proven` Proof with its reason, so the scan, the job and the verdict are unaffected.
+    """
+    last = (finding.call_path or [None])[-1]
+    stubbed = last.symbol if last is not None else ""
+
+    def result(status: Literal["proven", "not_proven"], reason: str, call: str | None) -> Proof:
+        return Proof(
+            status=status,
+            reason=reason,
+            ran_at=deps.clock.now(),
+            entry=entry,
+            target=stubbed,
+            recorded_call=call,
+        )
+
+    def not_proven(reason: str) -> Proof:
+        return result("not_proven", reason, None)
+
+    if last is None or finding.vulnerable_symbol is None:
+        return not_proven("the finding has no call path to prove")
+    symbols = finding.vulnerable_symbol.symbols
+    tops = sorted({s.split(".")[0] for s in symbols if _IDENT_RE.fullmatch(s.split(".")[0])})
+    workspace = None
+    try:
+        workspace = await deps.agent.open_workspace(target, budget)
+        index = await deps.agent.index(workspace, tops)
+        site = next(
+            (t for t in index.target_sites if (t.file, t.line) == (last.file, last.line)), None
+        )
+        if site is None:
+            return not_proven("the vulnerable call is not in the index of the pinned commit")
+        stubbed = site.target
+        implied = implied_symbols(site, finding.package, finding.version)
+        by_default = bool(implied & set(symbols)) and not any(
+            _module_matches(site.target, symbol) for symbol in symbols
+        )
+        pins = [
+            (d.name, d.version) for d in report.dependencies if d.resolved and d.version is not None
+        ]
+        installed = await deps.agent.proof_install(workspace, pins)
+        if installed.no_wheel:
+            missing = ", ".join(installed.no_wheel)
+            return not_proven(f"uncertain: no wheel for {missing}; source builds are not run")
+        run = await deps.agent.proof_run(
+            workspace,
+            installed,
+            entry=entry,
+            target=stubbed,
+            site=f"{site.file}:{site.line}" if by_default else None,
+        )
+        return result(run.status, run.reason, run.recorded_call)
+    except SandboxTimeout:
+        return not_proven(PROOF_SANDBOX_TIMEOUT)
+    except ExecutorSpendDenied:
+        return not_proven("not run: the spend limit was reached")
+    except SandboxFailed as exc:
+        logger.warning("proof failed in %s: %s", exc.step, exc.detail)
+        return not_proven(f"the Sandbox could not complete the proof ({exc.step})")
+    except Exception as exc:  # a proof never fails the job: log the type and report it
+        logger.error("proof raised %s", type(exc).__name__, exc_info=True)
+        return not_proven("the proof could not be completed")
+    finally:
+        if workspace is not None:
+            await deps.agent.close(workspace)

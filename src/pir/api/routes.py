@@ -1,6 +1,7 @@
 """API routes of ARCHITECTURE section 8: scans, status, report, config, health, schema.
 
-The events route lives in `pir.api.sse`; the proof route belongs to a later task. Both get the
+The events route lives in `pir.api.sse`. The proof route (M2, cuttable) is answered only when
+`FEATURE_PROOF=true` and `EXECUTOR=sandbox`; otherwise it is a plain 404 (AC-65). Both get the
 same `ApiContext` through `request.app.state.ctx` (see `get_context`).
 """
 
@@ -8,6 +9,7 @@ import json
 import logging
 import re
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,14 +29,17 @@ from pir.api.sse import create_sse_router
 from pir.config import Settings
 from pir.deps import PipelineDeps
 from pir.evaluation.metrics import load_eval_figure
-from pir.github import InvalidRepoUrl, RepoCoordinates, parse_repo_url
-from pir.jobs import JobManager, ScanNotFound
+from pir.github import InvalidRepoUrl, RepoCoordinates, ValidatedTarget, parse_repo_url
+from pir.jobs import JobManager, ScanNotFound, proof_entries, run_proof, with_proof
 from pir.logs import bind_scan, scan_id_var
 from pir.markdown import render_markdown
+from pir.models import Mode
 from pir.models.api import (
     AppConfigResponse,
     DemoSummary,
     HealthResponse,
+    ProgressEvent,
+    ProofRequest,
     ScanAccepted,
     ScanRequest,
 )
@@ -42,7 +47,7 @@ from pir.models.report import ScanReport
 from pir.pipeline import github_repo_ref, run_scan
 from pir.ratelimit import ClientHasher, Limited, RateLimiter, ReplayLimiter, client_key
 from pir.replay import DemoNotFound, EventSink, ReplayStore
-from pir.spend import Clock, Refused
+from pir.spend import Clock, Refused, ScanBudget
 
 logger = logging.getLogger("pir.api")
 
@@ -146,6 +151,30 @@ def parse_scan_request(body: bytes) -> tuple[ScanRequest, RepoCoordinates]:
     return scan_request, coords
 
 
+def proof_enabled(settings: Settings) -> bool:
+    """The proof exists only with FEATURE_PROOF=true and the real Sandbox executor (AC-65)."""
+    return settings.feature_proof and settings.executor == "sandbox"
+
+
+def parse_proof_request(body: bytes) -> ProofRequest:
+    """Validate the optional body (`{"entry": ...}`); detail texts never echo input."""
+    if not body.strip():
+        return ProofRequest()
+    try:
+        raw = json.loads(body)
+    except ValueError:
+        raise request_invalid("the body must be JSON") from None
+    if not isinstance(raw, dict):
+        raise request_invalid("the body must be a JSON object")
+    try:
+        return ProofRequest.model_validate(raw)
+    except ValidationError as exc:
+        field = next((str(e["loc"][0]) for e in exc.errors() if e["loc"]), None)
+        raise request_invalid(
+            "entry is not valid" if field == "entry" else "the body has an unexpected field"
+        ) from None
+
+
 def create_router(*, markdown_export: bool = True, max_sse_streams: int | None = None) -> APIRouter:
     """`markdown_export=False` (FEATURE_MARKDOWN_EXPORT) leaves `report.md` unregistered (AC-64).
     `max_sse_streams` registers the events route with that stream cap; None (FEATURE_PROGRESS_FEED
@@ -161,67 +190,18 @@ def create_router(*, markdown_export: bool = True, max_sse_streams: int | None =
         deps = ctx.deps
         if not ctx.settings.live_scans_enabled or deps is None:
             raise ApiError("live_scans_paused")
-        key = ctx.client_key(request)
-        client = ctx.hasher.hash(key)
-        verdict = ctx.limiter.check_and_consume(key, ctx.clock.now())
-        if isinstance(verdict, Limited):
-            _log_refusal("rate_limited", client)
-            raise ApiError(
-                "rate_limited",
-                messages.rate_limited(minutes_for(verdict.retry_after_s)),
-                retry_after_s=verdict.retry_after_s,
-            )
-        scan_id = uuid.uuid4().hex
-        token = bind_scan(scan_id)
-        try:
-            budget = await deps.meter.reserve(scan_id)
-            if isinstance(budget, Refused):
-                _log_refusal(f"spend_{budget.reason}", client)
-                if budget.reason == "daily_limit":
-                    raise ApiError(
-                        "rate_limited",
-                        messages.rate_limited(minutes_for(budget.retry_after_s)),
-                        retry_after_s=budget.retry_after_s,
-                    )
-                raise ApiError("live_scans_paused")
-            handed_off = False
-            slot = False
-            try:
-                if not ctx.acquire_live_slot():
-                    _log_refusal("server_busy", client)
-                    raise ApiError("server_busy", retry_after_s=60)
-                slot = True
-                try:
-                    target = await deps.validate(coords, scan_request.ref)
-                except Exception as exc:
-                    refusal = admission_error(exc)
-                    if refusal is None:
-                        raise
-                    _log_refusal(refusal.code, client)
-                    raise refusal from None
-                repo = github_repo_ref(target)
 
-                async def runner(sink: EventSink) -> ScanReport:
-                    try:
-                        return await run_scan(
-                            deps, target, budget, repo=repo, scan_id=scan_id, sink=sink
-                        )
-                    finally:
-                        try:
-                            await deps.meter.settle(budget)
-                        finally:
-                            ctx.release_live_slot()
+        def make_runner(
+            target: ValidatedTarget, budget: ScanBudget, scan_id: str
+        ) -> Callable[[EventSink], Awaitable[ScanReport]]:
+            repo = github_repo_ref(target)
 
-                ctx.jobs.create("live", runner, scan_id=scan_id)
-                handed_off = True
-            finally:
-                if not handed_off:
-                    if slot:
-                        ctx.release_live_slot()
-                    await deps.meter.settle(budget)
-            logger.info("scan admitted", extra={"event": "scan_admitted", "client": client})
-        finally:
-            scan_id_var.reset(token)
+            async def run(sink: EventSink) -> ScanReport:
+                return await run_scan(deps, target, budget, repo=repo, scan_id=scan_id, sink=sink)
+
+            return run
+
+        scan_id = await _admit(ctx, request, deps, coords, scan_request.ref, "live", make_runner)
         return json_response(_accepted(scan_id, "live"), 202)
 
     @router.get("/scans/{scan_id}")
@@ -317,6 +297,66 @@ def create_router(*, markdown_export: bool = True, max_sse_streams: int | None =
         logger.info("replay admitted", extra={"event": "replay_admitted", "client": client})
         return json_response(_accepted(job.scan_id, "replay"), 202)
 
+    @router.post("/scans/{scan_id}/findings/{finding_id}/proof", status_code=202)
+    async def start_proof(scan_id: str, finding_id: str, request: Request) -> Response:
+        """Prove a likely reachable finding's call path in the Sandbox (M2, cuttable). Answered only
+        with FEATURE_PROOF=true and EXECUTOR=sandbox; otherwise a plain 404 (AC-65). The proof only
+        sets the finding's `proof` on the stored report; the verdict never changes."""
+        ctx = get_context(request)
+        if not proof_enabled(ctx.settings):
+            return Response(content="Not Found", status_code=404, media_type="text/plain")
+        source = _job(ctx, scan_id)
+        report = source.report
+        if report is None:
+            raise ApiError("report_not_ready")
+        proof_request = parse_proof_request(await request.body())
+        finding = next((f for f in report.findings if f.finding_id == finding_id), None)
+        if finding is None:
+            raise ApiError("finding_not_found")
+        if finding.verdict != "likely reachable" or not finding.call_path:
+            raise request_invalid("the finding is not likely reachable")
+        entries = proof_entries(finding)
+        entry = proof_request.entry if proof_request.entry is not None else next(iter(entries), "")
+        if entry not in entries:
+            raise request_invalid("entry is not a step of the call path")
+        deps = ctx.deps
+        if not ctx.settings.live_scans_enabled or deps is None:
+            raise ApiError("live_scans_paused")
+        try:
+            coords = parse_repo_url(report.repo.url)
+        except InvalidRepoUrl:
+            raise request_invalid("the scan's repository is not a GitHub repository") from None
+
+        def make_runner(
+            target: ValidatedTarget, budget: ScanBudget, proof_id: str
+        ) -> Callable[[EventSink], Awaitable[ScanReport]]:
+            async def run(sink: EventSink) -> ScanReport:
+                proof = await run_proof(deps, target, budget, report, finding, entry)
+                # set on the latest stored report, so two proofs of one scan do not overwrite
+                updated = with_proof(source.report or report, finding.finding_id, proof)
+                source.report = updated
+                await sink.emit(
+                    ProgressEvent(
+                        seq=1,
+                        scan_id=proof_id,
+                        type="done",
+                        step=None,
+                        state=None,
+                        message=f"Proof: {proof.status.replace('_', ' ')}.",
+                        at=ctx.clock.now(),
+                        outcome=updated.outcome,
+                        tools=[],
+                    )
+                )
+                return updated
+
+            return run
+
+        proof_id = await _admit(
+            ctx, request, deps, coords, report.repo.commit_sha, "proof", make_runner
+        )
+        return json_response(_accepted(proof_id, "proof"), 202)
+
     @router.get("/config")
     async def app_config(request: Request) -> Response:
         ctx = get_context(request)
@@ -334,7 +374,7 @@ def create_router(*, markdown_export: bool = True, max_sse_streams: int | None =
                 features={
                     "progress_feed": settings.feature_progress_feed,
                     "markdown_export": settings.feature_markdown_export,
-                    "proof": settings.feature_proof,
+                    "proof": proof_enabled(settings),
                 },
                 limits={
                     "max_repo_mb": settings.max_repo_mb,
@@ -371,6 +411,81 @@ def create_router(*, markdown_export: bool = True, max_sse_streams: int | None =
         )
 
     return router
+
+
+async def _admit(
+    ctx: ApiContext,
+    request: Request,
+    deps: PipelineDeps,
+    coords: RepoCoordinates,
+    ref: str | None,
+    mode: Mode,
+    make_runner: Callable[
+        [ValidatedTarget, ScanBudget, str], Callable[[EventSink], Awaitable[ScanReport]]
+    ],
+) -> str:
+    """Admission shared by live scans and proofs (same rate limit, spend reservation, live slot
+    and repository checks). Returns the new job's scan id; raises `ApiError` when refused."""
+    key = ctx.client_key(request)
+    client = ctx.hasher.hash(key)
+    verdict = ctx.limiter.check_and_consume(key, ctx.clock.now())
+    if isinstance(verdict, Limited):
+        _log_refusal("rate_limited", client)
+        raise ApiError(
+            "rate_limited",
+            messages.rate_limited(minutes_for(verdict.retry_after_s)),
+            retry_after_s=verdict.retry_after_s,
+        )
+    scan_id = uuid.uuid4().hex
+    token = bind_scan(scan_id)
+    try:
+        budget = await deps.meter.reserve(scan_id)
+        if isinstance(budget, Refused):
+            _log_refusal(f"spend_{budget.reason}", client)
+            if budget.reason == "daily_limit":
+                raise ApiError(
+                    "rate_limited",
+                    messages.rate_limited(minutes_for(budget.retry_after_s)),
+                    retry_after_s=budget.retry_after_s,
+                )
+            raise ApiError("live_scans_paused")
+        handed_off = False
+        slot = False
+        try:
+            if not ctx.acquire_live_slot():
+                _log_refusal("server_busy", client)
+                raise ApiError("server_busy", retry_after_s=60)
+            slot = True
+            try:
+                target = await deps.validate(coords, ref)
+            except Exception as exc:
+                refusal = admission_error(exc)
+                if refusal is None:
+                    raise
+                _log_refusal(refusal.code, client)
+                raise refusal from None
+            run = make_runner(target, budget, scan_id)
+
+            async def runner(sink: EventSink) -> ScanReport:
+                try:
+                    return await run(sink)
+                finally:
+                    try:
+                        await deps.meter.settle(budget)
+                    finally:
+                        ctx.release_live_slot()
+
+            ctx.jobs.create(mode, runner, scan_id=scan_id)
+            handed_off = True
+        finally:
+            if not handed_off:
+                if slot:
+                    ctx.release_live_slot()
+                await deps.meter.settle(budget)
+        logger.info("scan admitted", extra={"event": "scan_admitted", "client": client})
+    finally:
+        scan_id_var.reset(token)
+    return scan_id
 
 
 def _job(ctx: ApiContext, scan_id: str):

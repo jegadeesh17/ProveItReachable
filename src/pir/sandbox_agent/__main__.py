@@ -1,12 +1,13 @@
 """Agent entry point: `python3.13 -I -S agent.pyz <command> --args-b64 <base64 JSON>`.
 
-`proof` is added by M2-TASK-09.
+`proof-install` and `proof-run` (M2-TASK-09) belong to the call-chain proof; `proof-run` leaves
+the process itself after printing its one result line (see `proof.py`).
 """
 
 import os
 import sys
 
-from . import fetch, index, protocol, resolve, selfcheck
+from . import fetch, index, proof, protocol, resolve, selfcheck
 
 HANDLERS: dict[str, protocol.Handler] = {
     "fetch": fetch.fetch,
@@ -14,6 +15,8 @@ HANDLERS: dict[str, protocol.Handler] = {
     "index": index.index_command,
     "resolve": resolve.resolve_command,
     "selfcheck": selfcheck.selfcheck_command,
+    "proof-install": proof.proof_install_command,
+    "proof-run": proof.proof_run_command,
 }
 
 

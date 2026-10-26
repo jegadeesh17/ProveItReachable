@@ -59,7 +59,7 @@ _GROUP_RE = re.compile(r"[A-Za-z0-9._-]{1,100}")
 _ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
 _SHIM = "import sys\nfrom pir.sandbox_agent.__main__ import run\n\nsys.exit(run())\n"
 
-Step = Literal["selfcheck", "fetch", "unpack", "resolve", "index"]
+Step = Literal["selfcheck", "fetch", "unpack", "resolve", "index", "proof-install", "proof-run"]
 
 
 class SandboxTimeout(Exception):
@@ -182,6 +182,70 @@ class ResolveResult(Strict):
             if path is not None:
                 check_repo_path(path)
         return self
+
+
+_PIN_RE = re.compile(r"(?P<name>[a-z0-9]+(?:-[a-z0-9]+)*)==(?P<version>[A-Za-z0-9.!+_-]{1,64})")
+_RECORDED_CALL_RE = re.compile(
+    r"(?P<target>[A-Za-z0-9_.]+) called from (?P<file>.+):(?P<line>[0-9]+)"
+)
+ENTRY_ENDED_REASON = "entry ended the process before the harness reported"
+
+
+def _check_pins(values: list[str]) -> list[str]:
+    for value in values:
+        match = _PIN_RE.fullmatch(value)
+        if match is None or len(match.group("name")) > 100 or not is_pep440(match.group("version")):
+            raise ValueError("a pin must look like name==version")
+    return values
+
+
+class ProofInstallResult(Strict):
+    """`proof-install` output: the pins installed from wheels and the pins with no wheel."""
+
+    installed: list[str]
+    no_wheel: list[str]
+
+    @field_validator("installed", "no_wheel")
+    @classmethod
+    def _pins(cls, value: list[str]) -> list[str]:
+        return _check_pins(value)
+
+
+class ProofRunResult(Strict):
+    """`proof-run` output (the report's Proof without `ran_at`)."""
+
+    status: Literal["proven", "not_proven"]
+    reason: str
+    entry: str
+    target: str
+    recorded_call: str | None
+
+    @field_validator("reason")
+    @classmethod
+    def _reason(cls, value: str) -> str:
+        if not value or len(value) > 500:
+            raise ValueError("reason must be 1 to 500 characters")
+        return value
+
+    @model_validator(mode="after")
+    def _check(self) -> "ProofRunResult":
+        if (self.status == "proven") != (self.recorded_call is not None):
+            raise ValueError("recorded_call is set iff proven")
+        if self.recorded_call is not None:
+            match = _RECORDED_CALL_RE.fullmatch(self.recorded_call)
+            if match is None or match.group("target") != self.target:
+                raise ValueError("recorded_call must read '<target> called from <file>:<line>'")
+            check_repo_path(match.group("file"))
+        return self
+
+
+@dataclass
+class ProofImage:
+    """Image P (A plus the installed wheels) and what `proof-install` reported."""
+
+    image: ImageRef
+    installed: list[str]
+    no_wheel: list[str]
 
 
 @dataclass
@@ -491,6 +555,81 @@ class SandboxAgentClient:
             raise SandboxFailed("index", "the index is for a different commit")
         return index
 
+    async def proof_install(self, ws: Workspace, pins: list[tuple[str, str]]) -> ProofImage:
+        """Install the pins from wheels only (network ON, from image A, saves P).
+
+        `pins` are `(normalized name, PEP 440 version)` from validated `Dependency` models; the
+        agent re-validates them and builds each `name==version` itself. With no pins nothing runs
+        and A is P. P is closed with the workspace.
+        """
+        specs = _check_pins([f"{name}=={version}" for name, version in pins])
+        if not specs:
+            return ProofImage(image=ws.image, installed=[], no_wheel=[])
+        result = await self._run(
+            "proof-install",
+            ws.image,
+            "proof-install",
+            {"pins": [{"name": name, "version": version} for name, version in pins]},
+            network=True,
+            timeout_s=self._settings.timeout_proof_install_s,
+            budget=ws.budget,
+            save=True,
+        )
+        if result.image is not None:
+            ws.saved.append(result.image)
+        installed = self._validate(
+            "proof-install", ProofInstallResult, parse_result("proof-install", result)
+        )
+        if result.image is None:
+            raise SandboxFailed("proof-install", "no image was saved")
+        if set(installed.installed + installed.no_wheel) != set(specs):
+            raise SandboxFailed("proof-install", "the result does not match the requested pins")
+        return ProofImage(result.image, installed.installed, installed.no_wheel)
+
+    async def proof_run(
+        self,
+        ws: Workspace,
+        proof_image: ProofImage,
+        *,
+        entry: str,
+        target: str,
+        site: str | None = None,
+    ) -> ProofRunResult:
+        """Run the entry with `target` stubbed (network OFF, from P, nothing saved).
+
+        Raises SandboxTimeout (the platform timeout) or SandboxFailed. A clean exit with no result
+        line (repository code ended the process) is a "not proven" result, not a failure.
+        """
+        args: dict[str, Any] = {"entry": entry, "target": target}
+        if site is not None:
+            args["site"] = site
+        result = await self._run(
+            "proof-run",
+            proof_image.image,
+            "proof-run",
+            args,
+            network=False,
+            timeout_s=self._settings.timeout_proof_run_s,
+            budget=ws.budget,
+        )
+        if (
+            result.exit_code == 0
+            and not result.timed_out
+            and not result.truncated
+            and RESULT_PREFIX not in result.stdout
+        ):
+            return ProofRunResult(
+                status="not_proven",
+                reason=ENTRY_ENDED_REASON,
+                entry=entry,
+                target=target,
+                recorded_call=None,
+            )
+        run = self._validate("proof-run", ProofRunResult, parse_result("proof-run", result))
+        if (run.entry, run.target) != (entry, target):
+            raise SandboxFailed("proof-run", "the result is for a different entry or target")
+        return run
+
     async def close(self, ws: Workspace) -> None:
         """Discard the workspace's saved images. Idempotent; never raises."""
         if ws.closed:
@@ -502,8 +641,12 @@ class SandboxAgentClient:
 
 
 __all__ = [
+    "ENTRY_ENDED_REASON",
     "FetchResult",
     "LocalFixtureTarget",
+    "ProofImage",
+    "ProofInstallResult",
+    "ProofRunResult",
     "ResolveResult",
     "ResolvedDependency",
     "SandboxAgentClient",

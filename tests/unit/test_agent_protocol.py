@@ -162,7 +162,15 @@ def test_require_int_rejects_bools_strings_and_out_of_range():
 
 
 def test_main_dispatches_the_part_one_and_two_commands():
-    assert set(agent_main.HANDLERS) == {"fetch", "unpack", "index", "resolve", "selfcheck"}
+    assert set(agent_main.HANDLERS) == {
+        "fetch",
+        "unpack",
+        "index",
+        "resolve",
+        "selfcheck",
+        "proof-install",  # M2-TASK-09
+        "proof-run",
+    }
     code = agent_main.main(["fetch", "--args-b64", _b64({"owner": "../x"})])
     assert code == 2
 
