@@ -30,7 +30,7 @@ from fakes.deps import (
     write_repo,
 )
 from fakes.langsmith import FakeLangSmithClient
-from fakes.llm import FakeLLM, json_result
+from fakes.llm import Call, FakeLLM, json_result, tool_result
 
 from pir.agent_client import SandboxFailed
 from pir.executor.base import ExecutorSpendDenied, ExecutorUnavailable
@@ -460,3 +460,85 @@ async def test_scan_runs_untraced_when_tracing_is_off(tmp_path):
     started = [json.loads(line) for line in logs.getvalue().splitlines() if "scan_started" in line]
     assert started and started[0]["run_id"] is None
     assert started[0]["trace_id"] is None
+
+
+def _model_following_the_listed_symbol() -> FakeLLM:
+    """A scripted Nemotron that does what the real one did in the eval trace: it reads the
+    "Vulnerable symbols" line of its prompt, asks the code index for the first symbol only, and
+    answers from what the tools returned."""
+    rounds = {"reasoning": 0}
+
+    def tool_answers(call: Call) -> list[dict]:
+        out = []
+        for message in call.messages:
+            if message.role == "tool":
+                out.append(json.loads(message.content or "{}"))
+        return out
+
+    def step(call: Call):
+        if call.json_mode:  # the research extraction answers like the eval run: names unqualified
+            return json_result(
+                {
+                    "identified": True,
+                    "symbols": ["full_load", "FullLoader.full_load"],
+                    "evidence_urls": [NVD_URL],
+                    "reason": "",
+                }
+            )
+        rounds["reasoning"] += 1
+        prompt = call.messages[1].content or ""
+        line = next(x for x in prompt.splitlines() if x.startswith("Vulnerable symbols:"))
+        symbol = line.removeprefix("Vulnerable symbols:").split(",")[0].strip()
+        answers = tool_answers(call)
+        if rounds["reasoning"] == 1:
+            return tool_result("find_call_sites", {"symbol": symbol})
+        if rounds["reasoning"] == 2:
+            return tool_result("find_paths", {"symbol": symbol})
+        sites, paths = answers[0]["sites"], answers[1]["paths"]
+        if not sites or not paths:
+            verdict = {
+                "verdict": "no reachable path detected",
+                "confidence": "high",
+                "call_path": [],
+                "source_locations": [],
+                "explanation": f"No call sites for {symbol} were found.",
+                "limitations": ["Static analysis only."],
+            }
+        else:
+            site = sites[0]
+            verdict = {
+                "verdict": "likely reachable",
+                "confidence": "medium",
+                "call_path": paths[0]["steps"],
+                "source_locations": [
+                    {
+                        "file": site["file"],
+                        "line": site["line"],
+                        "kind": site["kind"],
+                        "snippet": site["snippet"],
+                    }
+                ],
+                "explanation": f"The entry point reaches {symbol}.",
+                "limitations": ["Static analysis only."],
+            }
+        return tool_result("submit_verdict", verdict)
+
+    return FakeLLM([step])
+
+
+async def test_eval_regression_unqualified_research_symbols_still_reach_the_called_function(
+    tmp_path,
+):
+    # M2-TASK-15 attempt 2. In eval-20261026T083111Z the research reply named "full_load" and
+    # "FullLoader.full_load" (no "yaml." prefix) for GHSA-8q59-q68h-6hv4: the bare name was dropped,
+    # the class-qualified one made the analysis index target a module called "FullLoader", the
+    # code index saw no `yaml` use at all, and four likely-reachable cases became "no path".
+    h = make_harness(tmp_path, llm=_model_following_the_listed_symbol())
+    report = await scan(h, tmp_path)
+
+    (finding,) = report.findings
+    assert finding.vulnerable_symbol is not None
+    assert finding.vulnerable_symbol.symbols[0] == "yaml.full_load"
+    assert all(s.startswith("yaml.") for s in finding.vulnerable_symbol.symbols)
+    assert finding.verdict == "likely reachable"
+    assert finding.call_path is not None and finding.call_path[-1].symbol == "yaml.full_load"

@@ -50,6 +50,17 @@ _SYMBOL_MAX = 200
 _SYMBOL_RE = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+", re.ASCII)
 _HTTP_URL_RE = re.compile(r"https?://\S+")
 _EXTRACTION_MAX_TOKENS_FLOOR = 300
+_IDENT_RE = re.compile(r"[A-Za-z_]\w*", re.ASCII)
+# PyPI name (PEP 503 form) -> the module the code imports it by, where the two differ. Any other
+# package is imported by its own name with dashes written as underscores.
+_IMPORT_NAMES = {
+    "pyyaml": "yaml",
+    "pillow": "PIL",
+    "scikit-learn": "sklearn",
+    "beautifulsoup4": "bs4",
+    "opencv-python": "cv2",
+    "python-dateutil": "dateutil",
+}
 
 Depth = Literal["basic", "advanced"]
 
@@ -169,6 +180,26 @@ def _grounded(symbol: str, corpus: str) -> bool:
         return False
     last = symbol.rsplit(".", 1)[-1]
     return re.search(rf"(?<!\w){re.escape(last)}(?!\w)", corpus) is not None
+
+
+def _import_root(package: str) -> str:
+    normalized = re.sub(r"[-_.]+", "-", package).lower()
+    return _IMPORT_NAMES.get(normalized, normalized.replace("-", "_"))
+
+
+def _qualify(symbol: str, root: str) -> str:
+    """`root.` in front of a name that leaves out the module (`full_load`, `FullLoader.full_load`).
+
+    The model often names the function as the advisory text does, without the module the code
+    imports the package by, and then neither the index targets nor the symbol searches can find
+    it. A lower-case dotted name is a module path and stays as written.
+    """
+    first = symbol.split(".", 1)[0]
+    if first == root or not _IDENT_RE.fullmatch(first):
+        return symbol
+    if "." not in symbol or first[0].isupper():
+        return f"{root}.{symbol}"
+    return symbol
 
 
 def _string_list(value: object) -> list[str]:
@@ -299,7 +330,9 @@ class AdvisoryResearcher:
 
         corpus = research_text(advisory.summary, results)
         symbols: list[str] = []
-        for symbol in _string_list(data.get("symbols")):
+        root = _import_root(package)
+        for named in _string_list(data.get("symbols")):
+            symbol = _qualify(named, root)
             if symbol not in symbols and _grounded(symbol, corpus):
                 symbols.append(symbol)
             if len(symbols) >= _MAX_SYMBOLS:

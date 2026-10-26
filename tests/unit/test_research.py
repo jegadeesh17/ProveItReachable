@@ -295,7 +295,7 @@ async def test_ac12_model_written_url_not_in_returned_set_is_dropped(tmp_path):
     "symbol",
     [
         "yaml.exec_everything",  # last segment not in the supplied text
-        "full_load",  # no dot
+        "exec_everything",  # no dot, and its name is not in the supplied text
         "yaml.full_load()",
         "yaml.full_load; import os",
         "1yaml.full_load",
@@ -314,6 +314,42 @@ async def test_ac12_ungrounded_or_malformed_symbols_are_dropped(tmp_path, symbol
     result = await _research(researcher)
     assert not result.identified and result.symbols == []
     assert result.evidence_urls == []
+
+
+@pytest.mark.parametrize(
+    ("package", "named", "expected"),
+    [
+        # M2-TASK-15 attempt 2: the model leaves out the module the code imports the package by
+        ("pyyaml", ["full_load"], ["yaml.full_load"]),
+        ("PyYAML", ["full_load"], ["yaml.full_load"]),
+        ("pyyaml", ["FullLoader.full_load"], ["yaml.FullLoader.full_load"]),
+        (
+            "pyyaml",
+            ["full_load", "FullLoader.full_load"],
+            ["yaml.full_load", "yaml.FullLoader.full_load"],
+        ),
+        ("pyyaml", ["yaml.full_load", "full_load"], ["yaml.full_load"]),  # no duplicate
+        ("pyyaml", ["yaml.full_load"], ["yaml.full_load"]),  # already qualified: unchanged
+        ("pyyaml", ["os.full_load"], ["os.full_load"]),  # a lower-case module path is left alone
+        ("requests", ["full_load"], ["requests.full_load"]),  # the import name is the package name
+        ("some-pkg", ["full_load"], ["some_pkg.full_load"]),  # a dash becomes an underscore
+    ],
+)
+async def test_ac12_unqualified_symbols_get_the_import_name_of_the_package(
+    tmp_path, package, named, expected
+):
+    llm = FakeLLM([json_result({"identified": True, "symbols": named})])
+    researcher, _, _ = _researcher(tmp_path, llm=llm)
+    result = await researcher.research(_advisory(), package, list(OSV_LINKS), _budget())
+    assert result.symbols == expected
+    assert result.identified
+
+
+async def test_ac12_a_bare_name_that_is_not_in_the_text_is_still_dropped_after_qualifying(tmp_path):
+    llm = FakeLLM([json_result({"identified": True, "symbols": ["exec_everything", "full_load"]})])
+    researcher, _, _ = _researcher(tmp_path, llm=llm)
+    result = await _research(researcher)
+    assert result.symbols == ["yaml.full_load"]
 
 
 async def test_ac13_no_grounded_symbol_means_not_identified(tmp_path):

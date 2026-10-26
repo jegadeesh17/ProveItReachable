@@ -3,7 +3,7 @@
 import pytest
 
 from pir.models.research import SearchResult
-from pir.reasoning.prompts import research_messages, wrap_untrusted
+from pir.reasoning.prompts import REASONING_SYSTEM_PROMPT, research_messages, wrap_untrusted
 
 
 def _inner(wrapped: str) -> str:
@@ -58,3 +58,12 @@ def test_ac12_research_prompt_wraps_every_untrusted_part():
 def test_ac12_research_prompt_without_results_or_summary():
     user = research_messages("pyyaml", "PYSEC-2021-142", None, [])[1].content
     assert "(none)" in user
+
+
+def test_ac80_reasoning_prompt_says_an_implied_by_call_is_a_use_of_the_symbol():
+    # M2-TASK-15 attempt 2: in eval-20261026T083111Z the model got two find_paths paths and
+    # `implied_by` call sites for yaml.FullLoader and still answered "no reachable path detected",
+    # because nothing told it what `implied_by` means.
+    assert "'implied_by'" in REASONING_SYSTEM_PROMPT
+    assert "use of the vulnerable symbol" in REASONING_SYSTEM_PROMPT
+    assert "never when find_paths returned a path" in REASONING_SYSTEM_PROMPT
