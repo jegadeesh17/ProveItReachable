@@ -3,33 +3,33 @@
   "slug": "co2tools",
   "title": "co2tools",
   "description": "Small CLI using PyYAML safely: known advisories, no reachable path.",
-  "recorded_at": "2026-10-25T22:30:48.378744Z",
+  "recorded_at": "2026-10-26T08:30:53.863467Z",
   "model": "nvidia/nemotron-3-super-120b-a12b",
   "events": [
     {
-      "offset_ms": 301,
+      "offset_ms": 291,
       "event": {
         "seq": 1,
-        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "scan_id": "d8e45006e95c4a4589446592f847356f",
         "type": "step",
         "step": "resolve",
         "state": "running",
         "message": null,
-        "at": "2026-10-25T22:29:56.064211Z",
+        "at": "2026-10-26T08:30:10.056126Z",
         "outcome": null,
         "tools": []
       }
     },
     {
-      "offset_ms": 18886,
+      "offset_ms": 19005,
       "event": {
         "seq": 2,
-        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "scan_id": "d8e45006e95c4a4589446592f847356f",
         "type": "step",
         "step": "resolve",
         "state": "done",
         "message": null,
-        "at": "2026-10-25T22:30:14.650196Z",
+        "at": "2026-10-26T08:30:28.769151Z",
         "outcome": null,
         "tools": [
           "sandbox",
@@ -38,29 +38,29 @@
       }
     },
     {
-      "offset_ms": 18886,
+      "offset_ms": 19007,
       "event": {
         "seq": 3,
-        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "scan_id": "d8e45006e95c4a4589446592f847356f",
         "type": "step",
         "step": "osv",
         "state": "running",
         "message": null,
-        "at": "2026-10-25T22:30:14.650291Z",
+        "at": "2026-10-26T08:30:28.771597Z",
         "outcome": null,
         "tools": []
       }
     },
     {
-      "offset_ms": 27139,
+      "offset_ms": 26515,
       "event": {
         "seq": 4,
-        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "scan_id": "d8e45006e95c4a4589446592f847356f",
         "type": "step",
         "step": "osv",
         "state": "done",
         "message": null,
-        "at": "2026-10-25T22:30:22.902847Z",
+        "at": "2026-10-26T08:30:36.279988Z",
         "outcome": null,
         "tools": [
           "osv"
@@ -68,29 +68,29 @@
       }
     },
     {
-      "offset_ms": 27139,
+      "offset_ms": 26517,
       "event": {
         "seq": 5,
-        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "scan_id": "d8e45006e95c4a4589446592f847356f",
         "type": "step",
         "step": "research",
         "state": "running",
         "message": null,
-        "at": "2026-10-25T22:30:22.902941Z",
+        "at": "2026-10-26T08:30:36.282069Z",
         "outcome": null,
         "tools": []
       }
     },
     {
-      "offset_ms": 40958,
+      "offset_ms": 26529,
       "event": {
         "seq": 6,
-        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "scan_id": "d8e45006e95c4a4589446592f847356f",
         "type": "step",
         "step": "research",
         "state": "done",
         "message": null,
-        "at": "2026-10-25T22:30:36.722073Z",
+        "at": "2026-10-26T08:30:36.293888Z",
         "outcome": null,
         "tools": [
           "tavily",
@@ -99,29 +99,29 @@
       }
     },
     {
-      "offset_ms": 40958,
+      "offset_ms": 26530,
       "event": {
         "seq": 7,
-        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "scan_id": "d8e45006e95c4a4589446592f847356f",
         "type": "step",
         "step": "analysis",
         "state": "running",
         "message": null,
-        "at": "2026-10-25T22:30:36.722207Z",
+        "at": "2026-10-26T08:30:36.295002Z",
         "outcome": null,
         "tools": []
       }
     },
     {
-      "offset_ms": 44854,
+      "offset_ms": 30560,
       "event": {
         "seq": 8,
-        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "scan_id": "d8e45006e95c4a4589446592f847356f",
         "type": "step",
         "step": "analysis",
         "state": "done",
         "message": null,
-        "at": "2026-10-25T22:30:40.618583Z",
+        "at": "2026-10-26T08:30:40.324625Z",
         "outcome": null,
         "tools": [
           "sandbox",
@@ -130,29 +130,29 @@
       }
     },
     {
-      "offset_ms": 44854,
+      "offset_ms": 30562,
       "event": {
         "seq": 9,
-        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "scan_id": "d8e45006e95c4a4589446592f847356f",
         "type": "step",
         "step": "reasoning",
         "state": "running",
         "message": null,
-        "at": "2026-10-25T22:30:40.618693Z",
+        "at": "2026-10-26T08:30:40.326870Z",
         "outcome": null,
         "tools": []
       }
     },
     {
-      "offset_ms": 50953,
+      "offset_ms": 39765,
       "event": {
         "seq": 10,
-        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "scan_id": "d8e45006e95c4a4589446592f847356f",
         "type": "step",
         "step": "reasoning",
         "state": "done",
         "message": null,
-        "at": "2026-10-25T22:30:46.717921Z",
+        "at": "2026-10-26T08:30:49.529360Z",
         "outcome": null,
         "tools": [
           "nemotron",
@@ -161,29 +161,29 @@
       }
     },
     {
-      "offset_ms": 50953,
+      "offset_ms": 39766,
       "event": {
         "seq": 11,
-        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "scan_id": "d8e45006e95c4a4589446592f847356f",
         "type": "step",
         "step": "report",
         "state": "running",
         "message": null,
-        "at": "2026-10-25T22:30:46.718004Z",
+        "at": "2026-10-26T08:30:49.530626Z",
         "outcome": null,
         "tools": []
       }
     },
     {
-      "offset_ms": 50955,
+      "offset_ms": 39768,
       "event": {
         "seq": 12,
-        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "scan_id": "d8e45006e95c4a4589446592f847356f",
         "type": "step",
         "step": "report",
         "state": "done",
         "message": null,
-        "at": "2026-10-25T22:30:46.719975Z",
+        "at": "2026-10-26T08:30:49.532977Z",
         "outcome": null,
         "tools": [
           "verdict_gate"
@@ -191,15 +191,15 @@
       }
     },
     {
-      "offset_ms": 50955,
+      "offset_ms": 39769,
       "event": {
         "seq": 13,
-        "scan_id": "27ceb65e648542e08f1538ab713e957b",
+        "scan_id": "d8e45006e95c4a4589446592f847356f",
         "type": "done",
         "step": null,
         "state": null,
         "message": null,
-        "at": "2026-10-25T22:30:46.720029Z",
+        "at": "2026-10-26T08:30:49.533055Z",
         "outcome": "findings",
         "tools": []
       }
@@ -207,10 +207,10 @@
   ],
   "report": {
     "schema_version": "1.0",
-    "scan_id": "27ceb65e648542e08f1538ab713e957b",
+    "scan_id": "d8e45006e95c4a4589446592f847356f",
     "tool_version": "0.1.0",
     "model": "nvidia/nemotron-3-super-120b-a12b",
-    "generated_at": "2026-10-25T22:30:46.719066Z",
+    "generated_at": "2026-10-26T08:30:49.531884Z",
     "repo": {
       "url": "https://github.com/Mambix/co2tools",
       "owner": "Mambix",
@@ -237,8 +237,8 @@
           "sandbox",
           "lockfile"
         ],
-        "started_at": "2026-10-25T22:29:56.064195Z",
-        "finished_at": "2026-10-25T22:30:14.650167Z",
+        "started_at": "2026-10-26T08:30:10.056114Z",
+        "finished_at": "2026-10-26T08:30:28.769124Z",
         "message": null
       },
       {
@@ -247,8 +247,8 @@
         "tools": [
           "osv"
         ],
-        "started_at": "2026-10-25T22:30:14.650285Z",
-        "finished_at": "2026-10-25T22:30:22.902827Z",
+        "started_at": "2026-10-26T08:30:28.771586Z",
+        "finished_at": "2026-10-26T08:30:36.279965Z",
         "message": null
       },
       {
@@ -258,8 +258,8 @@
           "tavily",
           "nemotron"
         ],
-        "started_at": "2026-10-25T22:30:22.902935Z",
-        "finished_at": "2026-10-25T22:30:36.722052Z",
+        "started_at": "2026-10-26T08:30:36.282055Z",
+        "finished_at": "2026-10-26T08:30:36.293868Z",
         "message": null
       },
       {
@@ -269,8 +269,8 @@
           "sandbox",
           "ast"
         ],
-        "started_at": "2026-10-25T22:30:36.722199Z",
-        "finished_at": "2026-10-25T22:30:40.618561Z",
+        "started_at": "2026-10-26T08:30:36.294993Z",
+        "finished_at": "2026-10-26T08:30:40.324602Z",
         "message": null
       },
       {
@@ -280,8 +280,8 @@
           "nemotron",
           "ast"
         ],
-        "started_at": "2026-10-25T22:30:40.618686Z",
-        "finished_at": "2026-10-25T22:30:46.717903Z",
+        "started_at": "2026-10-26T08:30:40.326857Z",
+        "finished_at": "2026-10-26T08:30:49.529342Z",
         "message": null
       },
       {
@@ -290,8 +290,8 @@
         "tools": [
           "verdict_gate"
         ],
-        "started_at": "2026-10-25T22:30:46.718000Z",
-        "finished_at": "2026-10-25T22:30:46.719038Z",
+        "started_at": "2026-10-26T08:30:49.530616Z",
+        "finished_at": "2026-10-26T08:30:49.531852Z",
         "message": null
       }
     ],
@@ -764,7 +764,7 @@
         "finding_id": "f4509c8a78e1169b",
         "kind": "advisory",
         "verdict": "no reachable path detected",
-        "confidence": "high",
+        "confidence": "medium",
         "package": "pyyaml",
         "version": "5.3.1",
         "advisory": {
@@ -877,14 +877,19 @@
             "title": "CVE-2020-14343: CVE-2020-14343: PyYAML Code Execution - CVE Database | Miggo | Miggo"
           }
         ],
-        "source_locations": [],
+        "source_locations": [
+          {
+            "file": "co2tools/__init__.py",
+            "line": 6,
+            "kind": "import",
+            "snippet": "from yaml import SafeLoader, load"
+          }
+        ],
         "call_path": null,
-        "explanation": "No calls or references to yaml.full_load or yaml.FullLoader were found in the repository code via find_call_sites. Therefore there is no reachable path from entry points to the vulnerable symbols.",
+        "explanation": "The repository imports yaml.SafeLoader and yaml.load but does not import or call yaml.full_load or yaml.FullLoader. No call sites for these symbols were found, and find_paths returned no paths from entry points to the vulnerable symbols within a depth of 8.",
         "limitations": [
-          "Static analysis cannot detect dynamic imports, getattr, or reflection that might resolve the vulnerable symbol at runtime.",
-          "Code inside transitive dependencies is not examined.",
-          "Scope: 9 of 9 Python files parsed; examined imports, calls and references of `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration.",
-          "No import or call site found."
+          "Static analysis cannot detect dynamic imports or attribute access (e.g., getattr(yaml, 'full_load')), indirect calls via variables, or usage within transitive dependencies.",
+          "Scope: 9 of 9 Python files parsed; examined imports, calls and references of `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration."
         ],
         "reason_code": null,
         "reason": null,

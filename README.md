@@ -21,7 +21,7 @@ The report is available as JSON (`schemas/report.schema.json`) or Markdown. A si
 
 ## Evaluation
 
-Figures from [`eval/results/latest.json`](eval/results/latest.json): run 2026-10-25, model `nvidia/nemotron-3-super-120b-a12b`, 14 cases, 0 errored; precision 1.00, recall 0.71.
+Figures from [`eval/results/latest.json`](eval/results/latest.json): run 2026-10-26, model `nvidia/nemotron-3-super-120b-a12b`, 14 cases, 0 errored; precision 1.00, recall 0.86.
 
 Motivating example only, not a measured result: 41 to 3 reachable findings.
 

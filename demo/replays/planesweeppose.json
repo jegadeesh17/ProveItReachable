@@ -3,33 +3,33 @@
   "slug": "planesweeppose",
   "title": "PlaneSweepPose",
   "description": "3D pose research code that loads YAML configs with FullLoader on PyYAML 5.3.1.",
-  "recorded_at": "2026-10-25T22:37:34.456218Z",
+  "recorded_at": "2026-10-26T08:27:14.692266Z",
   "model": "nvidia/nemotron-3-super-120b-a12b",
   "events": [
     {
-      "offset_ms": 318,
+      "offset_ms": 324,
       "event": {
         "seq": 1,
-        "scan_id": "bc1721978cea4884936c985e6a417f03",
+        "scan_id": "584e5d16924d4600a33e3cf453b92844",
         "type": "step",
         "step": "resolve",
         "state": "running",
         "message": null,
-        "at": "2026-10-25T22:35:56.218922Z",
+        "at": "2026-10-26T08:25:36.716310Z",
         "outcome": null,
         "tools": []
       }
     },
     {
-      "offset_ms": 15328,
+      "offset_ms": 19902,
       "event": {
         "seq": 2,
-        "scan_id": "bc1721978cea4884936c985e6a417f03",
+        "scan_id": "584e5d16924d4600a33e3cf453b92844",
         "type": "step",
         "step": "resolve",
         "state": "done",
         "message": null,
-        "at": "2026-10-25T22:36:11.229165Z",
+        "at": "2026-10-26T08:25:56.293696Z",
         "outcome": null,
         "tools": [
           "sandbox",
@@ -38,29 +38,29 @@
       }
     },
     {
-      "offset_ms": 15328,
+      "offset_ms": 19904,
       "event": {
         "seq": 3,
-        "scan_id": "bc1721978cea4884936c985e6a417f03",
+        "scan_id": "584e5d16924d4600a33e3cf453b92844",
         "type": "step",
         "step": "osv",
         "state": "running",
         "message": null,
-        "at": "2026-10-25T22:36:11.229290Z",
+        "at": "2026-10-26T08:25:56.295975Z",
         "outcome": null,
         "tools": []
       }
     },
     {
-      "offset_ms": 48463,
+      "offset_ms": 56113,
       "event": {
         "seq": 4,
-        "scan_id": "bc1721978cea4884936c985e6a417f03",
+        "scan_id": "584e5d16924d4600a33e3cf453b92844",
         "type": "step",
         "step": "osv",
         "state": "done",
         "message": null,
-        "at": "2026-10-25T22:36:44.364386Z",
+        "at": "2026-10-26T08:26:32.504348Z",
         "outcome": null,
         "tools": [
           "osv"
@@ -68,29 +68,29 @@
       }
     },
     {
-      "offset_ms": 48463,
+      "offset_ms": 56115,
       "event": {
         "seq": 5,
-        "scan_id": "bc1721978cea4884936c985e6a417f03",
+        "scan_id": "584e5d16924d4600a33e3cf453b92844",
         "type": "step",
         "step": "research",
         "state": "running",
         "message": null,
-        "at": "2026-10-25T22:36:44.364501Z",
+        "at": "2026-10-26T08:26:32.506560Z",
         "outcome": null,
         "tools": []
       }
     },
     {
-      "offset_ms": 55255,
+      "offset_ms": 57016,
       "event": {
         "seq": 6,
-        "scan_id": "bc1721978cea4884936c985e6a417f03",
+        "scan_id": "584e5d16924d4600a33e3cf453b92844",
         "type": "step",
         "step": "research",
         "state": "done",
         "message": null,
-        "at": "2026-10-25T22:36:51.156265Z",
+        "at": "2026-10-26T08:26:33.407160Z",
         "outcome": null,
         "tools": [
           "tavily",
@@ -99,29 +99,29 @@
       }
     },
     {
-      "offset_ms": 55255,
+      "offset_ms": 57017,
       "event": {
         "seq": 7,
-        "scan_id": "bc1721978cea4884936c985e6a417f03",
+        "scan_id": "584e5d16924d4600a33e3cf453b92844",
         "type": "step",
         "step": "analysis",
         "state": "running",
         "message": null,
-        "at": "2026-10-25T22:36:51.156372Z",
+        "at": "2026-10-26T08:26:33.408384Z",
         "outcome": null,
         "tools": []
       }
     },
     {
-      "offset_ms": 59323,
+      "offset_ms": 61214,
       "event": {
         "seq": 8,
-        "scan_id": "bc1721978cea4884936c985e6a417f03",
+        "scan_id": "584e5d16924d4600a33e3cf453b92844",
         "type": "step",
         "step": "analysis",
         "state": "done",
         "message": null,
-        "at": "2026-10-25T22:36:55.224306Z",
+        "at": "2026-10-26T08:26:37.605236Z",
         "outcome": null,
         "tools": [
           "sandbox",
@@ -130,29 +130,29 @@
       }
     },
     {
-      "offset_ms": 59323,
+      "offset_ms": 61218,
       "event": {
         "seq": 9,
-        "scan_id": "bc1721978cea4884936c985e6a417f03",
+        "scan_id": "584e5d16924d4600a33e3cf453b92844",
         "type": "step",
         "step": "reasoning",
         "state": "running",
         "message": null,
-        "at": "2026-10-25T22:36:55.224424Z",
+        "at": "2026-10-26T08:26:37.609563Z",
         "outcome": null,
         "tools": []
       }
     },
     {
-      "offset_ms": 96792,
+      "offset_ms": 94556,
       "event": {
         "seq": 10,
-        "scan_id": "bc1721978cea4884936c985e6a417f03",
+        "scan_id": "584e5d16924d4600a33e3cf453b92844",
         "type": "step",
         "step": "reasoning",
         "state": "done",
         "message": null,
-        "at": "2026-10-25T22:37:32.694712Z",
+        "at": "2026-10-26T08:27:10.947792Z",
         "outcome": null,
         "tools": [
           "nemotron",
@@ -161,29 +161,29 @@
       }
     },
     {
-      "offset_ms": 96792,
+      "offset_ms": 94557,
       "event": {
         "seq": 11,
-        "scan_id": "bc1721978cea4884936c985e6a417f03",
+        "scan_id": "584e5d16924d4600a33e3cf453b92844",
         "type": "step",
         "step": "report",
         "state": "running",
         "message": null,
-        "at": "2026-10-25T22:37:32.694793Z",
+        "at": "2026-10-26T08:27:10.948748Z",
         "outcome": null,
         "tools": []
       }
     },
     {
-      "offset_ms": 96799,
+      "offset_ms": 94584,
       "event": {
         "seq": 12,
-        "scan_id": "bc1721978cea4884936c985e6a417f03",
+        "scan_id": "584e5d16924d4600a33e3cf453b92844",
         "type": "step",
         "step": "report",
         "state": "done",
         "message": null,
-        "at": "2026-10-25T22:37:32.701417Z",
+        "at": "2026-10-26T08:27:10.975862Z",
         "outcome": null,
         "tools": [
           "verdict_gate"
@@ -191,15 +191,15 @@
       }
     },
     {
-      "offset_ms": 96799,
+      "offset_ms": 94584,
       "event": {
         "seq": 13,
-        "scan_id": "bc1721978cea4884936c985e6a417f03",
+        "scan_id": "584e5d16924d4600a33e3cf453b92844",
         "type": "done",
         "step": null,
         "state": null,
         "message": null,
-        "at": "2026-10-25T22:37:32.701492Z",
+        "at": "2026-10-26T08:27:10.975933Z",
         "outcome": "findings",
         "tools": []
       }
@@ -207,10 +207,10 @@
   ],
   "report": {
     "schema_version": "1.0",
-    "scan_id": "bc1721978cea4884936c985e6a417f03",
+    "scan_id": "584e5d16924d4600a33e3cf453b92844",
     "tool_version": "0.1.0",
     "model": "nvidia/nemotron-3-super-120b-a12b",
-    "generated_at": "2026-10-25T22:37:32.699598Z",
+    "generated_at": "2026-10-26T08:27:10.974168Z",
     "repo": {
       "url": "https://github.com/jiahaoLjh/PlaneSweepPose",
       "owner": "jiahaoLjh",
@@ -237,8 +237,8 @@
           "sandbox",
           "lockfile"
         ],
-        "started_at": "2026-10-25T22:35:56.218904Z",
-        "finished_at": "2026-10-25T22:36:11.229131Z",
+        "started_at": "2026-10-26T08:25:36.716299Z",
+        "finished_at": "2026-10-26T08:25:56.293670Z",
         "message": null
       },
       {
@@ -247,8 +247,8 @@
         "tools": [
           "osv"
         ],
-        "started_at": "2026-10-25T22:36:11.229281Z",
-        "finished_at": "2026-10-25T22:36:44.364352Z",
+        "started_at": "2026-10-26T08:25:56.295963Z",
+        "finished_at": "2026-10-26T08:26:32.504327Z",
         "message": null
       },
       {
@@ -258,8 +258,8 @@
           "tavily",
           "nemotron"
         ],
-        "started_at": "2026-10-25T22:36:44.364494Z",
-        "finished_at": "2026-10-25T22:36:51.156246Z",
+        "started_at": "2026-10-26T08:26:32.506547Z",
+        "finished_at": "2026-10-26T08:26:33.407141Z",
         "message": null
       },
       {
@@ -269,8 +269,8 @@
           "sandbox",
           "ast"
         ],
-        "started_at": "2026-10-25T22:36:51.156360Z",
-        "finished_at": "2026-10-25T22:36:55.224285Z",
+        "started_at": "2026-10-26T08:26:33.408372Z",
+        "finished_at": "2026-10-26T08:26:37.605212Z",
         "message": null
       },
       {
@@ -280,8 +280,8 @@
           "nemotron",
           "ast"
         ],
-        "started_at": "2026-10-25T22:36:55.224417Z",
-        "finished_at": "2026-10-25T22:37:32.694692Z",
+        "started_at": "2026-10-26T08:26:37.609548Z",
+        "finished_at": "2026-10-26T08:27:10.947775Z",
         "message": null
       },
       {
@@ -290,8 +290,8 @@
         "tools": [
           "verdict_gate"
         ],
-        "started_at": "2026-10-25T22:37:32.694788Z",
-        "finished_at": "2026-10-25T22:37:32.699555Z",
+        "started_at": "2026-10-26T08:27:10.948742Z",
+        "finished_at": "2026-10-26T08:27:10.974125Z",
         "message": null
       }
     ],
@@ -392,8 +392,8 @@
       {
         "finding_id": "f4509c8a78e1169b",
         "kind": "advisory",
-        "verdict": "uncertain",
-        "confidence": "low",
+        "verdict": "likely reachable",
+        "confidence": "medium",
         "package": "pyyaml",
         "version": "5.3.1",
         "advisory": {
@@ -520,14 +520,335 @@
             "snippet": "exp_config = edict(yaml.load(f, Loader=yaml.FullLoader))"
           }
         ],
-        "call_path": null,
-        "explanation": "The model answered 'uncertain': the model could not establish a reachability claim. The repository imports yaml and uses yaml.FullLoader in lib/core/config.py line 85. However, find_paths did not discover a call path from any entry point to this usage within a depth of 8, so reachability cannot be confirmed statically.",
-        "limitations": [
-          "Static analysis may miss reachability due to dynamic imports, getattr/reflection, or indirect calls through other dependencies.",
-          "Call depth limit of 8 might exclude longer but valid paths."
+        "call_path": [
+          {
+            "file": "run/train.py",
+            "line": 1,
+            "edge": "entry",
+            "symbol": "run.train:<module>"
+          },
+          {
+            "file": "run/train.py",
+            "line": 109,
+            "edge": "call",
+            "symbol": "run.train:main"
+          },
+          {
+            "file": "run/train.py",
+            "line": 34,
+            "edge": "call",
+            "symbol": "run.train:parse_args"
+          },
+          {
+            "file": "run/train.py",
+            "line": 21,
+            "edge": "heuristic_call",
+            "symbol": "lib.core.config:update_config"
+          },
+          {
+            "file": "lib/core/config.py",
+            "line": 85,
+            "edge": "vulnerable_call",
+            "symbol": "yaml.FullLoader"
+          }
         ],
-        "reason_code": "unsupported_reachability_claim",
-        "reason": "the model could not establish a reachability claim",
+        "explanation": "The repository imports yaml and uses yaml.FullLoader in lib/core/config.py line 85. Find_paths shows a call chain from entry points (run/train.py and run/validate.py) through update_config to this usage, indicating the vulnerable symbol is reachable during normal execution.",
+        "limitations": [
+          "Static analysis cannot detect dynamic imports or attribute access (e.g., getattr, importlib) that might resolve yaml.FullLoader indirectly.",
+          "Analysis does not examine code inside transitive dependencies beyond the direct package.",
+          "The call path includes heuristic edges (name-based or an inferred import root)."
+        ],
+        "reason_code": null,
+        "reason": null,
+        "proof": null
+      },
+      {
+        "finding_id": "499a91da018768ff",
+        "kind": "advisory",
+        "verdict": "likely reachable",
+        "confidence": "medium",
+        "package": "torch",
+        "version": "1.6.0",
+        "advisory": {
+          "id": "GHSA-53q9-r3pm-6pq6",
+          "aliases": [
+            "BIT-pytorch-2025-32434",
+            "CVE-2025-32434",
+            "PYSEC-2025-41"
+          ],
+          "summary": "PyTorch: `torch.load` with `weights_only=True` leads to remote code execution",
+          "severity": "critical",
+          "fixed_versions": [
+            "2.6.0"
+          ],
+          "published": "2025-04-18T15:19:28Z",
+          "modified": "2026-08-07T08:12:20.395044Z"
+        },
+        "vulnerable_symbol": {
+          "identified": true,
+          "symbols": [
+            "torch.load",
+            "torch.serialization._legacy_load"
+          ],
+          "not_identified_reason": null,
+          "evidence_urls": [
+            "https://osv.dev/vulnerability/GHSA-53q9-r3pm-6pq6",
+            "https://github.com/advisories/ghsa-53q9-r3pm-6pq6",
+            "https://www.sentinelone.com/vulnerability-database/cve-2025-32434",
+            "https://www.miggo.io/vulnerability-database/cve/CVE-2025-32434"
+          ]
+        },
+        "advisory_links": [
+          {
+            "url": "https://osv.dev/vulnerability/GHSA-53q9-r3pm-6pq6",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pytorch/pytorch/security/advisories/GHSA-53q9-r3pm-6pq6",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-32434",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pytorch/pytorch/commit/8d4b8a920a2172523deb95bf20e8e52d50649c04",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pypa/advisory-database/tree/main/vulns/torch/PYSEC-2025-41.yaml",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pytorch/pytorch",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/advisories/ghsa-53q9-r3pm-6pq6",
+            "source": "tavily",
+            "title": "PyTorch: `torch.load` with `weights_only=True` leads to remote code execution · CVE-2025-32434 · GitHub Advisory Database · GitHub"
+          },
+          {
+            "url": "https://www.sentinelone.com/vulnerability-database/cve-2025-32434",
+            "source": "tavily",
+            "title": "CVE-2025-32434: PyTorch torch.load RCE Vulnerability"
+          },
+          {
+            "url": "https://www.miggo.io/vulnerability-database/cve/CVE-2025-32434",
+            "source": "tavily",
+            "title": "CVE-2025-32434: PyTorch weights_only RCE Bypass | Miggo"
+          },
+          {
+            "url": "https://feedly.com/cve/CVE-2025-32434",
+            "source": "tavily",
+            "title": "CVE-2025-32434 - Exploits & Severity - Feedly"
+          }
+        ],
+        "source_locations": [
+          {
+            "file": "lib/utils/utils.py",
+            "line": 47,
+            "kind": "call",
+            "snippet": "checkpoint = torch.load(f)"
+          },
+          {
+            "file": "lib/core/function.py",
+            "line": 5,
+            "kind": "import",
+            "snippet": "import torch"
+          }
+        ],
+        "call_path": [
+          {
+            "file": "run/validate.py",
+            "line": 1,
+            "edge": "entry",
+            "symbol": "run.validate:<module>"
+          },
+          {
+            "file": "run/validate.py",
+            "line": 93,
+            "edge": "call",
+            "symbol": "run.validate:main"
+          },
+          {
+            "file": "run/validate.py",
+            "line": 67,
+            "edge": "heuristic_call",
+            "symbol": "lib.utils.utils:load_checkpoint"
+          },
+          {
+            "file": "lib/utils/utils.py",
+            "line": 47,
+            "edge": "vulnerable_call",
+            "symbol": "torch.load"
+          }
+        ],
+        "explanation": "The repository calls torch.load in lib/utils/utils.py:load_checkpoint, which is invoked from run/validate.py via a call chain starting at the module level entry point. This demonstrates reachability of the vulnerable symbol torch.load.",
+        "limitations": [
+          "Static analysis cannot resolve dynamic imports or getattr-based calls.",
+          "Reflection or configuration-driven call targets may be missed.",
+          "The analysis does not examine code inside transitive dependencies beyond the direct torch package.",
+          "The call path includes heuristic edges (name-based or an inferred import root)."
+        ],
+        "reason_code": null,
+        "reason": null,
+        "proof": null
+      },
+      {
+        "finding_id": "ca469091037d26ae",
+        "kind": "advisory",
+        "verdict": "likely reachable",
+        "confidence": "medium",
+        "package": "torch",
+        "version": "1.6.0",
+        "advisory": {
+          "id": "PYSEC-2026-2286",
+          "aliases": [
+            "BIT-pytorch-2026-24747",
+            "CVE-2026-24747",
+            "GHSA-63cw-57p8-fm3p",
+            "PYSEC-2026-1856"
+          ],
+          "summary": null,
+          "severity": "unknown",
+          "fixed_versions": [
+            "2.10.0"
+          ],
+          "published": "2026-01-27T22:15:56.470000Z",
+          "modified": "2026-07-13T07:26:23.701611Z"
+        },
+        "vulnerable_symbol": {
+          "identified": true,
+          "symbols": [
+            "torch.load"
+          ],
+          "not_identified_reason": null,
+          "evidence_urls": [
+            "https://www.sentinelone.com/vulnerability-database/cve-2026-24747",
+            "https://github.com/advisories/GHSA-63cw-57p8-fm3p"
+          ]
+        },
+        "advisory_links": [
+          {
+            "url": "https://osv.dev/vulnerability/PYSEC-2026-2286",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://access.redhat.com/security/cve/CVE-2026-24747",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-24747.json",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://access.redhat.com/errata/RHSA-2026:24977",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pytorch/pytorch/releases/tag/v2.10.0",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pytorch/pytorch/security/advisories/GHSA-63cw-57p8-fm3p",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2433612",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pytorch/pytorch/issues/163105",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pytorch/pytorch/163122/commit/954dc5183ee9205cbe79876ad05dd2d9ae752139",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://osv.dev/PYSEC-2026-2286",
+            "source": "tavily",
+            "title": "OSV - Open Source Vulnerabilities"
+          },
+          {
+            "url": "https://www.sentinelone.com/vulnerability-database/cve-2026-24747",
+            "source": "tavily",
+            "title": "CVE-2026-24747: PyTorch weights_only RCE Vulnerability"
+          },
+          {
+            "url": "https://github.com/advisories/GHSA-63cw-57p8-fm3p",
+            "source": "tavily",
+            "title": "PyTorch Vulnerable to Remote Code Execution via Untrusted Checkpoint Files · CVE-2026-24747 · GitHub Advisory Database · GitHub"
+          },
+          {
+            "url": "https://app.opencve.io/cve?vendor=pytorch",
+            "source": "tavily",
+            "title": "Pytorch CVEs and Security Vulnerabilities - OpenCVE"
+          },
+          {
+            "url": "https://access.redhat.com/security/cve/cve-2026-24747",
+            "source": "tavily",
+            "title": "CVE-2026-24747 - Red Hat Customer Portal"
+          }
+        ],
+        "source_locations": [
+          {
+            "file": "lib/utils/utils.py",
+            "line": 47,
+            "kind": "call",
+            "snippet": "checkpoint = torch.load(f)"
+          }
+        ],
+        "call_path": [
+          {
+            "file": "run/validate.py",
+            "line": 1,
+            "edge": "entry",
+            "symbol": "run.validate:<module>"
+          },
+          {
+            "file": "run/validate.py",
+            "line": 93,
+            "edge": "call",
+            "symbol": "run.validate:main"
+          },
+          {
+            "file": "run/validate.py",
+            "line": 67,
+            "edge": "heuristic_call",
+            "symbol": "lib.utils.utils:load_checkpoint"
+          },
+          {
+            "file": "lib/utils/utils.py",
+            "line": 47,
+            "edge": "vulnerable_call",
+            "symbol": "torch.load"
+          }
+        ],
+        "explanation": "The repository contains a call to torch.load in lib/utils/utils.py at line 47, which is reachable from the entry point run/validate.py via a chain of calls: module level -> main -> load_checkpoint -> torch.load. This indicates the vulnerable symbol is used in non-test code.",
+        "limitations": [
+          "Static analysis cannot detect dynamic imports or calls via getattr/reflection.",
+          "The analysis does not examine code inside transitive dependencies beyond the direct dependency torch.",
+          "The call path includes heuristic edges (name-based or an inferred import root)."
+        ],
+        "reason_code": null,
+        "reason": null,
         "proof": null
       },
       {
@@ -633,112 +954,6 @@
         ],
         "reason_code": "vulnerable_function_not_identified",
         "reason": "vulnerable function not identified in the advisory text or search results",
-        "proof": null
-      },
-      {
-        "finding_id": "499a91da018768ff",
-        "kind": "advisory",
-        "verdict": "uncertain",
-        "confidence": "low",
-        "package": "torch",
-        "version": "1.6.0",
-        "advisory": {
-          "id": "GHSA-53q9-r3pm-6pq6",
-          "aliases": [
-            "BIT-pytorch-2025-32434",
-            "CVE-2025-32434",
-            "PYSEC-2025-41"
-          ],
-          "summary": "PyTorch: `torch.load` with `weights_only=True` leads to remote code execution",
-          "severity": "critical",
-          "fixed_versions": [
-            "2.6.0"
-          ],
-          "published": "2025-04-18T15:19:28Z",
-          "modified": "2026-08-07T08:12:20.395044Z"
-        },
-        "vulnerable_symbol": {
-          "identified": true,
-          "symbols": [
-            "torch.load",
-            "torch.serialization._legacy_load"
-          ],
-          "not_identified_reason": null,
-          "evidence_urls": [
-            "https://osv.dev/vulnerability/GHSA-53q9-r3pm-6pq6",
-            "https://github.com/advisories/ghsa-53q9-r3pm-6pq6",
-            "https://www.sentinelone.com/vulnerability-database/cve-2025-32434",
-            "https://www.miggo.io/vulnerability-database/cve/CVE-2025-32434"
-          ]
-        },
-        "advisory_links": [
-          {
-            "url": "https://osv.dev/vulnerability/GHSA-53q9-r3pm-6pq6",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/pytorch/pytorch/security/advisories/GHSA-53q9-r3pm-6pq6",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-32434",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/pytorch/pytorch/commit/8d4b8a920a2172523deb95bf20e8e52d50649c04",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/pypa/advisory-database/tree/main/vulns/torch/PYSEC-2025-41.yaml",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/pytorch/pytorch",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/advisories/ghsa-53q9-r3pm-6pq6",
-            "source": "tavily",
-            "title": "PyTorch: `torch.load` with `weights_only=True` leads to remote code execution · CVE-2025-32434 · GitHub Advisory Database · GitHub"
-          },
-          {
-            "url": "https://www.sentinelone.com/vulnerability-database/cve-2025-32434",
-            "source": "tavily",
-            "title": "CVE-2025-32434: PyTorch torch.load RCE Vulnerability"
-          },
-          {
-            "url": "https://www.miggo.io/vulnerability-database/cve/CVE-2025-32434",
-            "source": "tavily",
-            "title": "CVE-2025-32434: PyTorch weights_only RCE Bypass | Miggo"
-          },
-          {
-            "url": "https://feedly.com/cve/CVE-2025-32434",
-            "source": "tavily",
-            "title": "CVE-2025-32434 - Exploits & Severity - Feedly"
-          }
-        ],
-        "source_locations": [
-          {
-            "file": "lib/utils/utils.py",
-            "line": 47,
-            "kind": "call",
-            "snippet": "checkpoint = torch.load(f)"
-          }
-        ],
-        "call_path": null,
-        "explanation": "The model answered 'uncertain': the model could not establish a reachability claim. Found a call to torch.load in lib/utils/utils.py:load_checkpoint, but no call path from any entry point to this call within the analyzed depth. Without evidence that the call is reachable during normal execution, reachability cannot be confirmed.",
-        "limitations": [
-          "Static analysis cannot detect dynamic imports or indirect calls via getattr/reflection.",
-          "May miss reachability if the call occurs only under specific runtime conditions not captured in the call graph."
-        ],
-        "reason_code": "unsupported_reachability_claim",
-        "reason": "the model could not establish a reachability claim",
         "proof": null
       },
       {
@@ -1243,115 +1458,6 @@
         ],
         "reason_code": "vulnerable_function_not_identified",
         "reason": "vulnerable function not identified in the advisory text or search results",
-        "proof": null
-      },
-      {
-        "finding_id": "2ca03b3f2b474bb7",
-        "kind": "advisory",
-        "verdict": "uncertain",
-        "confidence": "low",
-        "package": "tqdm",
-        "version": "4.48.2",
-        "advisory": {
-          "id": "GHSA-g7vv-2v7x-gj9p",
-          "aliases": [
-            "CVE-2024-34062",
-            "PYSEC-2026-1976"
-          ],
-          "summary": "tqdm CLI arguments injection attack",
-          "severity": "low",
-          "fixed_versions": [
-            "4.66.3"
-          ],
-          "published": "2024-05-03T19:33:28Z",
-          "modified": "2026-09-10T03:50:13.776534Z"
-        },
-        "vulnerable_symbol": {
-          "identified": true,
-          "symbols": [
-            "builtins.eval"
-          ],
-          "not_identified_reason": null,
-          "evidence_urls": [
-            "https://nvd.nist.gov/vuln/detail/cve-2024-34062"
-          ]
-        },
-        "advisory_links": [
-          {
-            "url": "https://osv.dev/vulnerability/GHSA-g7vv-2v7x-gj9p",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/tqdm/tqdm/security/advisories/GHSA-g7vv-2v7x-gj9p",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-34062",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/tqdm/tqdm/commit/4e613f84ed2ae029559f539464df83fa91feb316",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/tqdm/tqdm",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/PA3GIGHPWAHCTT4UF57LTPZGWHAX3GW6",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/QRECVQCCESHBS3UJOWNXQUIX725TKNY6",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/VA337CYUS4SLRFV2P6MX6MZ2LKFURKJC",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://nvd.nist.gov/vuln/detail/cve-2024-34062",
-            "source": "tavily",
-            "title": "NVD-CVE-2024-34062"
-          },
-          {
-            "url": "https://axis-intelligence.com/ai-agent-security-incident-tracker",
-            "source": "tavily",
-            "title": "AI Agent Security Incident Tracker 2026: Every Confirmed Breach, Exploit & Vulnerability (2024–2026) - Axis Intelligence"
-          },
-          {
-            "url": "https://finance.yahoo.com/news/critical-cve-4-fortinet-products-110357469.html",
-            "source": "tavily",
-            "title": "Critical CVE in 4 Fortinet products actively exploited"
-          },
-          {
-            "url": "https://github.com/advisories/GHSA-fpx3-f8x9-6hqm",
-            "source": "tavily",
-            "title": "A vulnerability was discovered in MongoDB Server where... · CVE-2026-13078 · GitHub Advisory Database · GitHub"
-          },
-          {
-            "url": "https://github.com/advisories/GHSA-f96f-54rq-c385",
-            "source": "tavily",
-            "title": "An issue in MongoDB Server's Atlas Vector Search feature... · CVE-2026-18705 · GitHub Advisory Database · GitHub"
-          }
-        ],
-        "source_locations": [],
-        "call_path": null,
-        "explanation": "The model answered 'uncertain': the model could not establish a reachability claim. No direct calls to builtins.eval were found in the repository code. However, static analysis cannot detect dynamic invocations such as getattr, eval via strings, or indirect calls through other dependencies, so reachability cannot be ruled out.",
-        "limitations": [
-          "Static analysis cannot see dynamic imports, getattr, reflection, or eval constructed at runtime.",
-          "Calls inside transitive dependencies are not examined."
-        ],
-        "reason_code": "unsupported_reachability_claim",
-        "reason": "the model could not establish a reachability claim",
         "proof": null
       },
       {
@@ -1957,130 +2063,6 @@
         "proof": null
       },
       {
-        "finding_id": "ca469091037d26ae",
-        "kind": "advisory",
-        "verdict": "uncertain",
-        "confidence": "low",
-        "package": "torch",
-        "version": "1.6.0",
-        "advisory": {
-          "id": "PYSEC-2026-2286",
-          "aliases": [
-            "BIT-pytorch-2026-24747",
-            "CVE-2026-24747",
-            "GHSA-63cw-57p8-fm3p",
-            "PYSEC-2026-1856"
-          ],
-          "summary": null,
-          "severity": "unknown",
-          "fixed_versions": [
-            "2.10.0"
-          ],
-          "published": "2026-01-27T22:15:56.470000Z",
-          "modified": "2026-07-13T07:26:23.701611Z"
-        },
-        "vulnerable_symbol": {
-          "identified": true,
-          "symbols": [
-            "torch.load"
-          ],
-          "not_identified_reason": null,
-          "evidence_urls": [
-            "https://www.sentinelone.com/vulnerability-database/cve-2026-24747",
-            "https://github.com/advisories/GHSA-63cw-57p8-fm3p"
-          ]
-        },
-        "advisory_links": [
-          {
-            "url": "https://osv.dev/vulnerability/PYSEC-2026-2286",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://access.redhat.com/security/cve/CVE-2026-24747",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-24747.json",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://access.redhat.com/errata/RHSA-2026:24977",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/pytorch/pytorch/releases/tag/v2.10.0",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/pytorch/pytorch/security/advisories/GHSA-63cw-57p8-fm3p",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2433612",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/pytorch/pytorch/issues/163105",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/pytorch/pytorch/163122/commit/954dc5183ee9205cbe79876ad05dd2d9ae752139",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://osv.dev/PYSEC-2026-2286",
-            "source": "tavily",
-            "title": "OSV - Open Source Vulnerabilities"
-          },
-          {
-            "url": "https://www.sentinelone.com/vulnerability-database/cve-2026-24747",
-            "source": "tavily",
-            "title": "CVE-2026-24747: PyTorch weights_only RCE Vulnerability"
-          },
-          {
-            "url": "https://github.com/advisories/GHSA-63cw-57p8-fm3p",
-            "source": "tavily",
-            "title": "PyTorch Vulnerable to Remote Code Execution via Untrusted Checkpoint Files · CVE-2026-24747 · GitHub Advisory Database · GitHub"
-          },
-          {
-            "url": "https://app.opencve.io/cve?vendor=pytorch",
-            "source": "tavily",
-            "title": "Pytorch CVEs and Security Vulnerabilities - OpenCVE"
-          },
-          {
-            "url": "https://access.redhat.com/security/cve/cve-2026-24747",
-            "source": "tavily",
-            "title": "CVE-2026-24747 - Red Hat Customer Portal"
-          }
-        ],
-        "source_locations": [
-          {
-            "file": "lib/utils/utils.py",
-            "line": 47,
-            "kind": "call",
-            "snippet": "checkpoint = torch.load(f)"
-          }
-        ],
-        "call_path": null,
-        "explanation": "The model answered 'uncertain': the model could not establish a reachability claim. A call to torch.load was found in lib/utils/utils.py at line 47, but no call path from any entry point to this call was discovered within the analyzed depth. Without evidence that the calling function is reachable during normal execution, reachability cannot be confirmed.",
-        "limitations": [
-          "Static analysis may miss dynamic imports, getattr/reflection, or indirect calls constructed at runtime.",
-          "The call graph may be incomplete due to heuristics used for resolving function identifiers."
-        ],
-        "reason_code": "unsupported_reachability_claim",
-        "reason": "the model could not establish a reachability claim",
-        "proof": null
-      },
-      {
         "finding_id": "2c1f685bf6c93298",
         "kind": "advisory",
         "verdict": "no reachable path detected",
@@ -2191,20 +2173,13 @@
             "file": "lib/core/function.py",
             "line": 5,
             "kind": "import",
-            "snippet": "import torch"
-          },
-          {
-            "file": "lib/models/cnns.py",
-            "line": 1,
-            "kind": "import",
-            "snippet": "from torch import nn"
+            "snippet": null
           }
         ],
         "call_path": null,
-        "explanation": "Static analysis of the repository found no call sites for torch.nn.utils.rnn.pad_packed_sequence. The symbol is not imported or used in any non-test code, indicating no reachable path from entry points to the vulnerable function.",
+        "explanation": "No call sites for torch.nn.utils.rnn.pad_packed_sequence were found in the repository code, and the only import of torch does not reference the vulnerable function. Therefore, there is no reachable path from any entry point to the vulnerable symbol.",
         "limitations": [
-          "Static analysis cannot detect dynamic imports or attribute access (e.g., getattr) that might resolve to the vulnerable symbol at runtime.",
-          "Calls via reflection or eval are not visible.",
+          "Static analysis cannot detect dynamic imports or attribute access (e.g., getattr, __import__) that might resolve to the vulnerable function.",
           "The analysis does not examine transitive dependencies beyond the direct torch package.",
           "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration."
         ],
@@ -2319,9 +2294,10 @@
         ],
         "source_locations": [],
         "call_path": null,
-        "explanation": "The static analysis found no import statements or call sites for torch.nn.utils.rnn.unpack_sequence in the repository code, indicating the vulnerable symbol is not used in non-test code.",
+        "explanation": "The static analysis found no import statements referencing torch.nn.utils.rnn.unpack_sequence in the torch repository code, no call sites or references to this symbol, and find_paths returned no call paths from any entry point to the symbol within a depth of 8. This indicates that the vulnerable function is not used by the repository's own non‑test code.",
         "limitations": [
-          "Static analysis cannot detect dynamic imports, getattr/reflection usage, or indirect usage via other dependencies.",
+          "Static analysis cannot detect dynamic imports (e.g., __import__, importlib), attribute access via getattr, or reflection that might resolve the symbol at runtime.",
+          "Calls made through other dependencies (transitive dependencies) are not examined; the vulnerability could be reachable via a third‑party library that the repository uses.",
           "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration.",
           "No import or call site found."
         ],
@@ -2436,150 +2412,14 @@
             "title": "CVE-2025-2953: PyTorch mkldnn Pool Local DoS | Miggo"
           }
         ],
-        "source_locations": [
-          {
-            "file": "lib/core/function.py",
-            "line": 5,
-            "kind": "import",
-            "snippet": "import torch"
-          },
-          {
-            "file": "lib/models/cnns.py",
-            "line": 1,
-            "kind": "import",
-            "snippet": "import torch.nn as nn"
-          }
-        ],
+        "source_locations": [],
         "call_path": null,
-        "explanation": "No call sites for torch.mkldnn_max_pool2d were found in the repository code. The symbol is imported in several modules but never invoked, indicating no reachable path from entry points to the vulnerable function.",
+        "explanation": "No call sites for torch.mkldnn_max_pool2d were found in the torch repository code, indicating the vulnerable function is not used.",
         "limitations": [
           "Static analysis cannot detect dynamic imports or calls via getattr/reflection.",
-          "It does not analyze code inside transitive dependencies beyond the direct package.",
-          "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration."
-        ],
-        "reason_code": null,
-        "reason": null,
-        "proof": null
-      },
-      {
-        "finding_id": "4779c54dfbf5b671",
-        "kind": "advisory",
-        "verdict": "no reachable path detected",
-        "confidence": "high",
-        "package": "torch",
-        "version": "1.6.0",
-        "advisory": {
-          "id": "GHSA-c678-jfcj-6jmf",
-          "aliases": [
-            "BIT-pytorch-2025-2148",
-            "CVE-2025-2148",
-            "PYSEC-2025-189"
-          ],
-          "summary": "PyTorch Tuple Handler is Vulnerable to Memory Corruption through Manipulation of None Argument",
-          "severity": "low",
-          "fixed_versions": [],
-          "published": "2025-03-10T12:30:55Z",
-          "modified": "2026-06-09T21:26:06.844649Z"
-        },
-        "vulnerable_symbol": {
-          "identified": true,
-          "symbols": [
-            "torch.ops.profiler._call_end_callbacks_on_jit_fut"
-          ],
-          "not_identified_reason": null,
-          "evidence_urls": [
-            "https://www.sentinelone.com/vulnerability-database/cve-2025-2148",
-            "https://nvd.nist.gov/vuln/detail/CVE-2025-2148",
-            "https://github.com/advisories/GHSA-c678-jfcj-6jmf"
-          ]
-        },
-        "advisory_links": [
-          {
-            "url": "https://osv.dev/vulnerability/GHSA-c678-jfcj-6jmf",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-2148",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/pytorch/pytorch/issues/147722",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/pypa/advisory-database/tree/main/vulns/torch/PYSEC-2025-189.yaml",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/pytorch/pytorch",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/pytorch/pytorch/blob/b0a67c7495bb11ecb23e556058db059ba48354af/torch/autograd/profiler.py#L990",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://vuldb.com/?ctiid.299059",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://vuldb.com/?id.299059",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://vuldb.com/?submit.505959",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://www.sentinelone.com/vulnerability-database/cve-2025-2148",
-            "source": "tavily",
-            "title": "CVE-2025-2148: PyTorch Memory Corruption RCE Vulnerability"
-          },
-          {
-            "url": "https://github.com/advisories/GHSA-c678-jfcj-6jmf",
-            "source": "tavily",
-            "title": "PyTorch Tuple Handler is Vulnerable to Memory Corruption through Manipulation of None Argument · CVE-2025-2148 · GitHub Advisory Database · GitHub"
-          },
-          {
-            "url": "https://www.cve.org/CVERecord?id=CVE-2025-2148",
-            "source": "tavily",
-            "title": "CVE Record: CVE-2025-2148"
-          },
-          {
-            "url": "https://www.miggo.io/vulnerability-database/cve/CVE-2025-3000",
-            "source": "tavily",
-            "title": "CVE-2025-3000: PyTorch JIT Memory Corruption | Miggo"
-          }
-        ],
-        "source_locations": [
-          {
-            "file": "lib/core/function.py",
-            "line": 5,
-            "kind": "import",
-            "snippet": "import torch"
-          },
-          {
-            "file": "lib/dataset/campus.py",
-            "line": 12,
-            "kind": "import",
-            "snippet": "import torch"
-          }
-        ],
-        "call_path": null,
-        "explanation": "We examined the torch package for imports and direct uses of the vulnerable symbol torch.ops.profiler._call_end_callbacks_on_jit_fut. No import statements bound the symbol, and find_call_sites returned zero usages. Subsequently, find_paths found no call paths from any entry point to the symbol within a depth of 8. Therefore, there is no detectable reachable path in the non‑test code.",
-        "limitations": [
-          "Static analysis cannot detect dynamic attribute access (e.g., getattr) or indirect calls via reflection.",
-          "The analysis does not examine code inside transitive dependencies beyond the torch package itself.",
-          "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration."
+          "The analysis does not examine transitive dependencies beyond the direct package.",
+          "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration.",
+          "No import or call site found."
         ],
         "reason_code": null,
         "reason": null,
@@ -2691,25 +2531,134 @@
             "title": "CVE-2025-2999: PyTorch Buffer Overflow Vulnerability"
           }
         ],
-        "source_locations": [
+        "source_locations": [],
+        "call_path": null,
+        "explanation": "No call sites for torch.lstm_cell were found in the repository code, indicating the vulnerable symbol is not used.",
+        "limitations": [
+          "Static analysis cannot detect dynamic imports, getattr/reflection, or usage via string evaluation.",
+          "Cannot see code inside transitive dependencies not indexed.",
+          "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration.",
+          "No import or call site found."
+        ],
+        "reason_code": null,
+        "reason": null,
+        "proof": null
+      },
+      {
+        "finding_id": "83d731c064e1928b",
+        "kind": "advisory",
+        "verdict": "no reachable path detected",
+        "confidence": "high",
+        "package": "torch",
+        "version": "1.6.0",
+        "advisory": {
+          "id": "GHSA-rrmf-rvhw-rf47",
+          "aliases": [
+            "BIT-pytorch-2025-3000",
+            "CVE-2025-3000",
+            "PYSEC-2025-194"
+          ],
+          "summary": "PyTorch is vulnerable to memory corruption through its torch.jit.script function",
+          "severity": "low",
+          "fixed_versions": [
+            "2.13.0"
+          ],
+          "published": "2025-03-31T15:30:48Z",
+          "modified": "2026-09-10T03:49:48.419046Z"
+        },
+        "vulnerable_symbol": {
+          "identified": true,
+          "symbols": [
+            "torch.jit.script"
+          ],
+          "not_identified_reason": null,
+          "evidence_urls": [
+            "https://advisories.gitlab.com/pypi/torch/CVE-2025-3000",
+            "https://github.com/advisories/GHSA-rrmf-rvhw-rf47",
+            "https://getsafety.com/vulnerabilities/SFTY-20250331-30014",
+            "https://osv.dev/vulnerability/GHSA-rrmf-rvhw-rf47",
+            "https://www.sentinelone.com/vulnerability-database/cve-2025-2999"
+          ]
+        },
+        "advisory_links": [
           {
-            "file": "lib/core/function.py",
-            "line": 5,
-            "kind": "import",
-            "snippet": "import torch"
+            "url": "https://osv.dev/vulnerability/GHSA-rrmf-rvhw-rf47",
+            "source": "osv",
+            "title": null
           },
           {
-            "file": "lib/dataset/campus.py",
-            "line": 12,
-            "kind": "import",
-            "snippet": "import torch"
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-3000",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pytorch/pytorch/issues/149623",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pytorch/pytorch/issues/149623#issue-2935703015",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pytorch/pytorch/commit/b90c94991cdf8b87c8f7439f79518e0ef2c4ca4f",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pypa/advisory-database/tree/main/vulns/torch/PYSEC-2025-194.yaml",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pytorch/pytorch",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://vuldb.com/?ctiid.302049",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://vuldb.com/?id.302049",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://vuldb.com/?submit.524197",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://advisories.gitlab.com/pypi/torch/CVE-2025-3000",
+            "source": "tavily",
+            "title": "PyTorch is vulnerable to memory corruption through its torch.jit.script function | Legacy GitLab Advisory Database"
+          },
+          {
+            "url": "https://github.com/advisories/GHSA-rrmf-rvhw-rf47",
+            "source": "tavily",
+            "title": "PyTorch is vulnerable to memory corruption through its torch.jit.script function · CVE-2025-3000 · GitHub Advisory Database · GitHub"
+          },
+          {
+            "url": "https://getsafety.com/vulnerabilities/SFTY-20250331-30014",
+            "source": "tavily",
+            "title": "SFTY-20250331-30014 / CVE-2025-3000 — Safety Vulnerability Database"
+          },
+          {
+            "url": "https://www.sentinelone.com/vulnerability-database/cve-2025-2999",
+            "source": "tavily",
+            "title": "CVE-2025-2999: PyTorch Buffer Overflow Vulnerability"
           }
         ],
+        "source_locations": [],
         "call_path": null,
-        "explanation": "No call sites for torch.lstm_cell were found in the repository code, and imports of torch do not reference the symbol directly. Therefore there is no apparent path from entry points to the vulnerable function.",
+        "explanation": "No call sites for torch.jit.script were found in the repository code, indicating the vulnerable symbol is not used.",
         "limitations": [
-          "Static analysis cannot detect dynamic attribute access (e.g., getattr(torch, 'lstm_cell')), indirect calls via reflection, or usage within other dependencies that might re-export the symbol.",
-          "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration."
+          "Static analysis cannot detect dynamic imports, getattr/reflection, or code generated at runtime.",
+          "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration.",
+          "No import or call site found."
         ],
         "reason_code": null,
         "reason": null,
@@ -2822,7 +2771,118 @@
         "call_path": null,
         "explanation": "No imports or call sites for nnq.Sigmoid were found in the repository code, indicating the vulnerable symbol is not used.",
         "limitations": [
-          "Static analysis cannot detect dynamic imports, getattr/reflection usage, or indirect calls through variables.",
+          "Static analysis cannot detect dynamic imports, getattr/reflection, or usage via string evaluation.",
+          "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration.",
+          "No import or call site found."
+        ],
+        "reason_code": null,
+        "reason": null,
+        "proof": null
+      },
+      {
+        "finding_id": "2ca03b3f2b474bb7",
+        "kind": "advisory",
+        "verdict": "no reachable path detected",
+        "confidence": "high",
+        "package": "tqdm",
+        "version": "4.48.2",
+        "advisory": {
+          "id": "GHSA-g7vv-2v7x-gj9p",
+          "aliases": [
+            "CVE-2024-34062",
+            "PYSEC-2026-1976"
+          ],
+          "summary": "tqdm CLI arguments injection attack",
+          "severity": "low",
+          "fixed_versions": [
+            "4.66.3"
+          ],
+          "published": "2024-05-03T19:33:28Z",
+          "modified": "2026-09-10T03:50:13.776534Z"
+        },
+        "vulnerable_symbol": {
+          "identified": true,
+          "symbols": [
+            "builtins.eval"
+          ],
+          "not_identified_reason": null,
+          "evidence_urls": [
+            "https://nvd.nist.gov/vuln/detail/cve-2024-34062"
+          ]
+        },
+        "advisory_links": [
+          {
+            "url": "https://osv.dev/vulnerability/GHSA-g7vv-2v7x-gj9p",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/tqdm/tqdm/security/advisories/GHSA-g7vv-2v7x-gj9p",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-34062",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/tqdm/tqdm/commit/4e613f84ed2ae029559f539464df83fa91feb316",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/tqdm/tqdm",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/PA3GIGHPWAHCTT4UF57LTPZGWHAX3GW6",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/QRECVQCCESHBS3UJOWNXQUIX725TKNY6",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/VA337CYUS4SLRFV2P6MX6MZ2LKFURKJC",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://nvd.nist.gov/vuln/detail/cve-2024-34062",
+            "source": "tavily",
+            "title": "NVD-CVE-2024-34062"
+          },
+          {
+            "url": "https://axis-intelligence.com/ai-agent-security-incident-tracker",
+            "source": "tavily",
+            "title": "AI Agent Security Incident Tracker 2026: Every Confirmed Breach, Exploit & Vulnerability (2024–2026) - Axis Intelligence"
+          },
+          {
+            "url": "https://finance.yahoo.com/news/critical-cve-4-fortinet-products-110357469.html",
+            "source": "tavily",
+            "title": "Critical CVE in 4 Fortinet products actively exploited"
+          },
+          {
+            "url": "https://github.com/advisories/GHSA-fpx3-f8x9-6hqm",
+            "source": "tavily",
+            "title": "A vulnerability was discovered in MongoDB Server where... · CVE-2026-13078 · GitHub Advisory Database · GitHub"
+          },
+          {
+            "url": "https://github.com/advisories/GHSA-f96f-54rq-c385",
+            "source": "tavily",
+            "title": "An issue in MongoDB Server's Atlas Vector Search feature... · CVE-2026-18705 · GitHub Advisory Database · GitHub"
+          }
+        ],
+        "source_locations": [],
+        "call_path": null,
+        "explanation": "No call sites for builtins.eval were found in the repository code, indicating that the tqdm package does not directly invoke eval in its non-test code.",
+        "limitations": [
+          "Static analysis cannot detect dynamic invocation of eval via getattr, eval strings, or indirect calls through variables.",
+          "Code inside transitive dependencies is not examined; if a dependency of tqdm uses eval, this analysis would miss it.",
           "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration.",
           "No import or call site found."
         ],
@@ -2913,20 +2973,13 @@
             "title": "NVD-CVE-2025-2998"
           }
         ],
-        "source_locations": [
-          {
-            "file": "lib/core/function.py",
-            "line": 5,
-            "kind": "import",
-            "snippet": "import torch"
-          }
-        ],
+        "source_locations": [],
         "call_path": null,
         "explanation": "No call sites for torch.lstm_cell were found in the repository code, indicating the vulnerable symbol is not used.",
         "limitations": [
-          "Static analysis cannot detect dynamic imports or attribute access via getattr.",
-          "Reflection or indirect calls through variables are not captured.",
-          "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration."
+          "Static analysis cannot detect dynamic imports, getattr/reflection, or calls generated via string evaluation.",
+          "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration.",
+          "No import or call site found."
         ],
         "reason_code": null,
         "reason": null,
@@ -3001,101 +3054,135 @@
             "title": "PyTorch is vulnerable to memory corruption through its torch.lstm_cell function · CVE-2025-3001 · GitHub Advisory Database · GitHub"
           }
         ],
-        "source_locations": [],
-        "call_path": null,
-        "explanation": "No import or call sites for torch.linalg.lu were found in the repository code, indicating the vulnerable symbol is not used.",
-        "limitations": [
-          "Static analysis cannot detect dynamic imports, getattr/reflection usage, or indirect calls via variables.",
-          "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration.",
-          "No import or call site found."
-        ],
-        "reason_code": null,
-        "reason": null,
-        "proof": null
-      },
-      {
-        "finding_id": "167331d8b92855d0",
-        "kind": "advisory",
-        "verdict": "no reachable path detected",
-        "confidence": "high",
-        "package": "torch",
-        "version": "1.6.0",
-        "advisory": {
-          "id": "PYSEC-2025-204",
-          "aliases": [
-            "BIT-pytorch-2025-55552",
-            "CVE-2025-55552"
-          ],
-          "summary": null,
-          "severity": "unknown",
-          "fixed_versions": [
-            "2.9.0"
-          ],
-          "published": "2025-09-25T16:15:34.320000Z",
-          "modified": "2026-05-20T09:19:19.802802Z"
-        },
-        "vulnerable_symbol": {
-          "identified": true,
-          "symbols": [
-            "torch.nn.utils.rnn.unpack_sequence",
-            "torch.jit.script"
-          ],
-          "not_identified_reason": null,
-          "evidence_urls": [
-            "https://github.com/advisories/GHSA-vgrw-7cvw-pwgx",
-            "https://getsafety.com/vulnerabilities/SFTY-20250331-30014"
-          ]
-        },
-        "advisory_links": [
+        "source_locations": [
           {
-            "url": "https://osv.dev/vulnerability/PYSEC-2025-204",
-            "source": "osv",
-            "title": null
+            "file": "lib/core/function.py",
+            "line": 5,
+            "kind": "import",
+            "snippet": "import torch"
           },
           {
-            "url": "https://gist.github.com/shaoyuyoung/0e7d2a586297ae9c8ed14d8706749efc",
-            "source": "osv",
-            "title": null
+            "file": "lib/dataset/campus.py",
+            "line": 12,
+            "kind": "import",
+            "snippet": "import torch"
           },
           {
-            "url": "https://github.com/pytorch/pytorch/issues/147847",
-            "source": "osv",
-            "title": null
+            "file": "lib/dataset/campus_synthetic.py",
+            "line": 9,
+            "kind": "import",
+            "snippet": "import torch"
           },
           {
-            "url": "https://github.com/advisories/GHSA-vgrw-7cvw-pwgx",
-            "source": "tavily",
-            "title": "PyTorch is vulnerable to memory corruption through its unpack_sequence function · CVE-2025-2999 · GitHub Advisory Database · GitHub"
+            "file": "lib/dataset/panoptic.py",
+            "line": 10,
+            "kind": "import",
+            "snippet": "import torch"
           },
           {
-            "url": "https://getsafety.com/vulnerabilities/SFTY-20250331-30014",
-            "source": "tavily",
-            "title": "SFTY-20250331-30014 / CVE-2025-3000 — Safety Vulnerability Database"
+            "file": "lib/dataset/shelf.py",
+            "line": 12,
+            "kind": "import",
+            "snippet": "import torch"
           },
           {
-            "url": "https://advisories.gitlab.com/pypi/torch/CVE-2025-3000",
-            "source": "tavily",
-            "title": "PyTorch is vulnerable to memory corruption through its torch.jit.script function | Legacy GitLab Advisory Database"
+            "file": "lib/dataset/shelf_synthetic.py",
+            "line": 9,
+            "kind": "import",
+            "snippet": "import torch"
           },
           {
-            "url": "https://www.sentinelone.com/vulnerability-database/cve-2025-2999",
-            "source": "tavily",
-            "title": "CVE-2025-2999: PyTorch Buffer Overflow Vulnerability"
+            "file": "lib/models/cnns.py",
+            "line": 1,
+            "kind": "import",
+            "snippet": "import torch.nn as nn"
           },
           {
-            "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-2998",
-            "source": "tavily",
-            "title": "NVD-CVE-2025-2998"
+            "file": "lib/models/mvmppe.py",
+            "line": 2,
+            "kind": "import",
+            "snippet": "import torch"
+          },
+          {
+            "file": "lib/models/mvmppe.py",
+            "line": 3,
+            "kind": "import",
+            "snippet": "import torch.nn as nn"
+          },
+          {
+            "file": "lib/models/mvmppe.py",
+            "line": 4,
+            "kind": "import",
+            "snippet": "import torch.nn.functional as F"
+          },
+          {
+            "file": "lib/models/softargmax.py",
+            "line": 1,
+            "kind": "import",
+            "snippet": "import torch"
+          },
+          {
+            "file": "lib/models/softargmax.py",
+            "line": 2,
+            "kind": "import",
+            "snippet": "import torch.nn as nn"
+          },
+          {
+            "file": "lib/models/softargmax.py",
+            "line": 3,
+            "kind": "import",
+            "snippet": "import torch.nn.functional as F"
+          },
+          {
+            "file": "lib/utils/transforms.py",
+            "line": 2,
+            "kind": "import",
+            "snippet": "import torch"
+          },
+          {
+            "file": "lib/utils/utils.py",
+            "line": 6,
+            "kind": "import",
+            "snippet": "import torch"
+          },
+          {
+            "file": "run/train.py",
+            "line": 4,
+            "kind": "import",
+            "snippet": "import torch"
+          },
+          {
+            "file": "run/train.py",
+            "line": 5,
+            "kind": "import",
+            "snippet": "import torch.optim as optim"
+          },
+          {
+            "file": "run/train.py",
+            "line": 6,
+            "kind": "import",
+            "snippet": "import torch.backends.cudnn as cudnn"
+          },
+          {
+            "file": "run/validate.py",
+            "line": 9,
+            "kind": "import",
+            "snippet": "import torch"
+          },
+          {
+            "file": "run/validate.py",
+            "line": 10,
+            "kind": "import",
+            "snippet": "import torch.backends.cudnn as cudnn"
           }
         ],
-        "source_locations": [],
         "call_path": null,
-        "explanation": "No call sites were found for torch.nn.utils.rnn.unpack_sequence or torch.jit.script in the repository code, and imports of torch do not lead to usage of these symbols. Therefore, there is no reachable path from entry points to the vulnerable functions.",
+        "explanation": "No call sites for torch.linalg.lu were found in the repository code. The symbol was not imported or referenced in any non-test file, indicating there is no reachable path from entry points to the vulnerable function.",
         "limitations": [
-          "Static analysis cannot detect dynamic imports, getattr/reflection, or usage via strings.",
-          "It may miss calls generated through metaprogramming or external plugins.",
-          "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration.",
-          "No import or call site found."
+          "Static analysis cannot detect dynamic imports or attribute access via getattr/reflection.",
+          "Calls constructed via string evaluation or generated code are not visible.",
+          "The analysis does not examine transitive dependencies beyond the direct torch package.",
+          "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration."
         ],
         "reason_code": null,
         "reason": null,
@@ -3183,8 +3270,8 @@
         "call_path": null,
         "explanation": "No call sites for torch.rot90 were found in the repository code, indicating the vulnerable symbol is not used.",
         "limitations": [
-          "Static analysis cannot detect dynamic imports or indirect calls via getattr/reflection.",
-          "Analysis limited to the torch package; transitive dependencies are not examined.",
+          "Static analysis cannot detect dynamic imports or indirect usage via getattr/reflection.",
+          "Analysis limited to the torch module; transitive dependencies are not examined.",
           "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration.",
           "No import or call site found."
         ],
@@ -3271,11 +3358,10 @@
         ],
         "source_locations": [],
         "call_path": null,
-        "explanation": "Static analysis of the torch 1.6.0 repository found no import, call, or reference to the vulnerable symbols torch.rot90, torch.linalg.lu, or torch.nn.utils.rnn.unpack_sequence in any non-test code. Consequently, there is no reachable path from any entry point to these functions.",
+        "explanation": "No call sites were found for any of the vulnerable symbols (torch.rot90, torch.linalg.lu, torch.nn.utils.rnn.unpack_sequence) in the repository code, indicating that these functions are not invoked from any entry point.",
         "limitations": [
-          "Static analysis cannot detect dynamic imports or attribute access (e.g., getattr, __import__, eval) that might resolve to the vulnerable symbols at runtime.",
-          "Reflection or metaprogramming constructs are not captured by the static call graph.",
-          "Code residing in transitive dependencies beyond the torch package itself is not examined.",
+          "Static analysis cannot detect dynamic imports, getattr/reflection, or indirect calls via variables.",
+          "It may miss usage inside other dependencies that are not part of the repository's own code.",
           "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration.",
           "No import or call site found."
         ],
@@ -3363,10 +3449,9 @@
         ],
         "source_locations": [],
         "call_path": null,
-        "explanation": "No calls or references to torch.cummin were found in the repository code, and find_paths returned no call paths from any entry point to the symbol within a depth of 8. This indicates the vulnerable function is not reachable from the codebase.",
+        "explanation": "No call sites for torch.cummin were found in the repository code, indicating the vulnerable symbol is not used.",
         "limitations": [
-          "Static analysis cannot detect dynamic imports or attribute access (e.g., getattr, importlib) that might resolve to torch.cummin at runtime.",
-          "Calls originating from other dependencies are not examined; if a dependency invokes torch.cummin, this analysis would miss it.",
+          "Static analysis cannot detect dynamic imports or reflective calls (e.g., getattr, importlib) that might reference torch.cummin.",
           "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration.",
           "No import or call site found."
         ],
@@ -3375,69 +3460,55 @@
         "proof": null
       },
       {
-        "finding_id": "83d731c064e1928b",
+        "finding_id": "4779c54dfbf5b671",
         "kind": "advisory",
         "verdict": "no reachable path detected",
         "confidence": "medium",
         "package": "torch",
         "version": "1.6.0",
         "advisory": {
-          "id": "GHSA-rrmf-rvhw-rf47",
+          "id": "GHSA-c678-jfcj-6jmf",
           "aliases": [
-            "BIT-pytorch-2025-3000",
-            "CVE-2025-3000",
-            "PYSEC-2025-194"
+            "BIT-pytorch-2025-2148",
+            "CVE-2025-2148",
+            "PYSEC-2025-189"
           ],
-          "summary": "PyTorch is vulnerable to memory corruption through its torch.jit.script function",
+          "summary": "PyTorch Tuple Handler is Vulnerable to Memory Corruption through Manipulation of None Argument",
           "severity": "low",
-          "fixed_versions": [
-            "2.13.0"
-          ],
-          "published": "2025-03-31T15:30:48Z",
-          "modified": "2026-09-10T03:49:48.419046Z"
+          "fixed_versions": [],
+          "published": "2025-03-10T12:30:55Z",
+          "modified": "2026-06-09T21:26:06.844649Z"
         },
         "vulnerable_symbol": {
           "identified": true,
           "symbols": [
-            "torch.jit.script"
+            "torch.ops.profiler._call_end_callbacks_on_jit_fut"
           ],
           "not_identified_reason": null,
           "evidence_urls": [
-            "https://advisories.gitlab.com/pypi/torch/CVE-2025-3000",
-            "https://github.com/advisories/GHSA-rrmf-rvhw-rf47",
-            "https://getsafety.com/vulnerabilities/SFTY-20250331-30014",
-            "https://osv.dev/vulnerability/GHSA-rrmf-rvhw-rf47",
-            "https://www.sentinelone.com/vulnerability-database/cve-2025-2999"
+            "https://www.sentinelone.com/vulnerability-database/cve-2025-2148",
+            "https://nvd.nist.gov/vuln/detail/CVE-2025-2148",
+            "https://github.com/advisories/GHSA-c678-jfcj-6jmf"
           ]
         },
         "advisory_links": [
           {
-            "url": "https://osv.dev/vulnerability/GHSA-rrmf-rvhw-rf47",
+            "url": "https://osv.dev/vulnerability/GHSA-c678-jfcj-6jmf",
             "source": "osv",
             "title": null
           },
           {
-            "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-3000",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-2148",
             "source": "osv",
             "title": null
           },
           {
-            "url": "https://github.com/pytorch/pytorch/issues/149623",
+            "url": "https://github.com/pytorch/pytorch/issues/147722",
             "source": "osv",
             "title": null
           },
           {
-            "url": "https://github.com/pytorch/pytorch/issues/149623#issue-2935703015",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/pytorch/pytorch/commit/b90c94991cdf8b87c8f7439f79518e0ef2c4ca4f",
-            "source": "osv",
-            "title": null
-          },
-          {
-            "url": "https://github.com/pypa/advisory-database/tree/main/vulns/torch/PYSEC-2025-194.yaml",
+            "url": "https://github.com/pypa/advisory-database/tree/main/vulns/torch/PYSEC-2025-189.yaml",
             "source": "osv",
             "title": null
           },
@@ -3447,39 +3518,44 @@
             "title": null
           },
           {
-            "url": "https://vuldb.com/?ctiid.302049",
+            "url": "https://github.com/pytorch/pytorch/blob/b0a67c7495bb11ecb23e556058db059ba48354af/torch/autograd/profiler.py#L990",
             "source": "osv",
             "title": null
           },
           {
-            "url": "https://vuldb.com/?id.302049",
+            "url": "https://vuldb.com/?ctiid.299059",
             "source": "osv",
             "title": null
           },
           {
-            "url": "https://vuldb.com/?submit.524197",
+            "url": "https://vuldb.com/?id.299059",
             "source": "osv",
             "title": null
           },
           {
-            "url": "https://advisories.gitlab.com/pypi/torch/CVE-2025-3000",
-            "source": "tavily",
-            "title": "PyTorch is vulnerable to memory corruption through its torch.jit.script function | Legacy GitLab Advisory Database"
+            "url": "https://vuldb.com/?submit.505959",
+            "source": "osv",
+            "title": null
           },
           {
-            "url": "https://github.com/advisories/GHSA-rrmf-rvhw-rf47",
+            "url": "https://www.sentinelone.com/vulnerability-database/cve-2025-2148",
             "source": "tavily",
-            "title": "PyTorch is vulnerable to memory corruption through its torch.jit.script function · CVE-2025-3000 · GitHub Advisory Database · GitHub"
+            "title": "CVE-2025-2148: PyTorch Memory Corruption RCE Vulnerability"
           },
           {
-            "url": "https://getsafety.com/vulnerabilities/SFTY-20250331-30014",
+            "url": "https://github.com/advisories/GHSA-c678-jfcj-6jmf",
             "source": "tavily",
-            "title": "SFTY-20250331-30014 / CVE-2025-3000 — Safety Vulnerability Database"
+            "title": "PyTorch Tuple Handler is Vulnerable to Memory Corruption through Manipulation of None Argument · CVE-2025-2148 · GitHub Advisory Database · GitHub"
           },
           {
-            "url": "https://www.sentinelone.com/vulnerability-database/cve-2025-2999",
+            "url": "https://www.cve.org/CVERecord?id=CVE-2025-2148",
             "source": "tavily",
-            "title": "CVE-2025-2999: PyTorch Buffer Overflow Vulnerability"
+            "title": "CVE Record: CVE-2025-2148"
+          },
+          {
+            "url": "https://www.miggo.io/vulnerability-database/cve/CVE-2025-3000",
+            "source": "tavily",
+            "title": "CVE-2025-3000: PyTorch JIT Memory Corruption | Miggo"
           }
         ],
         "source_locations": [
@@ -3494,21 +3570,102 @@
             "line": 12,
             "kind": "import",
             "snippet": "import torch"
-          },
-          {
-            "file": "lib/dataset/campus_synthetic.py",
-            "line": 9,
-            "kind": "import",
-            "snippet": "import torch"
           }
         ],
         "call_path": null,
-        "explanation": "No call sites for torch.jit.script were found in the repository code, and find_paths returned no paths from entry points to the symbol. The only evidence of torch usage is import statements, indicating the library is available but the vulnerable function is not invoked.",
+        "explanation": "No import or call sites for the vulnerable symbol torch.ops.profiler._call_end_callbacks_on_jit_fut were found in the repository code, and find_paths returned no paths from entry points to the symbol within a depth of 8.",
         "limitations": [
-          "Static analysis cannot detect dynamic imports or attribute access (e.g., getattr(torch.jit, 'script') or via strings).",
-          "Reflection or metaprogramming that constructs the call at runtime would be missed.",
-          "The analysis does not examine transitive dependencies beyond the direct torch package.",
+          "Static analysis cannot detect dynamic attribute access (e.g., getattr), reflection, or indirect calls via variables.",
+          "The analysis does not examine code inside transitive dependencies beyond the direct torch package.",
           "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration."
+        ],
+        "reason_code": null,
+        "reason": null,
+        "proof": null
+      },
+      {
+        "finding_id": "167331d8b92855d0",
+        "kind": "advisory",
+        "verdict": "no reachable path detected",
+        "confidence": "medium",
+        "package": "torch",
+        "version": "1.6.0",
+        "advisory": {
+          "id": "PYSEC-2025-204",
+          "aliases": [
+            "BIT-pytorch-2025-55552",
+            "CVE-2025-55552"
+          ],
+          "summary": null,
+          "severity": "unknown",
+          "fixed_versions": [
+            "2.9.0"
+          ],
+          "published": "2025-09-25T16:15:34.320000Z",
+          "modified": "2026-05-20T09:19:19.802802Z"
+        },
+        "vulnerable_symbol": {
+          "identified": true,
+          "symbols": [
+            "torch.nn.utils.rnn.unpack_sequence",
+            "torch.jit.script"
+          ],
+          "not_identified_reason": null,
+          "evidence_urls": [
+            "https://github.com/advisories/GHSA-vgrw-7cvw-pwgx",
+            "https://getsafety.com/vulnerabilities/SFTY-20250331-30014"
+          ]
+        },
+        "advisory_links": [
+          {
+            "url": "https://osv.dev/vulnerability/PYSEC-2025-204",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://gist.github.com/shaoyuyoung/0e7d2a586297ae9c8ed14d8706749efc",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/pytorch/pytorch/issues/147847",
+            "source": "osv",
+            "title": null
+          },
+          {
+            "url": "https://github.com/advisories/GHSA-vgrw-7cvw-pwgx",
+            "source": "tavily",
+            "title": "PyTorch is vulnerable to memory corruption through its unpack_sequence function · CVE-2025-2999 · GitHub Advisory Database · GitHub"
+          },
+          {
+            "url": "https://getsafety.com/vulnerabilities/SFTY-20250331-30014",
+            "source": "tavily",
+            "title": "SFTY-20250331-30014 / CVE-2025-3000 — Safety Vulnerability Database"
+          },
+          {
+            "url": "https://advisories.gitlab.com/pypi/torch/CVE-2025-3000",
+            "source": "tavily",
+            "title": "PyTorch is vulnerable to memory corruption through its torch.jit.script function | Legacy GitLab Advisory Database"
+          },
+          {
+            "url": "https://www.sentinelone.com/vulnerability-database/cve-2025-2999",
+            "source": "tavily",
+            "title": "CVE-2025-2999: PyTorch Buffer Overflow Vulnerability"
+          },
+          {
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-2998",
+            "source": "tavily",
+            "title": "NVD-CVE-2025-2998"
+          }
+        ],
+        "source_locations": [],
+        "call_path": null,
+        "explanation": "The analysis searched for call paths from repository entry points to the vulnerable symbols torch.nn.utils.rnn.unpack_sequence and torch.jit.script using find_paths, which returned no paths within a depth of 8. Additionally, find_call_sites for each symbol returned zero usages in the repository code. Since no imports, calls, or references to these symbols were found in non‑test code, there is no evident reachable path.",
+        "limitations": [
+          "Static analysis cannot detect dynamic imports or attribute access (e.g., getattr, __import__), reflection, or indirect calls constructed at runtime.",
+          "Code inside other dependencies that might re‑export or wrap the vulnerable symbols is not examined.",
+          "Scope: 17 of 17 Python files parsed; examined imports, calls and references of `builtins`, `nnq`, `torch`, `yaml` in repository code. Not examined: dynamic imports, getattr or reflection, code inside other dependencies, C extensions, runtime configuration.",
+          "No import or call site found."
         ],
         "reason_code": null,
         "reason": null,
@@ -3522,9 +3679,9 @@
       "dependencies_not_checked": 0,
       "findings_total": 30,
       "by_verdict": {
-        "likely reachable": 0,
-        "no reachable path detected": 13,
-        "uncertain": 17
+        "likely reachable": 3,
+        "no reachable path detected": 14,
+        "uncertain": 13
       }
     },
     "limitations": [
