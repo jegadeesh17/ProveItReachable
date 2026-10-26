@@ -9,7 +9,7 @@ made up (rule 2). Errors are results too (`ok=False`); `call` never raises.
 
 import json
 from collections import deque
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from itertools import islice
 from typing import Any
@@ -419,13 +419,7 @@ class AstTool:
     # ---- find_paths -------------------------------------------------------------------
 
     def _best_edges(self) -> dict[str, dict[str, Edge]]:
-        """caller -> callee -> the edge to report (non-heuristic first, then file, line)."""
-        best: dict[str, dict[str, Edge]] = {}
-        for edge in self._index.edges:
-            current = best.setdefault(edge.caller, {}).get(edge.callee)
-            if current is None or _edge_key(edge) < _edge_key(current):
-                best[edge.caller][edge.callee] = edge
-        return best
+        return best_edges(self._index.edges)
 
     def _shortest_paths(self, symbol: str, max_depth: int) -> list[dict[str, Any]]:
         sites = [s for s in self._index.target_sites if self._site_matches(s, symbol)]
@@ -476,6 +470,16 @@ class AstTool:
             {"file": site.file, "line": site.line, "edge": "vulnerable_call", "symbol": site.target}
         )
         return {"depth": len(nodes) - 1, "heuristic": heuristic, "steps": steps}
+
+
+def best_edges(edges: Sequence[Edge]) -> dict[str, dict[str, Edge]]:
+    """caller -> callee -> the edge to report (non-heuristic first, then file, line)."""
+    best: dict[str, dict[str, Edge]] = {}
+    for edge in edges:
+        current = best.setdefault(edge.caller, {}).get(edge.callee)
+        if current is None or _edge_key(edge) < _edge_key(current):
+            best[edge.caller][edge.callee] = edge
+    return best
 
 
 def _edge_key(edge: Edge) -> tuple[bool, str, int]:

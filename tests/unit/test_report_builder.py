@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from pir.models.index import AnalysisIndex, DefRecord, IndexedFile, TargetSite
+from pir.models.index import AnalysisIndex, DefRecord, Edge, IndexedFile, TargetSite
 from pir.models.reasoning import ModelVerdict, ReasoningOutcome
 from pir.models.report import (
     Advisory,
@@ -77,7 +77,7 @@ def research(identified=True, failure=None):
     )
 
 
-def index(truncated=False, unparsed=False, extra_sites=(), sites=None):
+def index(truncated=False, unparsed=False, extra_sites=(), sites=None, edges=None):
     files = [
         IndexedFile(path="app.py", lines=20, is_test=False, parsed=True, skip_reason=None),
         IndexedFile(
@@ -93,10 +93,27 @@ def index(truncated=False, unparsed=False, extra_sites=(), sites=None):
     if sites is None:
         sites = [
             TargetSite(
+                file="app.py", line=10, col=4, caller="app:main", kind="call",
+                snippet="yaml.load(x)", target="yaml.load",
+            ),
+            TargetSite(
                 file="app.py", line=10, col=4, caller="app:helper", kind="call",
                 snippet="yaml.load(x)", target="yaml.load",
-            )
+            ),
+            TargetSite(
+                file="app.py", line=10, col=4, caller="app:x", kind="call",
+                snippet="yaml.load(x)", target="yaml.load",
+            ),
+            TargetSite(
+                file="app.py", line=10, col=4, caller="app:<module>", kind="call",
+                snippet="yaml.load(x)", target="yaml.load",
+            ),
         ]  # fmt: skip
+    if edges is None:
+        edges = [
+            Edge(caller="app:main", callee="app:x", file="app.py", line=3, heuristic=True),
+            Edge(caller="app:main", callee="app:helper", file="app.py", line=3, heuristic=False),
+        ]
     return AnalysisIndex(
         agent_protocol=1,
         commit_sha=SHA,
@@ -117,7 +134,7 @@ def index(truncated=False, unparsed=False, extra_sites=(), sites=None):
             ),
         ],
         target_sites=[*sites, *extra_sites],
-        edges=[],
+        edges=edges,
         truncated=truncated,
         stats={},
     )
@@ -199,6 +216,32 @@ def test_ac20_valid_path_stays_likely_reachable():
         ((ENTRY,), SEEN, "not a use of the vulnerable symbol"),
         ((), SEEN, "no call path"),
         (None, SEEN, "no call path"),
+        (
+            (
+                ENTRY,
+                CallPathStep(file="app.py", line=3, edge="call", symbol="app:ghost"),
+                HIT,
+            ),
+            SEEN | {("app.py", 3)},
+            "step 0 does not call step 1",
+        ),
+        (
+            (
+                ENTRY,
+                CallPathStep(file="app.py", line=3, edge="call", symbol="app:x"),
+                HIT,
+            ),
+            SEEN | {("app.py", 3)},
+            "step 0 does not call step 1",
+        ),
+        (
+            (
+                CallPathStep(file="app.py", line=3, edge="entry", symbol="app:unmatched"),
+                HIT,
+            ),
+            SEEN | {("app.py", 3)},
+            "does not call the target site",
+        ),
     ],
     ids=[
         "file-outside-index",
@@ -208,6 +251,9 @@ def test_ac20_valid_path_stays_likely_reachable():
         "single-step",
         "empty",
         "none",
+        "broken-edge",
+        "wrong-heuristic-flag",
+        "wrong-site-caller",
     ],
 )
 def test_ac20_ac22_invalid_path_is_downgraded(path, seen, fragment):
@@ -230,6 +276,22 @@ def test_ac22_last_step_must_be_a_site_of_the_vulnerable_symbol():
         outcome(path=(ENTRY, step)), idx=index(extra_sites=[other]), seen=SEEN | {("app.py", 4)}
     )
     assert f.reason_code == "unsupported_reachability_claim"
+
+
+def test_ac20_ac22_wrong_site_caller_is_downgraded():
+    other_site = TargetSite(
+        file="app.py",
+        line=10,
+        col=4,
+        caller="app:other",
+        kind="call",
+        snippet="yaml.load(x)",
+        target="yaml.load",
+    )
+    f = run(outcome(path=(ENTRY, HIT)), idx=index(sites=[other_site]))
+    assert f.verdict == "uncertain"
+    assert f.reason_code == "unsupported_reachability_claim"
+    assert "step 0 does not call the target site (caller is app:other)" in f.reason
 
 
 def test_valid_path_without_model_locations_uses_the_target_site():

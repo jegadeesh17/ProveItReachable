@@ -33,6 +33,7 @@ from pir.models.report import (
     expected_outcome,
 )
 from pir.models.research import AdvisoryResearch
+from pir.reasoning.ast_tool import best_edges
 from pir.reasoning.equivalences import implied_symbols
 
 _CONFIDENCE_RANK: dict[str, int] = {"high": 0, "medium": 1, "low": 2}
@@ -164,14 +165,38 @@ def _first_failed_reachability_rule(
             return f"rule 2: step {step.file}:{step.line} is outside the file's line range", None
         if (step.file, step.line) not in seen:
             return f"rule 2: step {step.file}:{step.line} was never returned by the ast tool", None
+    edges = best_edges(index.edges)
+    for i in range(len(path) - 2):
+        step_i = path[i]
+        step_next = path[i + 1]
+        edge = edges.get(step_i.symbol, {}).get(step_next.symbol)
+        if (
+            edge is None
+            or (edge.file, edge.line) != (step_next.file, step_next.line)
+            or edge.heuristic != (step_next.edge == "heuristic_call")
+        ):
+            return f"rule 2: step {i} does not call step {i + 1}", None
+
     last = path[-1]
+    expected_site_caller = path[-2].symbol if len(path) >= 2 else (path[0].symbol if path else None)
+    mismatched_site: TargetSite | None = None
     for site in index.target_sites:
         if (
             site.file == last.file
             and site.line == last.line
             and _matches(site, symbols, package, version)
         ):
-            return None, site
+            if expected_site_caller is not None and site.caller == expected_site_caller:
+                return None, site
+            if mismatched_site is None:
+                mismatched_site = site
+    if mismatched_site is not None:
+        step_idx = len(path) - 2 if len(path) >= 2 else 0
+        detail = (
+            f"rule 2: step {step_idx} does not call the target site "
+            f"(caller is {mismatched_site.caller})"
+        )
+        return detail, None
     return f"rule 2: last step {last.file}:{last.line} is not a use of the vulnerable symbol", None
 
 
