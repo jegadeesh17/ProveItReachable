@@ -16,14 +16,14 @@ Each significant technical decision for ProveItReachable, with its reasons, the 
 | [ADR-0010](#adr-0010-report-schema-verdicts-confidence-and-ranking) | Report schema, verdicts, confidence and ranking | Accepted | 2026-10-24 |
 | [ADR-0011](#adr-0011-job-based-http-api-with-server-sent-events-and-a-cli) | Job-based HTTP API with server-sent events and a CLI | Accepted | 2026-10-24 |
 | [ADR-0012](#adr-0012-single-screen-frontend-in-plain-html-css-and-javascript) | Single-screen frontend in plain HTML, CSS and JavaScript | Accepted | 2026-10-24 |
-| [ADR-0013](#adr-0013-host-the-demo-on-a-free-hugging-face-docker-space) | Host the demo on a free Hugging Face Docker Space | Accepted | 2026-10-24 |
+| [ADR-0013](#adr-0013-host-the-demo-on-a-free-hugging-face-docker-space) | Host the demo on a free Hugging Face Docker Space | Superseded by ADR-0040 | 2026-10-24 |
 | [ADR-0014](#adr-0014-spend-metering-hard-caps-and-rate-limits) | Spend metering, hard caps and rate limits | Superseded by ADR-0022 | 2026-10-24 |
 | [ADR-0015](#adr-0015-durable-spend-ledger-in-a-private-hugging-face-dataset) | Durable spend ledger in a private Hugging Face dataset | Superseded by ADR-0029 | 2026-10-24 |
 | [ADR-0016](#adr-0016-cached-replays-for-curated-demo-repos) | Cached replays for curated demo repos | Accepted | 2026-10-24 |
 | [ADR-0017](#adr-0017-evaluation-suite-metrics-and-precision-bar-with-langsmith) | Evaluation suite, metrics and precision bar with LangSmith | Accepted | 2026-10-24 |
 | [ADR-0018](#adr-0018-call-chain-proof-with-a-recording-stub-gated-and-cuttable) | Call-chain proof with a recording stub, gated and cuttable | Accepted | 2026-10-24 |
 | [ADR-0019](#adr-0019-bounded-timeouts-and-failure-becomes-uncertain) | Bounded timeouts and failure becomes uncertain | Accepted | 2026-10-24 |
-| [ADR-0020](#adr-0020-mit-license-and-secrets-only-from-environment-variables) | MIT license and secrets only from environment variables | Accepted | 2026-10-24 |
+| [ADR-0020](#adr-0020-mit-license-and-secrets-only-from-environment-variables) | MIT license and secrets only from environment variables | Accepted, amended by ADR-0040 (hosted secrets kept in Google Secret Manager, still read as environment variables) | 2026-10-24 |
 | [ADR-0021](#adr-0021-sandbox-runs-through-the-sdk-and-rest-api-with-no-docker-fallback) | Sandbox runs through the SDK and REST API, with no Docker fallback | Superseded by ADR-0027 | 2026-10-25 |
 | [ADR-0022](#adr-0022-spend-metering-from-reported-sandbox-cost-with-build-and-demo-caps) | Spend metering from reported Sandbox cost, with build and demo caps | Superseded by ADR-0029 | 2026-10-25 |
 | [ADR-0023](#adr-0023-nemotron-3-super-with-native-tool-calling-only) | Nemotron 3 Super with native tool calling only | Accepted | 2026-10-25 |
@@ -39,10 +39,11 @@ Each significant technical decision for ProveItReachable, with its reasons, the 
 | [ADR-0033](#adr-0033-sandbox-base-image-imported-by-version-tag-and-checked-against-a-reviewed-fingerprint) | Sandbox base image imported by version tag and checked against a reviewed fingerprint | Accepted (amended 2026-10-25: measured on GitHub Actions) | 2026-10-25 |
 | [ADR-0034](#adr-0034-sandbox-contract-corrections-from-the-live-platform-checks) | Sandbox contract corrections from the live platform checks | Accepted | 2026-10-25 |
 | [ADR-0035](#adr-0035-fixed-prompt-token-overhead-in-the-llm-spend-hold) | Fixed prompt-token overhead in the LLM spend hold | Accepted | 2026-10-25 |
-| [ADR-0036](#adr-0036-ship-the-published-eval-summary-in-the-space-image) | Ship the published eval summary in the Space image | Accepted | 2026-10-26 |
+| [ADR-0036](#adr-0036-ship-the-published-eval-summary-in-the-space-image) | Ship the published eval summary in the Space image | Accepted (applies unchanged to the Cloud Run image, ADR-0040) | 2026-10-26 |
 | [ADR-0037](#adr-0037-call-path-matching-through-default-argument-equivalences-and-inferred-source-roots) | Call-path matching through default-argument equivalences and inferred source roots | Accepted | 2026-10-26 |
 | [ADR-0038](#adr-0038-a-langsmith-run-per-pipeline-step-finding-and-tool-call) | A LangSmith run per pipeline step, finding and tool call | Accepted | 2026-10-26 |
 | [ADR-0039](#adr-0039-call-chain-proof-runs-main-block-entries-as-scripts-and-stubs-the-call-the-repository-makes) | Call-chain proof runs main-block entries as scripts and stubs the call the repository makes | Accepted | 2026-10-26 |
+| [ADR-0040](#adr-0040-host-the-demo-on-google-cloud-run-with-hard-cost-guards) | Host the demo on Google Cloud Run with hard cost guards | Accepted | 2026-10-26 |
 
 ## ADR-0001: Python and FastAPI service with typed schemas
 
@@ -348,7 +349,7 @@ Zero build tooling. The prototype is the real UI. The code must be kept tidy by 
 ## ADR-0013: Host the demo on a free Hugging Face Docker Space
 
 Date: 2026-10-24
-Status: Accepted
+Status: Superseded by ADR-0040
 
 ### Context
 
@@ -528,7 +529,7 @@ Scans always finish with honest gaps marked. Long scans are cut off at 15 minute
 ## ADR-0020: MIT license and secrets only from environment variables
 
 Date: 2026-10-24
-Status: Accepted
+Status: Accepted, amended by ADR-0040 (hosted secrets are kept in Google Secret Manager and reach the app as environment variables)
 
 ### Context
 
@@ -1113,3 +1114,59 @@ Two more details of PyRL would also defeat the proof as written:
 ### Consequences
 
 The flagship demo's path can be shown as "proven" with the exact repository line, in a few seconds instead of a timeout. Scripts that need command-line arguments, files or input before reaching the call are "not proven" with a clear reason; the proof is weaker for them, which is stated, not hidden. The `proof-run` step gains one optional argument, and the proof tests gain main-block fixtures (reached, `argparse` failure, early exit, a safe call before the vulnerable one). A new acceptance criterion covers this. Section 16 of [ARCHITECTURE.md](ARCHITECTURE.md) holds the details.
+
+## ADR-0040: Host the demo on Google Cloud Run with hard cost guards
+
+Date: 2026-10-26
+Status: Accepted (supersedes ADR-0013; amends ADR-0020 for where hosted secrets are kept; ADR-0030 and ADR-0036 apply unchanged to the image)
+
+### Context
+
+[ADR-0013](#adr-0013-host-the-demo-on-a-free-hugging-face-docker-space) chose a free Hugging Face Docker Space. On 2026-10-26 creating that Space failed with HTTP 402: "hosting Gradio and Docker Spaces on free cpu-basic requires a PRO subscription", and the account is not PRO (details in [DEPLOYMENT](DEPLOYMENT.md) and [PLATFORM_FEEDBACK](PLATFORM_FEEDBACK.md)). So the free host the design relied on does not exist for this account.
+
+Everything else from that deploy attempt still holds. The private spend-ledger dataset `jegadeesh17/pir-spend-ledger` exists and passed its live safety check, and Hugging Face datasets stay free, so the ledger stays where it is. Only the place that runs the app changes. The developer laptop cannot run Docker (CPU virtualization is off), so the image must be built remotely. The demo still has to be reachable without login until 2026-12-15 so judges can use it.
+
+The user approved the move on 2026-10-26, verbatim: "I approve: create a GCP project proveitreachable on my billing account, set a $1/$5 budget alert, store my keys from .env in Secret Manager, and deploy ProveItReachable to Cloud Run with max 1 instance."
+
+### Decision
+
+- **Host:** Google Cloud Run, service `proveitreachable` in a new project `proveitreachable` on the user's billing account, region `us-central1` (a free-tier region). Google's Cloud Build service builds the image from the existing `Dockerfile`, so no local Docker is needed.
+- **What gets uploaded:** the build input is an export of the last commit (`git archive HEAD`) unpacked into an empty temporary folder. Only committed files are uploaded, so the local `.env`, `data/` and unfinished work never leave the laptop.
+- **No code or Dockerfile change:** the app keeps listening on port 7860 and the deploy tells Cloud Run to use that port (`--port 7860`).
+- **Cost guards:**
+  - at most 1 instance and none when idle (`--max-instances 1`, `--min-instances 0`);
+  - billing only while a request is being served (request-based billing, `--cpu-throttling`);
+  - 1 vCPU and 1 GiB of memory, because files the app writes to disk use instance memory on Cloud Run;
+  - a $5 budget on the project with email alerts at $1 and $5;
+  - an image-store cleanup rule that keeps only the 2 newest images;
+  - the app's own limits unchanged: per-visitor and daily rate limits, and the spend caps of $10.00 for Token Factory and $5.00 for Tavily.
+- **Secrets:** `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `TAVILY_API_KEY`, `HF_TOKEN` and `LANGSMITH_API_KEY` (plus `GITHUB_TOKEN` if set) are stored in Google Secret Manager, one version each, which stays within its free allowance of 6 active versions. Cloud Run hands them to the app as environment variables, so the app still reads secrets only from its environment ([ADR-0020](#adr-0020-mit-license-and-secrets-only-from-environment-variables)). The app runs as its own service account, which may read only these secrets. The values are piped from the local `.env` into Google by a script that never prints them.
+- **Spend ledger:** unchanged: the private Hugging Face dataset, with `SPEND_LEDGER_BACKEND=hf_dataset`.
+- **Access:** the service starts private, with no public access. Checks before launch send the developer's Google identity token. Making it public is the go-public task (M2-TASK-11), done only after the user confirms.
+- **Long-running streams:** each request may last up to 1,200 seconds (`--timeout 1200`). That covers a scan's progress stream (the scan deadline is 900 seconds), and a cut stream resumes where it stopped.
+- **Visitor address:** Google's front end adds the visitor's address to the `X-Forwarded-For` header. `TRUSTED_PROXY_HOPS` stays at the safe value 0 until a deploy check measures the right value.
+- **Logs:** the app's JSON lines go to Cloud Logging. Cloud Run's own request logs record raw visitor IP addresses, so they are excluded from storage, keeping the rule that no raw IP is logged.
+- **Unchanged:** the page's `frame-ancestors` rule still allows embedding on huggingface.co. That is harmless because the app has no logins or cookies to attack, and removing it would need a code change for no security gain. The 6-hourly keepalive check stays as the monitor and spend alert. No keep-warm is needed, because a cold start takes a few seconds.
+
+### Alternatives considered
+
+- **Hugging Face PRO subscription:** keeps the original design, but costs a monthly fee for the whole account even when the demo is idle.
+- **Fly.io (about $2 to $5 per month, card required):** a fixed monthly cost, a new CLI and a remote builder to learn. Cloud Run's free tier covers the expected demo traffic, and `gcloud` is already installed and logged in.
+- **Render or Koyeb free tiers:** rejected in ADR-0013 (they sleep quickly, have small machines and no disk).
+- **Always-allocated CPU or one instance always running:** no cold start, and a scan keeps running with nobody watching. But it bills for idle time, around the clock with one instance kept running.
+- **A `.gcloudignore` file that mirrors `.dockerignore`:** works, but is a second ignore list to keep in sync, and it would upload uncommitted work.
+- **Making the container read Cloud Run's `PORT` variable:** a Dockerfile change for no gain.
+- **An automatic billing shut-off (a budget message that triggers a function to disable billing):** more moving parts. The one-instance limit already bounds the cost of normal use.
+
+### Consequences
+
+- **Cost:** hosting is expected to stay inside the monthly free tier (2 million requests, 180,000 vCPU-seconds, 360,000 GiB-seconds and 1 GiB of North America egress per billing account), but $0 is no longer guaranteed.
+  - Worst case at one instance busy all month: about $58 for CPU (at about $0.000024 per vCPU-second beyond the free tier) and $6 for memory, so about $65.
+  - A flood of tiny requests is billed per request ($0.40 per million beyond the free 2 million), which the instance limit does not cap.
+  - Budget alerts only warn, can arrive hours late, and do not stop billing. The response to an alert is to remove public access or roll back.
+- **Restarts:** the service stops when idle. Jobs, reports and rate-limit counters held in memory are lost then, as on the Space. The durable daily spend ceiling stays the binding control.
+- **Scans need a watcher:** because CPU is given only while a request is open, a scan advances while the visitor's page holds its progress stream or polls the status (the UI does both). An abandoned scan stalls, and its spend reservation counts as fully spent after twice the scan deadline, which errs on the safe side.
+- **Deploying** needs `gcloud` and the user's billing account. Rotating a key means adding a Secret Manager version, disabling the old one and redeploying.
+- **The public address** becomes Cloud Run's `run.app` URL. The keepalive variable and the README use it from the go-public task on.
+- **Re-planned tasks:** M2-TASK-08 part B rewrites the deploy steps and checks for Cloud Run. M2-TASK-11 makes the service public by granting public invoke access instead of changing a Space's visibility.
+- No new Python dependency. Details are in [ARCHITECTURE.md](ARCHITECTURE.md) section 18.
