@@ -20,6 +20,7 @@ from pir.cli import main
 from pir.github import RepoCoordinates, ValidatedTarget
 from pir.models.api import DemoSummary
 from pir.models.recording import RecordedEvent, ScanRecording
+from pir.models.report import CallPathStep, Proof
 from pir.replay import (
     MIN_GAP_S,
     DemoNotFound,
@@ -277,6 +278,32 @@ def test_write_recording_writes_file_and_appends_to_the_index(tmp_path):
     assert b"\r" not in (directory / "first.json").read_bytes()
 
 
+def test_recording_with_proof_round_trips_through_write_recording_and_replay_store(tmp_path):
+    base = load_fixture()
+    proof = Proof(
+        status="proven",
+        reason="call reached yaml.full_load in sandbox",
+        ran_at=datetime(2026, 10, 26, 12, 0, 0, tzinfo=UTC),
+        entry="app.py:load_config",
+        target="yaml.full_load",
+        recorded_call="yaml.full_load(text)",
+    )
+    findings = [
+        f.model_copy(update={"proof": proof}) if i == 0 else f
+        for i, f in enumerate(base.report.findings)
+    ]
+    report_with_proof = base.report.model_copy(update={"findings": findings})
+    rec_with_proof = base.model_copy(update={"slug": "proven-demo", "report": report_with_proof})
+
+    directory = tmp_path / "replays"
+    write_recording(directory, rec_with_proof)
+
+    store = ReplayStore(directory)
+    loaded = store.get("proven-demo")
+    assert loaded.report.findings[0].proof == proof
+    assert loaded == rec_with_proof
+
+
 # ---- committed recordings and imports ------------------------------------------------------
 
 
@@ -412,6 +439,70 @@ def test_record_writes_a_valid_recording_and_the_index(record_env, capsys):
     assert rec.report.repo.commit_sha == SHA
     assert json.loads((out / "index.json").read_text("utf-8")) == ["octo-demo"]
     assert "spend nebius: used $" in capsys.readouterr().err  # spend is printed
+
+
+def test_record_with_proof_sets_proof_on_findings(record_env, monkeypatch, capsys):
+    _h, out = record_env
+    from pir import cli
+
+    real_run_scan = cli.run_scan
+
+    async def scan_with_call_path(*args, **kwargs):
+        report = await real_run_scan(*args, **kwargs)
+        findings = [
+            f.model_copy(
+                update={
+                    "verdict": "likely reachable",
+                    "reason_code": None,
+                    "reason": None,
+                    "call_path": [
+                        CallPathStep(
+                            file="app.py", line=4, symbol="load_config", edge="heuristic_call"
+                        ),
+                        CallPathStep(
+                            file="app.py", line=5, symbol="yaml.full_load", edge="vulnerable_call"
+                        ),
+                    ],
+                }
+            )
+            for f in report.findings
+        ]
+        by_verdict = {
+            "likely reachable": sum(1 for f in findings if f.verdict == "likely reachable"),
+            "no reachable path detected": sum(
+                1 for f in findings if f.verdict == "no reachable path detected"
+            ),
+            "uncertain": sum(1 for f in findings if f.verdict == "uncertain"),
+        }
+        summary = report.summary.model_copy(update={"by_verdict": by_verdict})
+        return report.model_copy(update={"findings": findings, "summary": summary})
+
+    monkeypatch.setattr("pir.cli.run_scan", scan_with_call_path)
+
+    expected_proof = Proof(
+        status="proven",
+        reason="call reached yaml.full_load in sandbox",
+        ran_at=datetime(2026, 10, 26, 12, 0, 0, tzinfo=UTC),
+        entry="load_config",
+        target="yaml.full_load",
+        recorded_call="yaml.full_load(text)",
+    )
+
+    async def fake_run_proof(deps, target, budget, report, finding, entry):
+        assert entry == "load_config"
+        return expected_proof
+
+    monkeypatch.setattr("pir.cli.run_proof", fake_run_proof)
+
+    code = main(["record", "https://github.com/octo/demo", "--ref", SHA, "--proof", *RECORD_ARGS])
+
+    assert code == 0
+    rec = ScanRecording.model_validate_json((out / "octo-demo.json").read_text("utf-8"))
+    assert len(rec.report.findings) > 0
+    assert rec.report.findings[0].proof == expected_proof
+    err = capsys.readouterr().err
+    assert "Proof for " in err
+    assert "proven" in err
 
 
 def test_record_refuses_a_scan_the_sandbox_did_not_serve(record_env, monkeypatch, capsys):

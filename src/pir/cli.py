@@ -27,6 +27,7 @@ from pir.github import (
     ValidatedTarget,
     parse_repo_url,
 )
+from pir.jobs import proof_entries, run_proof, with_proof
 from pir.logs import bind_scan, configure_logging, scan_id_var
 from pir.markdown import render_markdown
 from pir.models.api import check_ref
@@ -256,6 +257,30 @@ async def _record_async(
         if problem is not None:
             print(f"Not recorded: {problem}. Nothing was written.", file=sys.stderr)
             return 1
+        if getattr(args, "proof", False):
+            for finding in report.findings:
+                if finding.verdict == "likely reachable":
+                    entries = proof_entries(finding)
+                    if entries:
+                        proof_budget = await deps.meter.reserve(uuid.uuid4().hex)
+                        if isinstance(proof_budget, Refused):
+                            print(
+                                f"Proof budget refused for {finding.finding_id}: "
+                                f"{proof_budget.reason}",
+                                file=sys.stderr,
+                            )
+                            continue
+                        try:
+                            proof = await run_proof(
+                                deps, target, proof_budget, report, finding, entries[0]
+                            )
+                            report = with_proof(report, finding.finding_id, proof)
+                            print(
+                                f"Proof for {finding.finding_id}: {proof.status} ({proof.reason})",
+                                file=sys.stderr,
+                            )
+                        finally:
+                            await deps.meter.settle(proof_budget)
         recording = recorder.to_recording(args.slug, args.title, args.description, report)
         path = write_recording(Path(settings.replay_dir), recording)
         info = summary(recording)
@@ -460,6 +485,11 @@ def build_parser() -> argparse.ArgumentParser:
     record.add_argument("--title", required=True, help="shown in the demo picker")
     record.add_argument("--description", required=True, help="shown in the demo picker")
     record.add_argument("--ref", help="branch, tag or commit SHA to pin (default: default branch)")
+    record.add_argument(
+        "--proof",
+        action="store_true",
+        help="run sandbox proof for each likely reachable finding and record it",
+    )
     serve = sub.add_parser("serve", help="run the API and the web UI")
     serve.add_argument("--host", default="127.0.0.1", help="interface to bind")
     serve.add_argument("--port", type=int, help="port (default: PORT, else 8000)")
