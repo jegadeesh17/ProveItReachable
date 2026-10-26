@@ -1,0 +1,80 @@
+{
+  "agent_protocol": 1,
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "target_modules": [
+    "urllib3"
+  ],
+  "files": [
+    {
+      "path": "app.py",
+      "lines": 11,
+      "is_test": false,
+      "parsed": true,
+      "skip_reason": null
+    }
+  ],
+  "imports": [
+    {
+      "file": "app.py",
+      "line": 3,
+      "module": "urllib3.exceptions",
+      "name": "HTTPError",
+      "asname": null,
+      "bound_as": "HTTPError"
+    }
+  ],
+  "defs": [
+    {
+      "id": "app:<module>",
+      "file": "app.py",
+      "line": 1,
+      "end_line": 11,
+      "decorators": [],
+      "entry_kind": "main_block"
+    },
+    {
+      "id": "app:check_error",
+      "file": "app.py",
+      "line": 6,
+      "end_line": 7,
+      "decorators": [],
+      "entry_kind": null
+    }
+  ],
+  "target_sites": [
+    {
+      "file": "app.py",
+      "line": 7,
+      "col": 27,
+      "caller": "app:check_error",
+      "kind": "reference",
+      "snippet": "return isinstance(exc, HTTPError)",
+      "target": "urllib3.exceptions.HTTPError",
+      "args": null,
+      "keywords": null
+    }
+  ],
+  "edges": [
+    {
+      "caller": "app:<module>",
+      "callee": "app:check_error",
+      "file": "app.py",
+      "line": 11,
+      "heuristic": false
+    }
+  ],
+  "truncated": false,
+  "stats": {
+    "defs": 2,
+    "dirs_skipped": 0,
+    "edges": 1,
+    "files_parsed": 1,
+    "files_skipped": 0,
+    "files_total": 1,
+    "imports": 1,
+    "lines_total": 11,
+    "names_skipped": 0,
+    "symlinks_skipped": 0,
+    "target_sites": 1
+  }
+}

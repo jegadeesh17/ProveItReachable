@@ -5,11 +5,11 @@
     "description": "3D pose research code that loads YAML configs with FullLoader on PyYAML 5.3.1.",
     "repo_url": "https://github.com/jiahaoLjh/PlaneSweepPose",
     "commit_sha": "35d8bc32155dc0488c0a8b37de1afa8a5069117e",
-    "recorded_at": "2026-10-26T08:27:14.692266Z",
+    "recorded_at": "2026-10-26T15:26:49.491745Z",
     "by_verdict": {
-      "likely reachable": 3,
+      "likely reachable": 2,
       "no reachable path detected": 14,
-      "uncertain": 13
+      "uncertain": 14
     }
   },
   {
@@ -18,7 +18,7 @@
     "description": "Reinforcement-learning research code with many pinned dependencies: a ranked mix of verdicts.",
     "repo_url": "https://github.com/chaovven/PyRL",
     "commit_sha": "edbf80db8edb9a40e91f3d97cecc93d4f3133d0c",
-    "recorded_at": "2026-10-26T10:02:58.351845Z",
+    "recorded_at": "2026-10-26T15:29:51.621123Z",
     "by_verdict": {
       "likely reachable": 2,
       "no reachable path detected": 14,
@@ -31,7 +31,7 @@
     "description": "Small CLI using PyYAML safely: known advisories, no reachable path.",
     "repo_url": "https://github.com/Mambix/co2tools",
     "commit_sha": "9f4a255d399cc1f7202330ecfa3185fc0cd5894e",
-    "recorded_at": "2026-10-26T08:30:53.863467Z",
+    "recorded_at": "2026-10-26T15:40:34.837733Z",
     "by_verdict": {
       "likely reachable": 0,
       "no reachable path detected": 1,

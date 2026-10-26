@@ -1,0 +1,59 @@
+{
+  "agent_protocol": 1,
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "target_modules": [
+    "yaml"
+  ],
+  "files": [
+    {
+      "path": "app.py",
+      "lines": 12,
+      "is_test": false,
+      "parsed": true,
+      "skip_reason": null
+    }
+  ],
+  "imports": [],
+  "defs": [
+    {
+      "id": "app:<module>",
+      "file": "app.py",
+      "line": 1,
+      "end_line": 12,
+      "decorators": [],
+      "entry_kind": "main_block"
+    },
+    {
+      "id": "app:log_recommendation",
+      "file": "app.py",
+      "line": 6,
+      "end_line": 8,
+      "decorators": [],
+      "entry_kind": null
+    }
+  ],
+  "target_sites": [],
+  "edges": [
+    {
+      "caller": "app:<module>",
+      "callee": "app:log_recommendation",
+      "file": "app.py",
+      "line": 12,
+      "heuristic": false
+    }
+  ],
+  "truncated": false,
+  "stats": {
+    "defs": 2,
+    "dirs_skipped": 0,
+    "edges": 1,
+    "files_parsed": 1,
+    "files_skipped": 0,
+    "files_total": 1,
+    "imports": 0,
+    "lines_total": 12,
+    "names_skipped": 0,
+    "symlinks_skipped": 0,
+    "target_sites": 0
+  }
+}

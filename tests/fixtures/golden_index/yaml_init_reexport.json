@@ -1,0 +1,148 @@
+{
+  "agent_protocol": 1,
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "target_modules": [
+    "yaml"
+  ],
+  "files": [
+    {
+      "path": "app.py",
+      "lines": 11,
+      "is_test": false,
+      "parsed": true,
+      "skip_reason": null
+    },
+    {
+      "path": "pkg/__init__.py",
+      "lines": 3,
+      "is_test": false,
+      "parsed": true,
+      "skip_reason": null
+    },
+    {
+      "path": "pkg/sub.py",
+      "lines": 5,
+      "is_test": false,
+      "parsed": true,
+      "skip_reason": null
+    }
+  ],
+  "imports": [
+    {
+      "file": "app.py",
+      "line": 3,
+      "module": "pkg",
+      "name": "parse_yaml",
+      "asname": null,
+      "bound_as": "parse_yaml"
+    },
+    {
+      "file": "pkg/__init__.py",
+      "line": 1,
+      "module": "pkg.sub",
+      "name": "parse_yaml",
+      "asname": null,
+      "bound_as": "parse_yaml"
+    },
+    {
+      "file": "pkg/sub.py",
+      "line": 1,
+      "module": "yaml",
+      "name": null,
+      "asname": null,
+      "bound_as": "yaml"
+    }
+  ],
+  "defs": [
+    {
+      "id": "app:<module>",
+      "file": "app.py",
+      "line": 1,
+      "end_line": 11,
+      "decorators": [],
+      "entry_kind": "main_block"
+    },
+    {
+      "id": "app:run",
+      "file": "app.py",
+      "line": 6,
+      "end_line": 7,
+      "decorators": [],
+      "entry_kind": null
+    },
+    {
+      "id": "pkg:<module>",
+      "file": "pkg/__init__.py",
+      "line": 1,
+      "end_line": 3,
+      "decorators": [],
+      "entry_kind": null
+    },
+    {
+      "id": "pkg.sub:<module>",
+      "file": "pkg/sub.py",
+      "line": 1,
+      "end_line": 5,
+      "decorators": [],
+      "entry_kind": null
+    },
+    {
+      "id": "pkg.sub:parse_yaml",
+      "file": "pkg/sub.py",
+      "line": 4,
+      "end_line": 5,
+      "decorators": [],
+      "entry_kind": null
+    }
+  ],
+  "target_sites": [
+    {
+      "file": "pkg/sub.py",
+      "line": 5,
+      "col": 11,
+      "caller": "pkg.sub:parse_yaml",
+      "kind": "call",
+      "snippet": "return yaml.full_load(content)",
+      "target": "yaml.full_load",
+      "args": 1,
+      "keywords": []
+    }
+  ],
+  "edges": [
+    {
+      "caller": "app:<module>",
+      "callee": "pkg:<module>",
+      "file": "app.py",
+      "line": 3,
+      "heuristic": false
+    },
+    {
+      "caller": "app:<module>",
+      "callee": "app:run",
+      "file": "app.py",
+      "line": 11,
+      "heuristic": false
+    },
+    {
+      "caller": "pkg:<module>",
+      "callee": "pkg.sub:<module>",
+      "file": "pkg/__init__.py",
+      "line": 1,
+      "heuristic": false
+    }
+  ],
+  "truncated": false,
+  "stats": {
+    "defs": 5,
+    "dirs_skipped": 0,
+    "edges": 3,
+    "files_parsed": 3,
+    "files_skipped": 0,
+    "files_total": 3,
+    "imports": 3,
+    "lines_total": 19,
+    "names_skipped": 0,
+    "symlinks_skipped": 0,
+    "target_sites": 1
+  }
+}

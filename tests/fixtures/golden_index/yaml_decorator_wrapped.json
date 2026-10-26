@@ -1,0 +1,108 @@
+{
+  "agent_protocol": 1,
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "target_modules": [
+    "yaml"
+  ],
+  "files": [
+    {
+      "path": "app.py",
+      "lines": 21,
+      "is_test": false,
+      "parsed": true,
+      "skip_reason": null
+    }
+  ],
+  "imports": [
+    {
+      "file": "app.py",
+      "line": 3,
+      "module": "functools",
+      "name": null,
+      "asname": null,
+      "bound_as": "functools"
+    },
+    {
+      "file": "app.py",
+      "line": 4,
+      "module": "yaml",
+      "name": null,
+      "asname": null,
+      "bound_as": "yaml"
+    }
+  ],
+  "defs": [
+    {
+      "id": "app:<module>",
+      "file": "app.py",
+      "line": 1,
+      "end_line": 21,
+      "decorators": [],
+      "entry_kind": "main_block"
+    },
+    {
+      "id": "app:timed",
+      "file": "app.py",
+      "line": 7,
+      "end_line": 12,
+      "decorators": [],
+      "entry_kind": null
+    },
+    {
+      "id": "app:timed.<locals>.wrapper",
+      "file": "app.py",
+      "line": 9,
+      "end_line": 10,
+      "decorators": [
+        "functools.wraps"
+      ],
+      "entry_kind": null
+    },
+    {
+      "id": "app:parse_payload",
+      "file": "app.py",
+      "line": 16,
+      "end_line": 17,
+      "decorators": [
+        "timed"
+      ],
+      "entry_kind": null
+    }
+  ],
+  "target_sites": [
+    {
+      "file": "app.py",
+      "line": 17,
+      "col": 11,
+      "caller": "app:parse_payload",
+      "kind": "call",
+      "snippet": "return yaml.full_load(payload)",
+      "target": "yaml.full_load",
+      "args": 1,
+      "keywords": []
+    }
+  ],
+  "edges": [
+    {
+      "caller": "app:<module>",
+      "callee": "app:parse_payload",
+      "file": "app.py",
+      "line": 21,
+      "heuristic": false
+    }
+  ],
+  "truncated": false,
+  "stats": {
+    "defs": 4,
+    "dirs_skipped": 0,
+    "edges": 1,
+    "files_parsed": 1,
+    "files_skipped": 0,
+    "files_total": 1,
+    "imports": 2,
+    "lines_total": 21,
+    "names_skipped": 0,
+    "symlinks_skipped": 0,
+    "target_sites": 1
+  }
+}

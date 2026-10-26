@@ -18,15 +18,29 @@ SHA = "b" * 40
 
 # repo directory (relative to the project root) -> target modules; the snapshot is <name>.json
 REPOS: dict[str, list[str]] = {
+    "eval/fixtures/jinja2_direct": ["jinja2"],
+    "eval/fixtures/jinja2_dynamic": ["jinja2"],
+    "eval/fixtures/jinja2_escape_only": ["jinja2"],
     "eval/fixtures/requests_mixed": ["requests"],
+    "eval/fixtures/urllib3_direct": ["urllib3"],
+    "eval/fixtures/urllib3_unused": ["urllib3"],
     "eval/fixtures/wheel_no_function": ["wheel"],
     "eval/fixtures/yaml_call_chain": ["yaml"],
+    "eval/fixtures/yaml_class_method": ["yaml"],
+    "eval/fixtures/yaml_conditional_import": ["yaml"],
+    "eval/fixtures/yaml_dead_code": ["yaml"],
+    "eval/fixtures/yaml_decorator_wrapped": ["yaml"],
     "eval/fixtures/yaml_direct": ["yaml"],
     "eval/fixtures/yaml_dynamic": ["yaml"],
+    "eval/fixtures/yaml_dynamic_import": ["yaml"],
     "eval/fixtures/yaml_from_import_as": ["yaml"],
     "eval/fixtures/yaml_import_as": ["yaml"],
     "eval/fixtures/yaml_import_unused": ["yaml"],
+    "eval/fixtures/yaml_init_reexport": ["yaml"],
+    "eval/fixtures/yaml_multi_hop": ["yaml"],
     "eval/fixtures/yaml_not_imported": ["yaml"],
+    "eval/fixtures/yaml_string_only": ["yaml"],
+    "eval/fixtures/yaml_test_only": ["yaml"],
     "tests/fixtures/repos/canary": ["yaml"],
 }
 

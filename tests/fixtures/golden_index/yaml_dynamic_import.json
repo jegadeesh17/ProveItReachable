@@ -1,0 +1,68 @@
+{
+  "agent_protocol": 1,
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "target_modules": [
+    "yaml"
+  ],
+  "files": [
+    {
+      "path": "app.py",
+      "lines": 13,
+      "is_test": false,
+      "parsed": true,
+      "skip_reason": null
+    }
+  ],
+  "imports": [
+    {
+      "file": "app.py",
+      "line": 3,
+      "module": "importlib",
+      "name": null,
+      "asname": null,
+      "bound_as": "importlib"
+    }
+  ],
+  "defs": [
+    {
+      "id": "app:<module>",
+      "file": "app.py",
+      "line": 1,
+      "end_line": 13,
+      "decorators": [],
+      "entry_kind": "main_block"
+    },
+    {
+      "id": "app:dynamic_loader",
+      "file": "app.py",
+      "line": 6,
+      "end_line": 9,
+      "decorators": [],
+      "entry_kind": null
+    }
+  ],
+  "target_sites": [],
+  "edges": [
+    {
+      "caller": "app:<module>",
+      "callee": "app:dynamic_loader",
+      "file": "app.py",
+      "line": 13,
+      "heuristic": false
+    }
+  ],
+  "truncated": false,
+  "stats": {
+    "defs": 2,
+    "dirs_skipped": 0,
+    "edges": 1,
+    "files_parsed": 1,
+    "files_skipped": 0,
+    "files_total": 1,
+    "imports": 1,
+    "lines_total": 13,
+    "names_skipped": 0,
+    "symlinks_skipped": 0,
+    "target_sites": 0
+  }
+}

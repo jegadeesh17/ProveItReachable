@@ -178,7 +178,7 @@ def _first_failed_reachability_rule(
             return f"rule 2: step {i} does not call step {i + 1}", None
 
     last = path[-1]
-    expected_site_caller = path[-2].symbol if len(path) >= 2 else (path[0].symbol if path else None)
+    expected_site_caller = path[-2].symbol if len(path) >= 2 else None
     mismatched_site: TargetSite | None = None
     for site in index.target_sites:
         if (
@@ -186,7 +186,7 @@ def _first_failed_reachability_rule(
             and site.line == last.line
             and _matches(site, symbols, package, version)
         ):
-            if expected_site_caller is not None and site.caller == expected_site_caller:
+            if expected_site_caller is None or site.caller == expected_site_caller:
                 return None, site
             if mismatched_site is None:
                 mismatched_site = site

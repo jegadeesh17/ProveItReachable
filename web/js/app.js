@@ -452,8 +452,9 @@ async function runProof(finding) {
   return proved.proof;
 }
 
-/** The proof controls exist only when the backend says the feature is on (AC-65). */
-const proofControl = () => (state.config.features.proof ? { run: runProof } : null);
+/** The proof controls exist only when the backend says the feature is on (AC-65) and not in replay mode (ADR-0042). */
+const proofControl = () => (state.config.features.proof && state.run?.kind !== "replay" ? { run: runProof } : null);
+
 
 /* ----------------------------------------------------------------- report */
 
@@ -562,13 +563,19 @@ async function loadStartup() {
 
   if (isMock && api.mock.sampleUrl) dom.url.value = api.mock.sampleUrl;
 
-  const plan = isMock && api.mock.jump ? api.mock.jumpPlan() : null;
-  if (plan && plan.type === "replay") {
-    const demo = demos.find((d) => d.slug === plan.slug);
-    if (demo) begin("replay", demo);
-  } else if (plan && plan.type === "scan") {
-    dom.url.value = plan.url;
-    begin("scan", { url: plan.url });
+  const demoParam = new URLSearchParams(window.location.search).get("demo");
+  const urlDemo = demoParam ? demos.find((d) => d.slug === demoParam) : null;
+  if (urlDemo) {
+    begin("replay", urlDemo);
+  } else {
+    const plan = isMock && api.mock.jump ? api.mock.jumpPlan() : null;
+    if (plan && plan.type === "replay") {
+      const demo = demos.find((d) => d.slug === plan.slug);
+      if (demo) begin("replay", demo);
+    } else if (plan && plan.type === "scan") {
+      dom.url.value = plan.url;
+      begin("scan", { url: plan.url });
+    }
   }
 }
 

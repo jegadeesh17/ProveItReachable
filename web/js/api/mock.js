@@ -11,7 +11,7 @@ import { fromErrorBody } from "./errors.js";
 const FIXTURES = new URL("../../fixtures/", import.meta.url);
 
 /** The scenario allowlist (ARCHITECTURE section 17). Report scenarios are the only names used in a fixture path. */
-const REPORT_SCENARIOS = new Set(["reachable", "clean", "incomplete", "partial-failure"]);
+const REPORT_SCENARIOS = new Set(["reachable", "clean", "incomplete", "partial-failure", "proof"]);
 /** Scenario name -> error code in fixtures/errors.json. These reject startScan (paused also locks the form). */
 const SCAN_ERRORS = new Map([
   ["error-invalid-url", "invalid_url"],
@@ -45,7 +45,7 @@ const DEFAULT_SCENARIO = "reachable";
 /** With no explicit report scenario, each recorded demo replays one of the fixtures (the mock has no real recordings). */
 const DEMO_SCENARIO = new Map([
   ["planesweeppose", "reachable"],
-  ["pyrl", "partial-failure"],
+  ["pyrl", "proof"],
   ["co2tools", "clean"],
 ]);
 /** A labelled sample for `&eval=on`, so the eval line can be seen. Not a measurement. */
@@ -120,10 +120,12 @@ export function createMockApi(params) {
 
   async function createJob(reportScenario, mode, repoOverride) {
     if (!REPORT_SCENARIOS.has(reportScenario)) throw new Error("Not a report scenario.");
+    const eventScenario = reportScenario === "proof" ? "reachable" : reportScenario;
+    const mdScenario = reportScenario === "proof" ? "reachable" : reportScenario;
     const [report, events, md] = await Promise.all([
       loadJson(`reports/${reportScenario}.json`),
-      loadJson(`events/${reportScenario}.json`),
-      loadText(`reports/${reportScenario}.md`),
+      loadJson(`events/${eventScenario}.json`),
+      loadText(`reports/${mdScenario}.md`),
     ]);
     let markdown = md;
     if (repoOverride) {
@@ -188,7 +190,7 @@ export function createMockApi(params) {
         if (scenario === "paused") return null;
         if (REPLAY_ERRORS.has(scenario) || scenario === "reachable") return { type: "replay", slug: "planesweeppose" };
         if (scenario === "clean") return { type: "replay", slug: "co2tools" };
-        if (scenario === "partial-failure") return { type: "replay", slug: "pyrl" };
+        if (scenario === "partial-failure" || scenario === "proof") return { type: "replay", slug: "pyrl" };
         return { type: "scan", url: scenario === "error-invalid-url" ? BAD_SAMPLE_URL : SAMPLE_URL };
       },
     },

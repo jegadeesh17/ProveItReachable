@@ -11,6 +11,7 @@
  *   getStatus(scanId):              Promise<ScanStatusResponse>
  *   getReport(scanId):              Promise<ScanReport>
  *   exportUrl(scanId, format):      string                       format is "json" or "md"
+ *   requestProof(scanId, findingId, entry?): Promise<ScanAccepted>
  *
  * The mock adapter also exposes `mock` ({ scenario, jumpPlan(), sampleUrl }); the http adapter does not.
  *

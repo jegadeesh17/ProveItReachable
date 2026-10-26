@@ -647,7 +647,7 @@ function proofResult(proof) {
       "p",
       { class: "proof-status" },
       proofMark(proven),
-      el("strong", { text: proven ? "proven" : "not proven" }),
+      el("strong", { text: proven ? "proven in Token Factory Sandbox" : "not proven" }),
       " ",
       el("span", { class: "proof-when", text: `run ${formatDateTime(proof.ran_at)}` }),
     ),
@@ -879,6 +879,7 @@ function renderFinding(f, proofCtl) {
       { class: "cell" },
       flag(f.verdict),
       f.verdict === "uncertain" && f.reason_code && el("span", { class: "cell__sub", text: `Reason: ${REASON_LABEL[f.reason_code] || f.reason_code}` }),
+      f.proof && f.proof.status === "proven" && el("span", { class: "cell__sub cell__sub--proven", text: "proven in Token Factory Sandbox" }),
     ),
     cell("Package", el("span", { class: "pkg", text: f.package }), " ", el("span", { class: "ver", text: f.version })),
     cell(

@@ -1,0 +1,96 @@
+{
+  "agent_protocol": 1,
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "target_modules": [
+    "yaml"
+  ],
+  "files": [
+    {
+      "path": "app.py",
+      "lines": 16,
+      "is_test": false,
+      "parsed": true,
+      "skip_reason": null
+    }
+  ],
+  "imports": [
+    {
+      "file": "app.py",
+      "line": 3,
+      "module": "sys",
+      "name": null,
+      "asname": null,
+      "bound_as": "sys"
+    },
+    {
+      "file": "app.py",
+      "line": 6,
+      "module": "yaml",
+      "name": null,
+      "asname": null,
+      "bound_as": "yaml"
+    },
+    {
+      "file": "app.py",
+      "line": 8,
+      "module": "json",
+      "name": null,
+      "asname": "yaml",
+      "bound_as": "yaml"
+    }
+  ],
+  "defs": [
+    {
+      "id": "app:<module>",
+      "file": "app.py",
+      "line": 1,
+      "end_line": 16,
+      "decorators": [],
+      "entry_kind": "main_block"
+    },
+    {
+      "id": "app:load_data",
+      "file": "app.py",
+      "line": 11,
+      "end_line": 12,
+      "decorators": [],
+      "entry_kind": null
+    }
+  ],
+  "target_sites": [
+    {
+      "file": "app.py",
+      "line": 12,
+      "col": 11,
+      "caller": "app:load_data",
+      "kind": "call",
+      "snippet": "return yaml.full_load(text)",
+      "target": "yaml.full_load",
+      "args": 1,
+      "keywords": []
+    }
+  ],
+  "edges": [
+    {
+      "caller": "app:<module>",
+      "callee": "app:load_data",
+      "file": "app.py",
+      "line": 16,
+      "heuristic": false
+    }
+  ],
+  "truncated": false,
+  "stats": {
+    "defs": 2,
+    "dirs_skipped": 0,
+    "edges": 1,
+    "files_parsed": 1,
+    "files_skipped": 0,
+    "files_total": 1,
+    "imports": 3,
+    "lines_total": 16,
+    "names_skipped": 0,
+    "symlinks_skipped": 0,
+    "target_sites": 1
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "agent_protocol": 1,
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "target_modules": [
+    "yaml"
+  ],
+  "files": [
+    {
+      "path": "app.py",
+      "lines": 9,
+      "is_test": false,
+      "parsed": true,
+      "skip_reason": null
+    },
+    {
+      "path": "tests/test_config.py",
+      "lines": 6,
+      "is_test": true,
+      "parsed": true,
+      "skip_reason": null
+    }
+  ],
+  "imports": [
+    {
+      "file": "tests/test_config.py",
+      "line": 1,
+      "module": "yaml",
+      "name": null,
+      "asname": null,
+      "bound_as": "yaml"
+    }
+  ],
+  "defs": [
+    {
+      "id": "app:<module>",
+      "file": "app.py",
+      "line": 1,
+      "end_line": 9,
+      "decorators": [],
+      "entry_kind": "main_block"
+    },
+    {
+      "id": "app:get_version",
+      "file": "app.py",
+      "line": 4,
+      "end_line": 5,
+      "decorators": [],
+      "entry_kind": null
+    },
+    {
+      "id": "tests.test_config:<module>",
+      "file": "tests/test_config.py",
+      "line": 1,
+      "end_line": 6,
+      "decorators": [],
+      "entry_kind": null
+    },
+    {
+      "id": "tests.test_config:test_yaml_parsing",
+      "file": "tests/test_config.py",
+      "line": 4,
+      "end_line": 6,
+      "decorators": [],
+      "entry_kind": null
+    }
+  ],
+  "target_sites": [
+    {
+      "file": "tests/test_config.py",
+      "line": 5,
+      "col": 13,
+      "caller": "tests.test_config:test_yaml_parsing",
+      "kind": "call",
+      "snippet": "parsed = yaml.full_load(\"name: test\")",
+      "target": "yaml.full_load",
+      "args": 1,
+      "keywords": []
+    }
+  ],
+  "edges": [
+    {
+      "caller": "app:<module>",
+      "callee": "app:get_version",
+      "file": "app.py",
+      "line": 9,
+      "heuristic": false
+    }
+  ],
+  "truncated": false,
+  "stats": {
+    "defs": 4,
+    "dirs_skipped": 0,
+    "edges": 1,
+    "files_parsed": 2,
+    "files_skipped": 0,
+    "files_total": 2,
+    "imports": 1,
+    "lines_total": 15,
+    "names_skipped": 0,
+    "symlinks_skipped": 0,
+    "target_sites": 1
+  }
+}

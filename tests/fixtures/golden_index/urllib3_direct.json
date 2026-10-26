@@ -1,0 +1,80 @@
+{
+  "agent_protocol": 1,
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "target_modules": [
+    "urllib3"
+  ],
+  "files": [
+    {
+      "path": "app.py",
+      "lines": 12,
+      "is_test": false,
+      "parsed": true,
+      "skip_reason": null
+    }
+  ],
+  "imports": [
+    {
+      "file": "app.py",
+      "line": 3,
+      "module": "urllib3",
+      "name": null,
+      "asname": null,
+      "bound_as": "urllib3"
+    }
+  ],
+  "defs": [
+    {
+      "id": "app:<module>",
+      "file": "app.py",
+      "line": 1,
+      "end_line": 12,
+      "decorators": [],
+      "entry_kind": "main_block"
+    },
+    {
+      "id": "app:fetch_url",
+      "file": "app.py",
+      "line": 6,
+      "end_line": 8,
+      "decorators": [],
+      "entry_kind": null
+    }
+  ],
+  "target_sites": [
+    {
+      "file": "app.py",
+      "line": 7,
+      "col": 11,
+      "caller": "app:fetch_url",
+      "kind": "call",
+      "snippet": "http = urllib3.PoolManager()",
+      "target": "urllib3.PoolManager",
+      "args": 0,
+      "keywords": []
+    }
+  ],
+  "edges": [
+    {
+      "caller": "app:<module>",
+      "callee": "app:fetch_url",
+      "file": "app.py",
+      "line": 12,
+      "heuristic": false
+    }
+  ],
+  "truncated": false,
+  "stats": {
+    "defs": 2,
+    "dirs_skipped": 0,
+    "edges": 1,
+    "files_parsed": 1,
+    "files_skipped": 0,
+    "files_total": 1,
+    "imports": 1,
+    "lines_total": 12,
+    "names_skipped": 0,
+    "symlinks_skipped": 0,
+    "target_sites": 1
+  }
+}

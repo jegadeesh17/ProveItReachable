@@ -94,6 +94,12 @@ def test_fixtures_cover_each_report_outcome():
     }
 
 
+def test_proof_report_fixture_validates():
+    report = load_report("proof")
+    assert report.outcome == "findings"
+    assert any(f.proof is not None for f in report.findings)
+
+
 # ---- events ---------------------------------------------------------------------------------
 
 

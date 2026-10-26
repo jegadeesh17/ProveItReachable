@@ -1,0 +1,110 @@
+{
+  "agent_protocol": 1,
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "target_modules": [
+    "yaml"
+  ],
+  "files": [
+    {
+      "path": "app.py",
+      "lines": 20,
+      "is_test": false,
+      "parsed": true,
+      "skip_reason": null
+    }
+  ],
+  "imports": [
+    {
+      "file": "app.py",
+      "line": 3,
+      "module": "yaml",
+      "name": null,
+      "asname": null,
+      "bound_as": "yaml"
+    }
+  ],
+  "defs": [
+    {
+      "id": "app:<module>",
+      "file": "app.py",
+      "line": 1,
+      "end_line": 20,
+      "decorators": [],
+      "entry_kind": "main_block"
+    },
+    {
+      "id": "app:ConfigLoader.__init__",
+      "file": "app.py",
+      "line": 7,
+      "end_line": 8,
+      "decorators": [],
+      "entry_kind": null
+    },
+    {
+      "id": "app:ConfigLoader.load",
+      "file": "app.py",
+      "line": 10,
+      "end_line": 11,
+      "decorators": [],
+      "entry_kind": null
+    },
+    {
+      "id": "app:run",
+      "file": "app.py",
+      "line": 14,
+      "end_line": 16,
+      "decorators": [],
+      "entry_kind": null
+    }
+  ],
+  "target_sites": [
+    {
+      "file": "app.py",
+      "line": 11,
+      "col": 15,
+      "caller": "app:ConfigLoader.load",
+      "kind": "call",
+      "snippet": "return yaml.full_load(self.raw)",
+      "target": "yaml.full_load",
+      "args": 1,
+      "keywords": []
+    }
+  ],
+  "edges": [
+    {
+      "caller": "app:run",
+      "callee": "app:ConfigLoader.__init__",
+      "file": "app.py",
+      "line": 15,
+      "heuristic": false
+    },
+    {
+      "caller": "app:run",
+      "callee": "app:ConfigLoader.load",
+      "file": "app.py",
+      "line": 16,
+      "heuristic": true
+    },
+    {
+      "caller": "app:<module>",
+      "callee": "app:run",
+      "file": "app.py",
+      "line": 20,
+      "heuristic": false
+    }
+  ],
+  "truncated": false,
+  "stats": {
+    "defs": 4,
+    "dirs_skipped": 0,
+    "edges": 3,
+    "files_parsed": 1,
+    "files_skipped": 0,
+    "files_total": 1,
+    "imports": 1,
+    "lines_total": 20,
+    "names_skipped": 0,
+    "symlinks_skipped": 0,
+    "target_sites": 1
+  }
+}
