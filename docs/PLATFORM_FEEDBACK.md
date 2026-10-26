@@ -55,3 +55,25 @@ A running log of friction and wins with Nebius Token Factory, Sandboxes and Nemo
 | HF ledger live gate | Pass | `tests/live/test_live_hf_ledger.py`: 2 passed on the real dataset (6.84 s). A commit on a stale parent is rejected. |
 | Local settings | Needs a change | `.env` sets `SPEND_LEDGER_HF_REPO` but not `SPEND_LEDGER_BACKEND`. `Settings` refuses to load (the backend defaults to `file`, which is refused while the HF repo is set). Set `SPEND_LEDGER_BACKEND=hf_dataset` in the local env file. |
 | Pydantic `ValidationError` output | Pitfall | A `ValidationError` from `Settings()` echoes the input values, so secrets can appear in output. Catch it and print the field names only, as `_ledger_set_caps` in `src/pir/cli.py` already does. |
+
+## Cloud Run deploy facts (2026-10-26, M2-TASK-08 part B, attempt 2: Google Cloud Run)
+
+Attempt 1 (Hugging Face Space) stopped at the HTTP 402 above. ADR-0040 moved the host to Cloud Run. The Space plan below is no longer used.
+
+| Check | Result | Facts for the deploy |
+|---|---|---|
+| Project ID `proveitreachable` | Free | `gcloud projects describe` said "permission denied" before creation, but `gcloud projects create proveitreachable` succeeded. The denial for an unknown ID is ambiguous: it does not tell "taken" from "does not exist". |
+| Budget in USD | **Refused (HTTP 400)** | `gcloud billing budgets create --budget-amount=5USD` returned only "Request contains an invalid argument", with no field name. The billing account's currency is INR. The fix was `--budget-amount=475INR` (about USD 5 at 95.16 INR per USD on 2026-10-26, open.er-api.com). Suggestion for Google: name the field and the expected currency in the error. |
+| Budget thresholds | Works | `--threshold-rule=percent=0.2` and `percent=1.0` gave the $1 and $5 equivalents (on current spend). |
+| Artifact Registry cleanup policy | Works | `set-cleanup-policies --no-dry-run` accepted the keep-2 and delete-rest JSON. |
+| Logging exclusion for `run.googleapis.com/requests` | Works | `gcloud logging sinks update _Default --add-exclusion=...` accepted; the exclusion shows in `sinks describe`. |
+| `gcloud run deploy --source` (Cloud Build) | Works, first try | One build from a folder with no `.git`. The deploy finished within an 8-minute wait. Warning seen on every gcloud call: a FutureWarning that google-api-core will drop Python 3.11 (the gcloud bundled Python is 3.11.9). |
+| Image check (Cloud Build step on the deployed digest) | Works | `gcloud builds submit --no-source --config=<yaml>` with `name: <AR digest ref>` and `entrypoint: sh` ran the check in 14 s. The step can pull the Artifact Registry image with the default Cloud Build account (no extra grant was needed). |
+| Env-only update | New revision, same image | `gcloud run services update --update-env-vars=...` made a new revision with the same image digest (no rebuild). Used for the XFF and live-scan switches. |
+| Cloud Run request logs | Excluded | The exclusion removed `run.googleapis.com/requests` (raw client IPs). The app's own `replay_admitted` lines still appear with a salted client hash. |
+| Anonymous request to a private service | 403 | `GET /` without a token returned HTTP 403 with no `allUsers` binding. |
+| POST without a body | **HTTP 411 from Google's front end** | `curl -X POST` without a body returned a Google HTML 411 page ("POST requests require a Content-length header"). A client must send `Content-Length: 0`. Note for the keepalive and any tool that POSTs. |
+| Cold start | About 20 s | After 16 min idle: first `GET /api/health` 21.5 s; the log showed instance start to TCP probe ready in about 20.8 s. A second instance start 2 s after the first response, with a 20.0 s reply, was not explained by the logs (reason "AUTOSCALING"). Warm requests: 0.49 to 0.80 s. |
+| `X-Forwarded-For` with `TRUSTED_PROXY_HOPS=1` | Inconclusive | Two spoofed leftmost values gave the same `replay_admitted` hash, and an IPv6 request from the same laptop gave the same hash as IPv4. Either the rightmost entry is not the visitor address, or the key falls back to a constant connection address. The app does not log the header, so the cause is not visible. Kept 0 (fail-safe). The second-network test is in DEPLOYMENT.md, section 5. |
+| `SANDBOX_BASE_IMAGE` | Needed for live scans | Not required at startup (default `None`), but the sandbox executor raises `SANDBOX_BASE_IMAGE is not set` at scan time. It was added with `LIVE_SCANS_ENABLED=true`. |
+| Cloud Run startup CPU boost | On | `run.googleapis.com/startup-cpu-boost: true` on the service; the deploy did not set it. |

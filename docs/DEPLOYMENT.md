@@ -1,108 +1,143 @@
 # Deployment
 
-Hosting per ARCHITECTURE section 18 (ADR-0013, ADR-0030, ADR-0033, ADR-0036). Part A (offline) was built and checked on 2026-10-26 (M2-TASK-08, commit 9a013b7). Part B (Space, ledger, caps, deploy checks) was attempted on 2026-10-26 (attempt 1).
+Hosting per ARCHITECTURE section 18 (ADR-0040, which supersedes ADR-0013; ADR-0030, ADR-0033 and ADR-0036 for the image; ADR-0020 for secrets). Part A (offline build) was done on 2026-10-26 (M2-TASK-08, commit 9a013b7). Part B attempt 1 (Hugging Face Space) was blocked by HTTP 402 (a Docker Space needs a PRO subscription). Part B attempt 2 (Google Cloud Run) was run on 2026-10-26.
 
-**Status (2026-10-26, part B attempt 1): BLOCKED at Space creation.**
+**Status (2026-10-26, part B attempt 2): DEPLOYED, PRIVATE, live scans enabled.** Nothing is public. The service has no `allUsers` or `allAuthenticatedUsers` binding. M2-TASK-11 (go public) is not done.
 
-- **Done:** ADR-0036 packaging (`.dockerignore` re-includes only `eval/results/latest.json`; the Dockerfile copies that one file; the packaging tests pass locally).
-- **Done:** the HF token has write access; its owner (`jegadeesh17`) matches the owner of `SPEND_LEDGER_HF_REPO`; the ledger dataset `jegadeesh17/pir-spend-ledger` exists and is **private** (created 2026-10-26 under the approval); the M2-TASK-02 live gate (`tests/live/test_live_hf_ledger.py`, 2 tests) **passed** on it.
-- **Blocked:** creating the private Space `jegadeesh17/proveitreachable` returned **HTTP 402**: "hosting Gradio and Docker Spaces on free cpu-basic requires a PRO subscription". The account is not PRO (`isPro` false). No Space exists. Nothing was uploaded, no Space secret or variable was set, and `ledger set-caps` has not run.
-- Nothing is public. No GitHub setting changed. No workflow was triggered.
+| Item | Value |
+|---|---|
+| Google Cloud project | `proveitreachable` (project number `760189264289`), on billing account `0156C0-992061-82318D` (billing currency INR). The requested ID was free, so the fallback ID was not needed. |
+| Region | `us-central1` |
+| Service | `proveitreachable` |
+| Service URL | `https://proveitreachable-ynjbf5demq-uc.a.run.app` (the project-number form `https://proveitreachable-760189264289.us-central1.run.app` is the same service) |
+| Live revision | `proveitreachable-00004-5nx` (100% of traffic) |
+| Image | `us-central1-docker.pkg.dev/proveitreachable/cloud-run-source-deploy/proveitreachable@sha256:c6204caedb238a7d4d312194129253911453d7ad5dfbb0918c7e246917001b3f` (built by Cloud Build from `git archive HEAD`; commit `95a058b72459`, stored as the `commit` label) |
+| Runtime service account | `pir-run@proveitreachable.iam.gserviceaccount.com` |
+| Spend ledger | Hugging Face dataset `jegadeesh17/pir-spend-ledger` (private), unchanged |
 
-## 1. What is built
+## 1. What is deployed
 
-- **Dockerfile:** `FROM python:3.13-slim@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962` (multi-arch index digest; its linux/amd64 manifest is `sha256:d879ed88565a7a3c614b980b369d4a5025a9d057b71f93d09fc6d0b2ca823a18`).
-  - Verified 2026-10-26 two ways: `docker buildx imagetools inspect python:3.13-slim` printed the index digest, and the Docker Hub registry manifest API (`HEAD .../library/python/manifests/3.13-slim`, `docker-content-digest` header) returned the same value.
-- Runs as uid 1000. Command: `python -m pir serve --host 0.0.0.0 --port 7860` (one Uvicorn worker, JSON logs).
-- Installs: `pip install --no-cache-dir --require-hashes -r requirements.lock`, then `pip install --no-cache-dir --no-deps .`.
-- Copies `pyproject.toml`, `README.md`, `LICENSE`, `src/`, `web/`, `demo/` (the replays), and the single file `eval/results/latest.json` to `./eval/results/latest.json` (ADR-0036: the published eval summary, so the page can show the eval figure). `.dockerignore` excludes `.env`, `.env.*` (except `.env.example`), `data/`, `eval/results/` (except `!eval/results/latest.json`), `.venv/` and `.git/`.
-- **requirements.lock** (committed) is regenerated with `uv pip compile pyproject.toml --universal --generate-hashes --python-version 3.13 -o requirements.lock` (uv 0.13.5 from the dev extra). A fast test checks that every runtime dependency is in it at its pin with a `--hash`.
+- **Image:** unchanged `Dockerfile` (`FROM python:3.13-slim@sha256:d98cc2...`, non-root uid 1000, `python -m pir serve --host 0.0.0.0 --port 7860`). Cloud Run listens on port 7860 (`--port 7860`).
+- **Build input:** `git -c core.autocrlf=false archive HEAD` unpacked into an empty folder in the temp directory. The folder held no `.env*` file other than `.env.example` and no `data/`. Uncommitted work is not uploaded.
+- **Service settings:** max instances 1, min instances 0 (no min annotation, the Cloud Run default), 1 vCPU, 1 GiB, concurrency 80, CPU throttling on (request-based billing), request timeout 1200 s, startup CPU boost on (`run.googleapis.com/startup-cpu-boost: true` on the service; the deploy command did not set it, so it is a platform default this run did not check), ingress `all` with IAM restricting invocation.
+- **Secrets:** Secret Manager, one enabled version each, injected as environment variables with `--set-secrets NAME=NAME:latest`: `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `TAVILY_API_KEY`, `HF_TOKEN`, `LANGSMITH_API_KEY`. `GITHUB_TOKEN` was not set in `.env`, so it was not stored. Each secret grants `roles/secretmanager.secretAccessor` to `pir-run` only.
+- **Plain environment variables:** `SPEND_LEDGER_BACKEND`, `SPEND_LEDGER_HF_REPO`, `TRUSTED_PROXY_HOPS`, `NEBIUS_PRICE_INPUT_PER_MTOK`, `NEBIUS_PRICE_OUTPUT_PER_MTOK`, `TAVILY_PRICE_PER_CREDIT_USD`, `LANGSMITH_TRACING`, `LOG_LEVEL`, `LIVE_SCANS_ENABLED` and `SANDBOX_BASE_IMAGE` (section 9 explains the last one, which was added after the first deploy). Values are in ARCHITECTURE section 18 and in `.env.example`; none is a secret.
+- **Logs:** the app's JSON lines go to Cloud Logging. The Cloud Logging exclusion `exclude-run-request-logs` (`log_id("run.googleapis.com/requests")`) on `_Default` drops Cloud Run request logs, which hold raw client IP addresses.
+- **Cost guards:** budget `proveitreachable-5usd` on project `760189264289` (see section 3); Artifact Registry repository `cloud-run-source-deploy` with a cleanup policy (keep the 2 newest images, delete the rest).
 
-## 2. Local Docker build: skipped on this laptop
+## 2. Commands run
 
-- **Why:** Docker cannot run on this laptop. CPU virtualization is off in the firmware (see the fingerprint ADR in DECISIONS.md), so the Docker daemon does not start. The Docker CLI (29.6.2) is installed; `docker info` could not reach the engine on 2026-10-26.
-- **What replaces it (decided, ADR-0036 and the M2-TASK-08 brief):**
-  1. The image build: Hugging Face builds the image from the Space repository. Poll the Space runtime stage; on `BUILD_ERROR`, fetch the build logs.
-  2. The image has no `.env`: list the Space repository files through the HF API. Assert there is no `.env*` file, nothing under `data/`, and nothing under `eval/results/` except `latest.json`.
-  3. The app serves: `GET /` and `GET /api/health` on the private Space URL with the token as a Bearer header.
-  4. Only `latest.json` ships from `eval/results/`: the repository file list shows it, and the deployed page or API shows the eval figure.
-- **Local commands** (for a machine where the daemon runs):
+Run from the project root in Git Bash. Values captured from gcloud had `tr -d '\r'` applied. No command printed a secret or a token.
 
-  ```bash
-  docker build -t proveitreachable:local .
-  docker run --rm -p 127.0.0.1:7860:7860 -e LIVE_SCANS_ENABLED=false proveitreachable:local
-  curl -s http://127.0.0.1:7860/api/health
-  docker run --rm --entrypoint sh proveitreachable:local -c 'test ! -e /app/.env && ls -ld /app/data && test "$(ls /app/eval/results)" = "latest.json"'
-  ```
+1. `gcloud projects create proveitreachable --name="ProveItReachable"`; `gcloud billing projects link proveitreachable --billing-account=0156C0-992061-82318D`.
+2. `gcloud services enable run cloudbuild artifactregistry secretmanager billingbudgets` (`.googleapis.com`).
+3. `gcloud billing budgets create --billing-account=0156C0-992061-82318D --billing-project=proveitreachable --display-name=proveitreachable-5usd --budget-amount=475INR --threshold-rule=percent=0.2 --threshold-rule=percent=1.0 --filter-projects=projects/760189264289` (the first attempt with `--budget-amount=5USD` returned HTTP 400; see section 3).
+4. `gcloud artifacts repositories create cloud-run-source-deploy --repository-format=docker --location=us-central1`; `gcloud artifacts repositories set-cleanup-policies ... --policy=<JSON file in the temp folder> --no-dry-run`.
+5. `gcloud logging sinks update _Default --add-exclusion='name=exclude-run-request-logs,filter=log_id("run.googleapis.com/requests")'`.
+6. `gcloud iam service-accounts create pir-run`; `gcloud projects add-iam-policy-binding ... --member=serviceAccount:760189264289-compute@developer.gserviceaccount.com --role=roles/run.builder`.
+7. `.venv/Scripts/python -I <temp>/put_secrets.py`: reads `.env` in-process with `python-dotenv`, pipes each value to `gcloud secrets create NAME --replication-policy=automatic --data-file=-` on stdin, prints only `NAME: created` or `NAME: not set`. Then `gcloud secrets add-iam-policy-binding NAME --role=roles/secretmanager.secretAccessor --member=serviceAccount:pir-run@proveitreachable.iam.gserviceaccount.com` for each of the five secrets.
+8. Build folder: `git -c core.autocrlf=false archive --format=tar HEAD | tar -x -C <empty temp folder>`; assertions in section 4, check 1.
+9. `gcloud run deploy proveitreachable --region=us-central1 --source=<build folder> --port=7860 --service-account=pir-run@proveitreachable.iam.gserviceaccount.com --no-allow-unauthenticated --min-instances=0 --max-instances=1 --cpu=1 --memory=1Gi --concurrency=80 --cpu-throttling --timeout=1200 --set-env-vars=<plain names above> --set-secrets=<five secrets> --update-labels=commit=95a058b72459 --quiet`. Result: revision `proveitreachable-00001-s9n`.
+10. `gcloud builds submit --no-source --config=<temp>/imagecheck.yaml` (section 4, check 2).
+11. `gcloud run services update proveitreachable --update-env-vars=TRUSTED_PROXY_HOPS=1` (revision `00002`), then `TRUSTED_PROXY_HOPS=0` (revision `00003`), for the XFF measurement (section 5).
+12. `SPEND_LEDGER_BACKEND=hf_dataset .venv/Scripts/python -m pir ledger set-caps --nebius-balance 29.99 --tavily-balance 32.40 --nebius 10 --tavily 5` (exit 0; section 7).
+13. `gcloud run services update proveitreachable --update-env-vars=LIVE_SCANS_ENABLED=true,SANDBOX_BASE_IMAGE=<base_image from src/pir/executor/base_image_fingerprint.json>` (revision `00004-5nx`, live).
+14. Fast checks: `python -m ruff check .`, `python -m ruff format --check .`, `python -m pytest -q -m "not slow"` (in `.venv`). Results in section 8.
 
-  `LIVE_SCANS_ENABLED=false` lets `serve` start with no keys.
+## 3. Budget and currency
 
-## 3. Hugging Face Space (part B): BLOCKED on 2026-10-26
+- **Refused in USD.** The billing account's currency is INR (`gcloud billing accounts describe`), and the budget API returned HTTP 400 for `--budget-amount=5USD`. The existing budget `MonthlyBilling` on the same account is also in INR.
+- **Used:** `--budget-amount=475INR`. $5 at the rate of 95.16 INR per USD (open.er-api.com, 2026-10-26 00:02 UTC) is about INR 476; INR 475 is about USD 4.99. The alerts are at 20% (INR 95, about USD 1.00) and 100% (INR 475, about USD 5.00), both on current spend for this project only.
+- **Action for you:** the rate is an approximation. Adjust the budget in the console if you want an exact figure. Budget alerts email the billing account's administrators. They warn only and do not stop billing.
 
-- **Space:** `jegadeesh17/proveitreachable`, private, SDK Docker, app_port 7860. **Not created.** `create_repo` returned HTTP 402 (see the status above). ARCHITECTURE section 18 assumed free hosting ($0); a Docker Space on the free CPU tier needs a PRO subscription.
-- **Decision for the user** (each option needs approval):
-  1. Subscribe to Hugging Face PRO on this account. Part B then continues on the same design (the Space, secrets, variables, build, `set-caps`, deploy checks). Costs a monthly fee; the price is on huggingface.co/pro.
-  2. Another host (Fly.io was the listed paid alternative: about $2 to $5 per month, card required). This needs a new ADR and rework of this file.
-  3. Stop at part A. The image and the ledger dataset stay as they are.
-- **README front matter** goes at the top of the Space repository's `README.md` (not this repository's README):
+## 4. Deploy checks (part B, attempt 2)
 
-  ```yaml
-  ---
-  title: ProveItReachable
-  sdk: docker
-  app_port: 7860
-  pinned: false
-  license: mit
-  ---
-  ```
+| # | Check | How | Result and evidence |
+|---|---|---|---|
+| 1 | Build folder: no `.env*` except `.env.example`, no `data/` | `find` on the `git archive HEAD` folder | **PASS.** Only `./.env.example`; no `data/`. `eval/results/` held `latest.json` and `latest.md` in the upload (the Dockerfile copies only `latest.json`). |
+| 2 | Deployed image: no `/app/.env`; `/app/data` empty; `/app/eval/results` holds only `latest.json`; no `.env*` under `/app` | One-off Cloud Build step on the deployed digest (`gcloud builds submit --no-source`), build ID `937e9572-8ee8-4f56-b42b-f60cc5d4c95e` | **PASS.** Step printed `IMAGE_CHECK_OK`, build status SUCCESS (14 s). |
+| 3 | `GET /` returns 200 with the security headers | `curl` with the identity token as a Bearer header | **PASS.** HTTP 200. `content-security-policy` includes `frame-ancestors 'self' https://huggingface.co`; `x-content-type-options: nosniff`; `referrer-policy: no-referrer`. |
+| 4 | `GET /api/health` reports ok | Same | **PASS.** `{"status":"ok","version":"0.1.0","live_scans":"enabled","budget_remaining":{"nebius":1.0,"tavily":1.0}}` (after section 7). |
+| 5 | `GET /api/demos` lists the demos | Same | **PASS.** 3 demos: `planesweeppose`, `pyrl`, `co2tools`. |
+| 6 | A demo replay streams to `event: done` | `POST /api/demos/co2tools/replay` (with `Content-Length: 0`), then `curl -N` the events URL | **PASS.** Scan `2d118c8015334df9bc5a097f0132c300`: 12 `step` events and `event: done`, stream 20 s. |
+| 7 | Service config: max 1, min 0, CPU throttling, timeout 1200, service account `pir-run` | `gcloud run services describe` | **PASS.** `autoscaling.knative.dev/maxScale: 1`, minScale absent (0), `run.googleapis.com/cpu-throttling: true`, `timeoutSeconds: 1200`, `serviceAccountName: pir-run@proveitreachable.iam.gserviceaccount.com`. |
+| 8 | No public access | `get-iam-policy` on the service and the project; anonymous `GET /` | **PASS.** No `allUsers` or `allAuthenticatedUsers` on either policy. Anonymous request: HTTP 403. |
+| 9 | Cleanup policy present | `gcloud artifacts repositories list-cleanup-policies` | **PASS.** `keep-newest-2` (KEEP, 2 most recent) and `delete-rest` (DELETE, tag state any); dry run disabled. |
+| 10 | Budget listed | `gcloud billing budgets describe` | **PASS.** `proveitreachable-5usd`, INR 475, project filter `projects/760189264289`, thresholds 0.2 and 1.0 (section 3). |
+| 11 | XFF: `TRUSTED_PROXY_HOPS` measured | Section 5 | **Kept 0 (fail-safe).** The evidence did not show that the logged key follows the visitor. |
+| 12 | `ledger set-caps` on the HF ledger (stale-parent gate) | Section 7 | **PASS.** Exit 0. |
+| 13 | `/api/health` shows `budget_remaining` for both pools | Section 7 | **PASS.** `{"nebius":1.0,"tavily":1.0}`, with `LIVE_SCANS_ENABLED=true`. |
+| 14 | Browser check through `gcloud run services proxy` | Optional in the plan | **NOT RUN** (optional; no browser session in this run). |
+| 15 | Cold start after idle | Section 6 | **MEASURED:** about 20 s to the first byte after 16 minutes idle; warm requests about 0.5 s. |
+| 16 | Keepalive `workflow_dispatch` | M2-TASK-11 | **DEFERRED** (private URL needs a token; no workflow triggered). |
+| 17 | Live scan | Not requested | **NOT RUN** (the user asked for no live scan). |
 
-- **Space repository content:** the `git ls-files` set (tracked files only, the working tree version), minus `.env.example` and minus every `eval/results/` file except `latest.json`. The Space's `README.md` is this repository's README with the front matter above prepended.
-- **Space secrets** (values typed in the Space settings, never in files): `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `TAVILY_API_KEY`, `HF_TOKEN` (write access to the ledger dataset), `LANGSMITH_API_KEY`, and `GITHUB_TOKEN` only if it is set. Set through `add_space_secret`, values from the local `.env` inside a Python process.
-- **Space variables** (not secret): `SPEND_LEDGER_BACKEND=hf_dataset`, `SPEND_LEDGER_HF_REPO=jegadeesh17/pir-spend-ledger`, `TRUSTED_PROXY_HOPS=0` (until the XFF check in section 5 sets it), `NEBIUS_PRICE_INPUT_PER_MTOK=0.30`, `NEBIUS_PRICE_OUTPUT_PER_MTOK=0.90`, `TAVILY_PRICE_PER_CREDIT_USD=0.008`, `LANGSMITH_TRACING=true`, `LOG_LEVEL=INFO`, `LIVE_SCANS_ENABLED=false` until `set-caps` succeeds, then `true`.
-  - `LIVE_SCANS_ENABLED` must be `true` for `/api/health` to report `budget_remaining`: the app builds the spend meter only when live scans are enabled (`src/pir/api/app.py`), and the value is null otherwise.
-  - **Prices:** Nebius: the user's Nebius bill gives $0.26 for 0.87M input tokens and $0.15 for 0.17M output tokens, which matches the Token Factory catalog (`https://tokenfactory.nebius.com/api/public/models_info`: `nvidia/nemotron-3-super-120b-a12b` at 0.30 input and 0.90 output USD per million tokens). The code has no cached-input price, so cached tokens are counted at the full input price (conservative). Tavily: $0.008 per credit (`https://tavily.com/pricing`, Pay As You Go; the user's billing page agrees).
-- **Local `.env`:** it sets `SPEND_LEDGER_HF_REPO` but not `SPEND_LEDGER_BACKEND`, so the settings refuse to load (the `file` backend is refused while the HF repo is set). The user sets `SPEND_LEDGER_BACKEND=hf_dataset` in `.env`. The agent does not edit `.env`. Until then, commands run with `SPEND_LEDGER_BACKEND=hf_dataset` in the process environment.
-- **Balances and caps** (not run; blocked): `python -m pir ledger set-caps --nebius-balance 29.99 --tavily-balance 32.40 --nebius 10 --tavily 5` with the HF ledger settings. Balances are the user's figures on 2026-10-26: Nebius $0.49 trial credits plus $29.50 account balance = $29.99; Tavily 4,050 credits (925 plan plus 3,125 add-on) at $0.008 = $32.40. Local allowances take the defaults ($5 Nebius, $2 Tavily); headroom takes the minimums ($5 Nebius, $3 Tavily). The formula maximum (recorded spend 0 on a new ledger + balance − headroom) is $24.99 Nebius and $29.40 Tavily, so the approved caps of **$10.00** and **$5.00** are within it.
+## 5. XFF measurement and `TRUSTED_PROXY_HOPS`
 
-## 4. Keepalive and spend alert
+With `TRUSTED_PROXY_HOPS=1` (revision `proveitreachable-00002-p68`), the app keys rate limits on the rightmost `X-Forwarded-For` entry (`src/pir/ratelimit.py`, `client_key`). The logged `client` is a salted hash per process (`replay_admitted` in `src/pir/api/routes.py`).
 
-- `.github/workflows/keepalive.yml`: schedule `17 */6 * * *` and `workflow_dispatch`. It runs `python -I src/pir/keepalive.py "$PIR_HEALTH_URL"`.
-- GitHub **repository variable** `PIR_HEALTH_URL` (not a secret): `https://<hf-owner>-<space-name>.hf.space/api/health`. Set it when the Space goes public (M2-TASK-11).
-- Exit codes: `0` health ok and every pool at or above 0.25; `1` a pool is below 0.25 (the output names it, for example `Budget alert: nebius at 0.18 (below 0.25)`); `2` health check failed (non-200, invalid JSON, status not ok, `budget_remaining` null, a non-https URL, or no answer after 3 tries 20 s apart). A failed run makes GitHub email the owner.
-- **`workflow_dispatch` against the private Space: DEFERRED to M2-TASK-11.** The URL needs a token, and the keepalive script sends none. No workflow was triggered.
+| Replay | Time (UTC) | `X-Forwarded-For` sent | Logged `client` |
+|---|---|---|---|
+| A | 07:49:05 | `203.0.113.7` | `c063a09b0f960065` |
+| B | 07:49:31 (about 25 s later) | `198.51.100.9` | `c063a09b0f960065` |
+| C, IPv6 (`curl -6`) | 07:50:35 | `203.0.113.7` | `c063a09b0f960065` |
 
-## 5. Deploy checks (part B)
+- The spoofed leftmost value did not change the hash (A and B).
+- The laptop has a global IPv6 address (`2409:40f4:...`) distinct from its IPv4 address, yet replay C (IPv6) logged the same hash as IPv4. So the key did not follow the visitor's address in this test.
+- Two explanations fit: the rightmost entry is not the visitor address, or the key falls back to the connection address, which is the same for every request. The app does not log the header, so the two cannot be separated from the logs.
+- A second-network comparison was not available to the agent (no Cloud Shell session). Under the rule to keep the fail-safe value when unsure, **`TRUSTED_PROXY_HOPS=0`** (set back on revision `proveitreachable-00003-d52`; the live revision keeps it).
+- **Effect of 0:** every visitor shares one per-client rate-limit bucket. The replay bucket is 30 per hour (`RATE_LIMIT_REPLAYS_PER_CLIENT_HOUR`), so with many visitors the replays can hit `too_many_requests` (429) sooner. This is the trade-off of the fail-safe.
+- **To set 1 safely:** with `TRUSTED_PROXY_HOPS=1` on one instance, POST one replay from this laptop and one from a second network (Cloud Shell or a phone hotspot) within the same instance lifetime. Compare the two `replay_admitted` hashes in `gcloud logging read`. Different hashes: keep 1. Equal hashes: keep 0.
 
-Status on 2026-10-26 (attempt 1). "BLOCKED" means the check needs the Space, which does not exist.
+## 6. Cold start
 
-| Check | How | Status and evidence |
-|---|---|---|
-| Image builds (replaces the local `docker build`) | Poll the Space runtime stage; on failure, fetch the build logs | BLOCKED (no Space) |
-| Image has no `.env`; nothing from `data/`; only `latest.json` from `eval/results/` | List the Space repository files through the HF API; `.dockerignore` and the COPY line are checked by `tests/unit/test_packaging.py` | Local part PASS (ADR-0036 tests in the fast command). Space listing BLOCKED |
-| `GET /` and `GET /api/health` on the private URL | Bearer token; `/api/health` must return `status: ok` | BLOCKED |
-| Eval figure shown from the shipped `latest.json` | Page or `/api/` response carries the figure | BLOCKED |
-| Demo replay streams through the HF proxy (SSE if enabled) | Replay a demo on the Space | BLOCKED |
-| `X-Forwarded-For` hop count; `TRUSTED_PROXY_HOPS` set to match (fail-safe 0) | Two requests with different spoofed leftmost XFF entries: the logged `client` hash must not change. Then an IPv4 and an IPv6 request (if the proxy accepts IPv6): the hash differs only when the hop count is 1. The logs hold a salted hash (salt random per process), so the hash cannot be matched to the address directly. | BLOCKED. Keep `TRUSTED_PROXY_HOPS=0` until a run shows otherwise |
-| `frame-ancestors` allows the HF embed | Response `Content-Security-Policy` on `/` contains `frame-ancestors 'self' https://huggingface.co` | BLOCKED (the value is set in `src/pir/api/security_headers.py`) |
-| `ledger set-caps` succeeded (stale-parent gate passed) | `python -m pir ledger set-caps` with the figures in section 3 | BLOCKED (not run). The gate itself passed: M2-TASK-02 live test, 2 passed |
-| `/api/health` shows `budget_remaining` | `GET /api/health` after `set-caps` and `LIVE_SCANS_ENABLED=true` | BLOCKED |
-| Dataset commit rate is acceptable | Ledger commits during a short live scan | DEFERRED: needs a live scan, which spends within the caps. Not requested for attempt 1 |
-| Keepalive `workflow_dispatch` against the Space URL | Actions run | DEFERRED to M2-TASK-11 (private URL needs auth; no workflow triggered) |
-| M2-TASK-02 HF ledger live gate (`PIR_LIVE_TESTS=1 pytest tests/live/test_live_hf_ledger.py`) | Run before the deploy continues | PASS on 2026-10-26 (2 passed, 6.84 s) |
+- **Measured 2026-10-26 (revision `proveitreachable-00004-5nx`), after at least 16 minutes with no request** (last request 07:57:29 UTC, next request 08:14:00 UTC):
+  - First request `GET /api/health`: HTTP 200 in **21.5 s**. The log shows "Starting new instance" at 08:14:00.08 and the startup TCP probe on port 7860 succeeding at 08:14:20.89 (about 20.8 s from instance start to ready).
+  - A second request, 2 s after the first response, also took **20.0 s**. Its log shows a second "Starting new instance" at 08:14:23.9 (ready at 08:14:43.25). The cause of the second start was not determined; the logs give only the reason "AUTOSCALING".
+  - Warm requests then took 0.49 to 0.80 s (`/api/health`, `/api/demos`, `/`).
+  - **Effect:** a visitor after an idle period waits about 20 s before the first byte. The keepalive check's 3 tries 20 s apart cover this. Reducing the start time would need a code or image change, which this task does not allow.
 
-Results go in the M2-TASK-08 entry of `docs/QA_RESULTS.json` and in this table.
+## 7. Spend caps (`ledger set-caps`)
 
-## 6. Rollback
+Command: `SPEND_LEDGER_BACKEND=hf_dataset .venv/Scripts/python -m pir ledger set-caps --nebius-balance 29.99 --tavily-balance 32.40 --nebius 10 --tavily 5`. Exit 0.
 
-- **Pause live spend:** set `LIVE_SCANS_ENABLED=false` as a Space variable and restart the Space. Replays keep working and need no keys.
-- **Code:** revert the Space repository to the previous good commit with a new commit. Do not force-push without the user's approval.
-- **Spend state** lives in the HF ledger dataset and is not touched by a code rollback. Caps are in ledger state, so the ledger survives a rollback.
+Output (numbers only, from the run):
+- Nebius cap $10.00; Tavily cap $5.00 (the approved values).
+- Balances: Nebius $29.99 ($0.49 trial plus $29.50); Tavily $32.40 (4,050 credits at $0.008).
+- Hosted allowances after the write: Nebius $5.00 (remaining $5.0000 of $5.00), Tavily $3.00 (remaining $3.0000 of $3.00). Local allowances: Nebius $5.00, Tavily $2.00. Recorded spend $0.0000 on both pools.
+- The stale-parent gate passed. One commit returned HTTP 412 and the app's retry (up to 3 attempts) then succeeded, as designed.
 
-## 7. Open points for the user
+Live scans were enabled after this, and `/api/health` reports `budget_remaining` `{"nebius":1.0,"tavily":1.0}`. No live scan was run.
 
-- **Hosting plan:** Docker Spaces need a Hugging Face PRO subscription on this account (section 3). Choose PRO or another host; part B resumes after the choice.
-- **Commit the ADR-0036 changes.** `Dockerfile`, `.dockerignore` and `tests/unit/test_packaging.py` are uncommitted. The agent does not commit.
-- **`.env`:** add `SPEND_LEDGER_BACKEND=hf_dataset` (section 3).
-- **Eval figure:** `latest.json` ships in the image (ADR-0036). Updating the figure means committing a new `latest.json` and rebuilding the Space.
-- **Build tooling.** `pip install --no-deps .` builds with setuptools (the build backend) from build isolation. It is not in the hashed lock, because it is not a runtime dependency.
-- **Docker unavailable** on 2026-10-26; the image has not been built or run locally (section 2).
+## 8. Fast checks (local, on the current tree)
+
+`python -m ruff check .`: all checks passed. `python -m ruff format --check .`: 133 files already formatted. `python -m pytest -q -m "not slow"`: 1730 passed, 3 skipped, 135 deselected. Recorded in `docs/QA_RESULTS.json` (M2-TASK-08, attempt 2, part B).
+
+## 9. Environment changes after the first deploy
+
+- Revision `00002`: `TRUSTED_PROXY_HOPS=1` (XFF measurement). Revision `00003`: back to `0`.
+- Revision `00004-5nx`: `LIVE_SCANS_ENABLED=true` and `SANDBOX_BASE_IMAGE` added. **`SANDBOX_BASE_IMAGE` is not in the approved command list.** The sandbox executor raises `SANDBOX_BASE_IMAGE is not set` when it is missing (`src/pir/executor/contree.py`), so enabling live scans without it would break every scan. Its value is the public `base_image` from `src/pir/executor/base_image_fingerprint.json` (the same value `.env` must hold, per `.env.example`). It is not a secret. To undo it, remove it with `gcloud run services update ... --remove-env-vars=SANDBOX_BASE_IMAGE` (with `LIVE_SCANS_ENABLED=false` first).
+
+## 10. Rollback
+
+- **Pause live spend:** `gcloud run services update proveitreachable --region=us-central1 --update-env-vars=LIVE_SCANS_ENABLED=false` (a new revision; replays keep working and need no keys).
+- **Previous revision:** `gcloud run services update-traffic proveitreachable --region=us-central1 --to-revisions=<previous>=100` (for example `proveitreachable-00001-s9n`, which has `LIVE_SCANS_ENABLED=false`, `TRUSTED_PROXY_HOPS=0` and no `SANDBOX_BASE_IMAGE`).
+- **Make private again (if ever public):** `gcloud run services remove-iam-policy-binding proveitreachable --region=us-central1 --member=allUsers --role=roles/run.invoker`.
+- **Spend state** lives in the HF ledger dataset and is not touched by any of these. The caps are in ledger state.
+- **Secret rotation:** add a new Secret Manager version, disable the old one, and redeploy (ADR-0040).
+
+## 11. M2-TASK-11 (go public): steps for later, after the user confirms
+
+1. Redeploy from `git archive HEAD` after any change (the same build-folder procedure as section 2, step 8), then run the image check (section 4, check 2) on the new digest.
+2. Grant public invoke access: `gcloud run services add-iam-policy-binding proveitreachable --region=us-central1 --member=allUsers --role=roles/run.invoker`. Only after the user says so.
+3. Set the GitHub repository variable `PIR_HEALTH_URL` to `https://proveitreachable-ynjbf5demq-uc.a.run.app/api/health` (a variable, not a secret).
+4. Dispatch the keepalive workflow once and check that it passes.
+5. Resolve the `TRUSTED_PROXY_HOPS` question (section 5) before public traffic, since public traffic makes the shared rate-limit bucket matter.
+
+## 12. Open points for the user
+
+- Approve or change the INR budget amount (section 3).
+- Decide the `TRUSTED_PROXY_HOPS` question with a second-network test (section 5). Until then, visitors share one per-client bucket.
+- Live scans are enabled with the caps above. Confirm before the first live scan.
+- The local `.env` should have `SPEND_LEDGER_BACKEND=hf_dataset` (see the attempt 1 notes in `docs/PLATFORM_FEEDBACK.md`). The agent did not edit `.env`.
+- Nothing has been made public, and no GitHub setting or workflow was changed.
