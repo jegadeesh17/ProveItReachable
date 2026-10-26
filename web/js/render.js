@@ -155,7 +155,7 @@ const ERROR_HINT = {
 
 /**
  * @param {{ code?: string, message: string, details?: object }} error  message is shown verbatim (AC-43)
- * @param {{ kind?: "error"|"info", title?: string }} [options]
+ * @param {{ kind?: "error"|"info", title?: string, hint?: boolean }} [options] `hint: false` leaves out the generic hint
  */
 export function banner(error, options = {}) {
   const kind = options.kind || "error";
@@ -166,7 +166,7 @@ export function banner(error, options = {}) {
     facts.push(["Limit", `${d.max_mb} MB or ${d.max_files} files`]);
     facts.push(["This repository", `${d.mb} MB in ${d.files} files`]);
   }
-  const hint = ERROR_HINT[code];
+  const hint = options.hint === false ? undefined : ERROR_HINT[code];
   return el(
     "div",
     { class: `notice notice--${kind}`, role: kind === "error" ? "alert" : "status" },
@@ -612,15 +612,47 @@ function sourceNote(links) {
   return el("p", { class: "src-note", text });
 }
 
-/** The optional call-chain proof (M2), read-only: the status in words, then the facts the run recorded. */
-function renderProof(proof) {
-  const words = proof.status === "proven" ? "proven" : "not proven";
-  return el(
-    "div",
-    { class: "ev-proof", dataset: { proof: proof.status } },
-    el("h4", { class: "block-title", text: "Call-chain proof" }),
-    el("p", { class: "proof-status" }, el("strong", { text: words }), " ", el("span", { class: "hint", text: `run ${formatDateTime(proof.ran_at)}` })),
-    el("p", { text: proof.reason }),
+/* ---- call-chain proof (M2, optional) ---- */
+
+/** Reasons of a run that finished without reaching the call (src/sandbox_agent/proof.py `_reason`). */
+const NOT_REACHED_REASON = /^(entry finished without reaching|entry exited with code|entry raised|entry needs command-line arguments)/;
+
+/**
+ * How to read a proof. `proven`: the stub recorded a call. `not_reached`: the entry ran to its end or
+ * stopped, and the vulnerable call was not seen. `uncertain`: the proof could not run to the end (no wheel or
+ * build failure, "sandbox timeout", spend limit, Sandbox error), so it says nothing either way. Anything
+ * unrecognised counts as `uncertain`, the more modest claim.
+ */
+export function proofKind(proof) {
+  if (proof.status === "proven") return "proven";
+  return NOT_REACHED_REASON.test(proof.reason) ? "not_reached" : "uncertain";
+}
+
+const PROOF_NOTE = {
+  proven: "Seen in a sandbox with the vulnerable call stubbed out. The finding's verdict is unchanged.",
+  not_reached: "The entry point ran and the vulnerable call was not seen. That does not show it is unreachable. The verdict is unchanged.",
+  uncertain: "The proof could not run to the end, so it says nothing either way. The verdict is unchanged.",
+};
+
+/** A drawn mark beside the words: a check for proven, a dash for not proven. Never colour alone. */
+function proofMark(proven) {
+  return el("span", { class: "proof-mark" }, icon(proven ? "stamp-done" : "stamp-skipped", "icon icon--sm"));
+}
+
+/** What a finished proof records, in order: the status in words, how to read it, the reason, the facts. */
+function proofResult(proof) {
+  const proven = proof.status === "proven";
+  return [
+    el(
+      "p",
+      { class: "proof-status" },
+      proofMark(proven),
+      el("strong", { text: proven ? "proven" : "not proven" }),
+      " ",
+      el("span", { class: "proof-when", text: `run ${formatDateTime(proof.ran_at)}` }),
+    ),
+    el("p", { class: "proof-note", text: PROOF_NOTE[proofKind(proof)] }),
+    el("p", { class: "proof-reason", text: proof.reason }),
     el(
       "dl",
       { class: "kv" },
@@ -628,10 +660,75 @@ function renderProof(proof) {
       dtRow("Target", el("code", { text: proof.target })),
       proof.recorded_call && dtRow("Recorded call", el("code", { text: proof.recorded_call })),
     ),
+  ];
+}
+
+/** A recorded proof with no controls: shown when the feature is off but the report carries one. */
+function renderProof(proof) {
+  return el(
+    "div",
+    { class: "ev-proof", dataset: { proof: proof.status, proofKind: proofKind(proof) } },
+    el("h4", { class: "block-title", text: "Call-chain proof" }),
+    proofResult(proof),
   );
 }
 
-function renderEvidence(f) {
+const PROOF_LABEL = { idle: "Prove call chain", running: "Proving…", done: "Prove again", error: "Try again" };
+
+/**
+ * The proof block of a likely reachable finding when config.features.proof is true. One persistent button
+ * (aria-disabled while running, so focus stays on it); the body is a live region that holds the intro, the
+ * running note, the result or the error beside the button. `ctl.run(finding)` resolves with a Proof or rejects
+ * with an error that has a `message`. The verdict badge is never touched here.
+ */
+function proofBlock(f, ctl) {
+  const block = el("div", { class: "ev-proof", dataset: { proofState: "idle" } });
+  const body = el("div", { class: "proof-body", "aria-live": "polite" });
+  const button = el("button", { class: "btn proof-run", type: "button" });
+
+  const show = (state, payload) => {
+    block.dataset.proofState = state;
+    delete block.dataset.proof;
+    delete block.dataset.proofKind;
+    if (state === "running") block.setAttribute("aria-busy", "true");
+    else block.removeAttribute("aria-busy");
+    if (state === "running") button.setAttribute("aria-disabled", "true");
+    else button.removeAttribute("aria-disabled");
+    button.textContent = PROOF_LABEL[state];
+    if (state === "done") {
+      block.dataset.proof = payload.status;
+      block.dataset.proofKind = proofKind(payload);
+    }
+    clear(body);
+    if (state === "idle") {
+      body.append(el("p", { class: "proof-intro", text: "Runs the entry point in a sandbox with the vulnerable call stubbed out, and records whether it is reached. It can take a few minutes." }));
+    } else if (state === "running") {
+      body.append(el("p", { class: "proof-running" }, icon("stamp-running", "icon icon--sm proof-spin"), "Running in a sandbox. It installs the pinned dependencies, then runs the entry point."));
+    } else if (state === "done") {
+      body.append(...proofResult(payload));
+    } else {
+      body.append(banner(payload, { title: "The proof did not run", hint: false }));
+    }
+  };
+
+  button.addEventListener("click", async () => {
+    if (block.dataset.proofState === "running") return;
+    show("running");
+    try {
+      const proof = await ctl.run(f);
+      if (block.isConnected) show("done", proof);
+    } catch (error) {
+      if (block.isConnected) show("error", error);
+    }
+  });
+
+  block.append(el("h4", { class: "block-title", text: "Call-chain proof" }), body, el("div", { class: "proof-actions" }, button));
+  if (f.proof) show("done", f.proof);
+  else show("idle");
+  return block;
+}
+
+function renderEvidence(f, proofCtl) {
   const evidence = el("div", { class: "evidence" });
 
   if (f.vulnerable_symbol) {
@@ -681,7 +778,8 @@ function renderEvidence(f) {
     );
   }
 
-  if (f.proof) evidence.append(renderProof(f.proof));
+  if (proofCtl && f.verdict === "likely reachable" && f.call_path && f.call_path.length) evidence.append(proofBlock(f, proofCtl));
+  else if (f.proof) evidence.append(renderProof(f.proof));
 
   if (f.kind === "advisory") {
     evidence.append(
@@ -766,12 +864,12 @@ function renderAssessment(f) {
   return box;
 }
 
-function renderFinding(f) {
+function renderFinding(f, proofCtl) {
   const meta = VERDICTS[f.verdict] || VERDICTS["no reachable path detected"];
   const id = `finding-${f.finding_id}`;
   const bodyId = `${id}-body`;
   const loc = firstLocation(f);
-  const body = el("div", { class: "finding__body", id: bodyId, hidden: true }, renderEvidence(f), renderAssessment(f));
+  const body = el("div", { class: "finding__body", id: bodyId, hidden: true }, renderEvidence(f, proofCtl), renderAssessment(f));
 
   const toggle = el(
     "button",
@@ -814,14 +912,15 @@ function setOpen(toggle, body, open) {
   body.hidden = !open;
 }
 
-export function renderResults(report) {
+/** `proofCtl` is null unless config.features.proof is true; then likely reachable findings get a proof control. */
+export function renderResults(report, proofCtl = null) {
   const head = el(
     "div",
     { class: "results__head cols", "aria-hidden": "true" },
     ...["Verdict", "Package", "Advisory", "Where", "Confidence"].map((t) => el("span", { text: t })),
     el("span"),
   );
-  const list = el("ol", { class: "results" }, report.findings.map((f) => renderFinding(f)));
+  const list = el("ol", { class: "results" }, report.findings.map((f) => renderFinding(f, proofCtl)));
   const node = el(
     "section",
     { class: "results-section", "aria-labelledby": "results-h" },

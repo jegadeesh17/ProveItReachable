@@ -118,6 +118,19 @@ export function createHttpApi() {
     getReport: (scanId) => request(`${scanPath(scanId)}/report`),
 
     /**
+     * Ask for the call-chain proof of one likely reachable finding (M2). Answers ScanAccepted for a
+     * proof job; follow it like a scan, then read `proof` from the scan's own report. The route exists
+     * only when config.features.proof is true; `entry` names another step of the call path (optional).
+     * @param {string} scanId @param {string} findingId @param {string} [entry]
+     */
+    requestProof: (scanId, findingId, entry) =>
+      request(`${scanPath(scanId)}/findings/${encodeURIComponent(findingId)}/proof`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entry ? { entry } : {}),
+      }),
+
+    /**
      * Server-sent events, closed on `done` or `error` (else EventSource would reconnect forever).
      * @param {string} scanId
      * @param {(e: object) => void} onEvent

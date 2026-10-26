@@ -76,6 +76,7 @@ const state = {
   rateTimer: null,
   instant: Boolean(api.mock && api.mock.jump),
   stageStart: {}, // step -> ISO time of its running event, for per-stage durations
+  proofStops: new Set(), // cancel functions of the proof jobs being followed
   run: null,
 };
 
@@ -257,6 +258,7 @@ async function begin(kind, payload) {
   }
 
   if (state.stop) state.stop();
+  cancelProofs();
   state.runId += 1;
   const runId = state.runId;
   const name = kind === "replay" ? payload.title : repoNameFromUrl(payload.url);
@@ -383,6 +385,76 @@ async function finish(runId) {
   showReport(report);
 }
 
+/* ------------------------------------------------------------------ proof */
+
+/** Stop following every proof job: the report they belong to is going away. */
+function cancelProofs() {
+  for (const stop of state.proofStops) stop();
+  state.proofStops.clear();
+}
+
+/**
+ * Follow a proof job like a scan: the event stream when the progress feed is on, else status polling.
+ * Resolves when the job is done; rejects with a message when it failed or could not be followed.
+ */
+function followProof(jobId) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let stopFeed = null;
+    let timer = null;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      if (stopFeed) stopFeed();
+      window.clearTimeout(timer);
+      state.proofStops.delete(cancel);
+      fn(value);
+    };
+    const cancel = () => finish(reject, { code: "cancelled", message: "Stopped: a new scan was started." });
+    state.proofStops.add(cancel);
+
+    if (state.config.features.progress_feed) {
+      stopFeed = api.subscribe(jobId, (event) => {
+        if (event.type === "done") finish(resolve);
+        else if (event.type === "error") finish(reject, { code: "internal_error", message: event.message || "The proof job failed." });
+      });
+      if (settled) stopFeed();
+      return;
+    }
+    const tick = async () => {
+      if (settled) return;
+      try {
+        const status = await api.getStatus(jobId);
+        if (status.state === "completed") return finish(resolve);
+        if (status.state === "failed") return finish(reject, { code: "internal_error", message: "The proof job failed." });
+      } catch (error) {
+        return finish(reject, error);
+      }
+      timer = window.setTimeout(tick, POLL_MS);
+    };
+    timer = window.setTimeout(tick, state.instant ? 0 : POLL_MS);
+  });
+}
+
+/**
+ * Request a proof for one finding and wait for it. The proof job sets `proof` on the scan's own report,
+ * so the result is read from there; nothing else in the report is used, and the verdict is never touched.
+ */
+async function runProof(finding) {
+  const { scanId } = state.run;
+  const accepted = await api.requestProof(scanId, finding.finding_id);
+  await followProof(accepted.scan_id);
+  const report = await fetchReport(scanId);
+  const proved = report.findings.find((f) => f.finding_id === finding.finding_id);
+  if (!proved || !proved.proof) {
+    throw { code: "internal_error", message: "The proof finished, but its result is not in the report. Try again." };
+  }
+  return proved.proof;
+}
+
+/** The proof controls exist only when the backend says the feature is on (AC-65). */
+const proofControl = () => (state.config.features.proof ? { run: runProof } : null);
+
 /* ----------------------------------------------------------------- report */
 
 function showReport(report) {
@@ -414,7 +486,7 @@ function showReport(report) {
   const summary = renderSummary(report, { isMock });
   clear(dom.report);
   dom.report.append(summary.node);
-  if (report.findings.length > 0) dom.report.append(renderResults(report));
+  if (report.findings.length > 0) dom.report.append(renderResults(report, proofControl()));
   const notExamined = renderNotExamined(report);
   if (notExamined) dom.report.append(notExamined);
   dom.report.append(renderMethod(report), renderReportFoot(report));

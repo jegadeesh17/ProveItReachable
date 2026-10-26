@@ -3,7 +3,8 @@
  * Select with ?api=mock&scenario=<name>; the name must be on the allowlist below, anything else is
  * `reachable` and never reaches a fixture path. `&jump=report` skips the feed animation.
  * Extra switches: `&feed=off` (AC-42), `&md=off` (AC-64), `&eval=on` (a labelled sample eval figure),
- * `&speed=<n>` (faster feed).
+ * `&speed=<n>` (faster feed), `&proof=<mode>` (turns features.proof on and picks what a proof returns;
+ * the mode must be on the PROOF_MODES allowlist, anything else leaves the feature off).
  */
 import { fromErrorBody } from "./errors.js";
 
@@ -25,6 +26,21 @@ const REPLAY_ERRORS = new Map([
   ["demo-not-found", "demo_not_found"],
   ["too-many-requests", "too_many_requests"],
 ]);
+/**
+ * `&proof=<mode>`: what `requestProof` answers. `on` replays the recorded outcomes in reports/proof.json
+ * (one proven, one not proven); the others make every proof end with the reason the backend gives
+ * (src/pir/jobs.py run_proof), `error` rejects the request like the API would. The package and version
+ * in a reason come from the finding, as they do on the server.
+ */
+const PROOF_MODES = new Set(["on", "no-wheel", "build-failed", "timeout", "spend", "error"]);
+const PROOF_REASONS = {
+  "no-wheel": (f) => `uncertain: no wheel for ${f.package}==${f.version}; its source package could not be downloaded`,
+  "build-failed": (f) => `uncertain: could not build ${f.package} ${f.version} from source`,
+  timeout: () => "sandbox timeout",
+  spend: () => "not run: the spend limit was reached",
+};
+/** How long the mock proof "runs" before its job is done. */
+const PROOF_MS = 1800;
 const DEFAULT_SCENARIO = "reachable";
 /** With no explicit report scenario, each recorded demo replays one of the fixtures (the mock has no real recordings). */
 const DEMO_SCENARIO = new Map([
@@ -87,6 +103,7 @@ export function createMockApi(params) {
   const feedOff = params.get("feed") === "off";
   const markdownOff = params.get("md") === "off";
   const evalOn = params.get("eval") === "on";
+  const proofMode = PROOF_MODES.has(params.get("proof") || "") ? params.get("proof") : "";
   const latency = (ms) => (jump ? wait(0) : wait(ms));
 
   /** @type {Map<string, any>} */
@@ -182,6 +199,7 @@ export function createMockApi(params) {
       if (feedOff) config.features.progress_feed = false;
       if (markdownOff) config.features.markdown_export = false;
       if (evalOn) config.eval = { ...SAMPLE_EVAL };
+      if (proofMode) config.features.proof = true;
       if (scenario === "paused") {
         const table = await errors();
         config.live_scans_enabled = false;
@@ -214,6 +232,57 @@ export function createMockApi(params) {
       // The fixture stands in for the recording: show the demo's own repository and commit.
       const [owner, name] = new URL(demo.repo_url).pathname.split("/").filter(Boolean);
       const job = await createJob(reportScenario, "replay", { owner, name, commit_sha: demo.commit_sha });
+      return accepted(job);
+    },
+
+    /**
+     * Like POST /api/scans/{id}/findings/{fid}/proof: answers ScanAccepted for a proof job, which follows
+     * like a scan (subscribe or getStatus) and, when done, has set `proof` on the scan's report. The
+     * verdict is never touched (AC-67).
+     */
+    async requestProof(scanId, findingId, entry) {
+      await latency(250);
+      if (!proofMode) throw new Error("The mock proof is off; add &proof=on to the URL.");
+      if (proofMode === "error") return rejectWith("rate_limited");
+      const source = await getJob(scanId);
+      const finding = source.report.findings.find((f) => f.finding_id === findingId);
+      if (!finding) return rejectWith("finding_not_found");
+      const steps = (finding.call_path || []).filter((s) => s.edge !== "vulnerable_call");
+      if (finding.verdict !== "likely reachable" || steps.length === 0) return rejectWith("request_invalid");
+      const chosen = entry === undefined || entry === null ? steps[0].symbol : entry;
+      if (!steps.some((s) => s.symbol === chosen)) return rejectWith("request_invalid");
+
+      let proof;
+      if (proofMode === "on") {
+        const recorded = (await loadJson("reports/proof.json")).findings.find((f) => f.finding_id === findingId);
+        proof = recorded && recorded.proof ? clone(recorded.proof) : null;
+      }
+      const target = finding.call_path[finding.call_path.length - 1].symbol;
+      if (!proof) {
+        // Nothing recorded for this finding (or a mode that fixes the reason): the mock says it was not reached.
+        const reason = PROOF_REASONS[proofMode] ? PROOF_REASONS[proofMode](finding) : `entry finished without reaching ${target}`;
+        proof = { status: "not_proven", reason, ran_at: new Date().toISOString(), entry: chosen, target, recorded_call: null };
+      }
+      proof.entry = chosen;
+      proof.ran_at = new Date().toISOString();
+      source.report = { ...source.report, findings: source.report.findings.map((f) => (f.finding_id === findingId ? { ...f, proof } : f)) };
+      source.blobs = {};
+
+      const proofId = newJobId();
+      const done = {
+        seq: 1,
+        scan_id: proofId,
+        type: "done",
+        step: null,
+        state: null,
+        message: `Proof: ${proof.status.replace("_", " ")}.`,
+        at: proof.ran_at,
+        outcome: source.report.outcome,
+        tools: [],
+        offset: PROOF_MS,
+      };
+      const job = { ...source, scanId: proofId, mode: "proof", events: [done], startedAt: performance.now(), blobs: {} };
+      jobs.set(proofId, job);
       return accepted(job);
     },
 
