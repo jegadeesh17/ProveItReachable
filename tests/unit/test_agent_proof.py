@@ -17,6 +17,7 @@ import json
 import os
 import runpy
 import shlex
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -195,8 +196,9 @@ def test_ac66_install_argv_is_wheels_only_with_the_pin_after_double_dash(tmp_pat
     assert argv[pair : pair + 2] == ["--only-binary", ":all:"]
     assert argv[argv.index("--target") + 1] == "/work/deps"
     assert argv[argv.index("--python") + 1] == "/usr/local/bin/python3.13"
-    for flag in ("--no-build", "--no-config", "--no-sources"):
+    for flag in ("--no-config", "--no-sources"):
         assert flag in argv
+    assert "--no-build" not in argv  # uv refuses --only-binary together with --no-build
     assert argv[argv.index("--index-url") + 1] == "https://pypi.org/simple"
     assert argv[-2:] == ["--", "pyyaml==6.0.2"]  # the pin follows `--`, built from validated parts
     assert runner.calls[1][0][-2:] == ["--", "requests==2.32.3"]
@@ -208,7 +210,8 @@ def test_uv_install_runs_from_a_fresh_empty_directory_with_the_fixed_environment
     for _, kwargs in runner.calls:
         assert kwargs["cwd"] == str(tmp_path / "uvwd")  # outside /work/repo
         assert not kwargs["cwd"].startswith("/work/repo")
-        assert kwargs["env"] == resolve.UV_ENV  # never os.environ
+        assert kwargs["env"] == resolve.UV_WHEELS_ENV  # never os.environ
+        assert "UV_NO_BUILD" not in kwargs["env"]  # same conflict as the flag
         assert kwargs["stdin"] == subprocess.DEVNULL and kwargs["check"] is False
         assert kwargs["timeout"] <= resolve.UV_TIMEOUT_S
     assert list((tmp_path / "uvwd").iterdir()) == []
@@ -1907,3 +1910,93 @@ async def test_the_fake_executor_saves_a_copy_of_the_image_for_a_recorded_proof_
     assert os.path.isdir(built.image.ref) and os.path.isdir(installed.image.ref)
     await client.close(ws)
     assert not os.path.exists(built.image.ref) and not os.path.exists(installed.image.ref)
+
+
+# ---- the real uv accepts the proof argv and environment (found live in M2-TASK-16) -------------
+
+
+def real_uv() -> str:
+    found = shutil.which("uv") or str(Path(sys.executable).with_name("uv"))
+    for candidate in (found, found + ".exe"):
+        if os.path.isfile(candidate):
+            return candidate
+    pytest.skip("no uv binary next to the test interpreter")
+
+
+def local_uv_env(env: dict[str, str], tmp_path: Path) -> dict[str, str]:
+    """The agent's environment with the paths this machine needs (HOME, cache, PATH, SYSTEMROOT)."""
+    local = {**env, "HOME": str(tmp_path), "UV_CACHE_DIR": str(tmp_path / "uvcache")}
+    local["PATH"] = os.environ.get("PATH", "")
+    if "SYSTEMROOT" in os.environ:
+        local["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
+    local["UV_PYTHON_DOWNLOADS"] = "never"
+    return local
+
+
+def run_real_uv(argv: list[str], env: dict[str, str], tmp_path: Path):
+    """Run the real uv with the agent's argv, only the binary and the interpreter swapped, and
+    `--offline`: it can never reach a network, so any error left is not a usage error."""
+    argv = [real_uv(), *argv[1:]]
+    argv[argv.index("--python") + 1] = sys.executable
+    (tmp_path / "cwd").mkdir(parents=True, exist_ok=True)
+    return subprocess.run(
+        argv,
+        cwd=tmp_path / "cwd",
+        env=local_uv_env(env, tmp_path),
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        timeout=60,
+        check=False,
+    )
+
+
+def assert_no_usage_error(done) -> None:
+    assert done.returncode != 2, done.stderr
+    for text in ("cannot be used with", "unexpected argument", "Usage:"):
+        assert text not in done.stderr, done.stderr
+
+
+@pytest.mark.slow
+def test_ac66_the_real_uv_accepts_the_proof_install_argv_and_environment(tmp_path):
+    base = proof.build_install_argv("pyyaml==5.3.1", str(tmp_path / "deps"))
+    cut = base.index("--")  # options go before `--`
+    argv = [*base[:cut], "--offline", *base[cut:]]
+    done = run_real_uv(argv, resolve.UV_WHEELS_ENV, tmp_path)
+    assert_no_usage_error(done)
+    # control: --only-binary :all: plus --no-build is the combination uv rejects outright
+    conflicting = [*base[:cut], "--no-build", "--offline", *base[cut:]]
+    again = run_real_uv(conflicting, resolve.UV_WHEELS_ENV, tmp_path / "again")
+    assert again.returncode == 2 and "cannot be used with" in again.stderr, again.stderr
+
+
+@pytest.mark.slow
+def test_ac83_the_real_uv_accepts_the_proof_build_argv_and_environment(tmp_path):
+    wheels, sdists = tmp_path / "wheels", tmp_path / "sdists"
+    wheels.mkdir()
+    sdists.mkdir()
+    constraints = tmp_path / "constraints.txt"
+    constraints.write_text("setuptools==75.8.0\nwheel==0.45.1\n", encoding="ascii")
+    package = tmp_path / "pkg-1.0"
+    package.mkdir()
+    (package / "setup.py").write_text(
+        "from setuptools import setup\nsetup(name='pkg', version='1.0')\n", encoding="utf-8"
+    )
+    sdist = sdists / "pkg-1.0.tar.gz"
+    with tarfile.open(sdist, "w:gz") as archive:
+        archive.add(package, arcname="pkg-1.0")
+    argv = proof.build_build_argv(str(sdist), str(constraints), str(tmp_path / "deps"), str(wheels))
+    done = run_real_uv(argv, resolve.UV_BUILD_ENV, tmp_path)
+    assert_no_usage_error(done)
+    # the build started in isolation and asked for the pinned tool from the (empty) local folder
+    assert "setuptools==75.8.0" in done.stderr, done.stderr
+
+
+def test_the_proof_install_argv_and_environment_never_combine_only_binary_with_no_build():
+    argv = proof.build_install_argv("pyyaml==5.3.1")
+    assert "--only-binary" in argv and "--no-build" not in argv
+    assert "UV_NO_BUILD" not in resolve.UV_WHEELS_ENV
+    assert "UV_NO_BUILD" not in resolve.UV_BUILD_ENV
+    assert resolve.UV_BUILD_ENV["UV_OFFLINE"] == "1"
+    assert "--no-build" in resolve.UV_COMMON_FLAGS  # compile has no --only-binary
+    assert resolve.UV_ENV["UV_NO_BUILD"] == "1"

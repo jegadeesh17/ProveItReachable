@@ -50,11 +50,12 @@ UV_ENV: dict[str, str] = {
     "UV_NO_CONFIG": "1",
     "UV_PYTHON_DOWNLOADS": "never",
 }
-# `proof-build` (network OFF, ADR-0041): the same environment without UV_NO_BUILD, plus UV_OFFLINE.
-UV_BUILD_ENV: dict[str, str] = {
-    **{key: value for key, value in UV_ENV.items() if key != "UV_NO_BUILD"},
-    "UV_OFFLINE": "1",
-}
+# `proof-install` passes `--only-binary :all:`, which uv refuses to combine with `--no-build` (flag
+# or UV_NO_BUILD): "the argument '--only-binary' cannot be used with '--no-build'". It keeps only
+# `--only-binary :all:`, which already forbids every build, and drops the other.
+UV_WHEELS_ENV: dict[str, str] = {k: v for k, v in UV_ENV.items() if k != "UV_NO_BUILD"}
+# `proof-build` (network OFF, ADR-0041): the same environment, plus UV_OFFLINE.
+UV_BUILD_ENV: dict[str, str] = {**UV_WHEELS_ENV, "UV_OFFLINE": "1"}
 UV_COMMON_FLAGS: tuple[str, ...] = (
     "--python",
     UV_PYTHON,
@@ -64,6 +65,8 @@ UV_COMMON_FLAGS: tuple[str, ...] = (
     "--index-url",
     UV_INDEX_URL,
 )
+
+UV_WHEELS_COMMON_FLAGS: tuple[str, ...] = tuple(f for f in UV_COMMON_FLAGS if f != "--no-build")
 
 # `proof-build` drops --no-build and --index-url: the build is fed only by local wheels (ADR-0041).
 UV_BUILD_COMMON_FLAGS: tuple[str, ...] = (

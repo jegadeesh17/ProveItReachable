@@ -128,7 +128,7 @@ def build_install_argv(spec: str, deps_root: str = DEPS_ROOT) -> list[str]:
         ":all:",
         "--target",
         deps_root,
-        *resolve.UV_COMMON_FLAGS,
+        *resolve.UV_WHEELS_COMMON_FLAGS,
         "--",
         spec,
     ]
@@ -392,7 +392,7 @@ def proof_install_command(
             done = run(
                 build_install_argv(spec, deps_root),
                 cwd=uvwd,
-                env=dict(resolve.UV_ENV),
+                env=dict(resolve.UV_WHEELS_ENV),
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
