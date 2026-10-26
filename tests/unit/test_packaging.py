@@ -1,6 +1,7 @@
 """Packaging and delivery checks: hashed lock, Docker inputs, Sandbox digest, wheel, docs.
 
-ADR-0030 and finding 10 (SECURITY_REVIEW), ADR-0033, AC-39, NFR-08. The fast checks read files
+ADR-0030, ARCHITECTURE section 18 (with the SECURITY_REVIEW round 1 test cases to carry),
+ADR-0033, ADR-0036, AC-39, NFR-08. The fast checks read files
 only. The wheel test builds one in a temporary copy of the project (slow).
 """
 
@@ -39,6 +40,7 @@ ALLOWED_COPY_SOURCES = {
     "src",
     "web",
     "demo",
+    "eval/results/latest.json",
 }
 
 
@@ -137,7 +139,7 @@ def test_adr0030_checker_rejects_a_line_that_is_not_a_pin():
         lock_entries("--index-url https://example.invalid/simple\n")
 
 
-# ADR-0030 and finding 10: the Dockerfile.
+# ADR-0030 and ARCHITECTURE section 18: the Dockerfile.
 
 
 def test_adr0030_dockerfile_base_is_pinned_by_sha256_digest():
@@ -154,7 +156,7 @@ def test_adr0030_dockerfile_installs_locked_hashes_before_the_project():
     assert lines.index(lock_install) < lines.index(project_install)
 
 
-def test_finding10_dockerfile_runs_as_uid_1000_and_serves_on_7860():
+def test_arch18_dockerfile_runs_as_uid_1000_and_serves_on_7860():
     lines = dockerfile_lines()
     users = [line for line in lines if line.startswith("USER ")]
     assert users and users[-1] == "USER 1000"
@@ -162,7 +164,7 @@ def test_finding10_dockerfile_runs_as_uid_1000_and_serves_on_7860():
     assert cmd == ['CMD ["python", "-m", "pir", "serve", "--host", "0.0.0.0", "--port", "7860"]']
 
 
-def test_finding10_dockerfile_copies_only_the_app_inputs():
+def test_arch18_dockerfile_copies_only_the_app_inputs():
     for line in dockerfile_lines():
         if not line.startswith("COPY "):
             continue
@@ -171,21 +173,21 @@ def test_finding10_dockerfile_copies_only_the_app_inputs():
         assert set(sources) <= ALLOWED_COPY_SOURCES, f"unexpected COPY source in: {line}"
 
 
-def test_finding10_checker_flags_a_copy_of_secrets_or_eval_results():
+def test_arch18_checker_flags_a_copy_of_secrets_or_eval_results():
     for line in ("COPY . .", "COPY .env ./", "COPY eval/results ./eval/results"):
         sources = line.split()[1:-1]
         assert not set(sources) <= ALLOWED_COPY_SOURCES
 
 
-def test_finding10_dockerfile_declares_no_secret_values():
+def test_arch18_dockerfile_declares_no_secret_values():
     text = DOCKERFILE.read_text(encoding="utf-8")
     assert re.search(r"(?im)^(ENV|ARG)\b.*(KEY|TOKEN|SECRET|PASSWORD)", text) is None
 
 
-# finding 10: .dockerignore.
+# ARCHITECTURE section 18 and SECURITY_REVIEW round 1 (test cases to carry): .dockerignore.
 
 
-def test_finding10_dockerignore_excludes_secrets_data_and_eval_results():
+def test_arch18_dockerignore_excludes_secrets_data_and_eval_results():
     patterns = dockerignore_patterns(DOCKERIGNORE.read_text(encoding="utf-8"))
     for entry in (".env", ".env.*", "!.env.example", "data/", "eval/results/", ".venv/", ".git/"):
         assert entry in patterns, entry
@@ -194,22 +196,48 @@ def test_finding10_dockerignore_excludes_secrets_data_and_eval_results():
         ".env.local",
         ".env.production",
         "data/spend_ledger.json",
-        "eval/results/latest.json",
+        "eval/results/latest.md",
+        "eval/results/2026-10-26T120000Z.json",
         ".venv/pyvenv.cfg",
         ".git/config",
     ):
         assert docker_excluded(path, patterns), path
 
 
-def test_finding10_dockerignore_keeps_example_and_app_inputs():
+def test_arch18_dockerignore_keeps_example_and_app_inputs():
     patterns = dockerignore_patterns(DOCKERIGNORE.read_text(encoding="utf-8"))
     for path in (".env.example", "src/pir/cli.py", "demo/replays/index.json", "web/index.html"):
         assert not docker_excluded(path, patterns), path
 
 
-def test_finding10_checker_flags_a_dockerignore_without_env_glob():
+def test_arch18_checker_flags_a_dockerignore_without_env_glob():
     patterns = dockerignore_patterns("data/\neval/results/\n")
     assert not docker_excluded(".env.local", patterns)
+
+
+# ADR-0036: the image ships exactly one file from eval/results/, latest.json.
+
+
+def test_adr0036_dockerignore_reincludes_only_latest_json():
+    patterns = dockerignore_patterns(DOCKERIGNORE.read_text(encoding="utf-8"))
+    reincludes = [entry for entry in patterns if entry.startswith("!eval/results/")]
+    assert reincludes == ["!eval/results/latest.json"]
+    assert patterns.index("!eval/results/latest.json") == patterns.index("eval/results/") + 1
+    assert not docker_excluded("eval/results/latest.json", patterns)
+    for path in (
+        "eval/results/latest.md",
+        "eval/results/2026-10-26T120000Z.json",
+        "eval/results/sub/latest.json",
+    ):
+        assert docker_excluded(path, patterns), path
+
+
+def test_adr0036_dockerfile_copies_only_latest_json_from_eval():
+    lines = dockerfile_lines()
+    eval_copies = [line for line in lines if line.startswith("COPY ") and "eval" in line]
+    assert eval_copies == ["COPY eval/results/latest.json ./eval/results/latest.json"]
+    assert "eval/results/latest.md" not in ALLOWED_COPY_SOURCES
+    assert lines.index("COPY demo ./demo") < lines.index(eval_copies[0]) < lines.index("USER 1000")
 
 
 # ADR-0033: the Sandbox base image keeps its digest; the fingerprint names the same image.

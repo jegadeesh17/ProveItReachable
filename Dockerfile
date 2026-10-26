@@ -20,6 +20,9 @@ RUN pip install --no-cache-dir --no-deps .
 COPY web ./web
 COPY demo ./demo
 
+# The one file from eval/results/ that ships: the published eval summary (ADR-0036).
+COPY eval/results/latest.json ./eval/results/latest.json
+
 RUN mkdir -p /app/data && chown 1000:1000 /app/data
 
 USER 1000

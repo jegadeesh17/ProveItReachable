@@ -44,3 +44,14 @@ A running log of friction and wins with Nebius Token Factory, Sandboxes and Nemo
 | Base image for the Space | Verified | `python:3.13-slim` index digest `sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962` (Docker Hub registry API and `docker buildx imagetools inspect`, same value). |
 | Dependency lock | Generated | `uv pip compile pyproject.toml --universal --generate-hashes --python-version 3.13` (uv 0.13.5) wrote `requirements.lock` with a hash on every locked file. |
 | Docker on the build machine | Not run | Docker CLI present; daemon not running, so the image build and loopback run are pending (see `docs/DEPLOYMENT.md`, section 2). |
+
+## Deploy facts (2026-10-26, M2-TASK-08 part B, attempt 1: blocked)
+
+| Check | Result | Facts for the deploy |
+|---|---|---|
+| Hugging Face Docker Space, free tier | **Blocked (HTTP 402)** | `create_repo(..., space_sdk="docker", private=True)` returned 402: "Static Spaces are free for everyone, but hosting Gradio and Docker Spaces on free cpu-basic requires a PRO subscription." The account has `isPro: false`. ARCHITECTURE section 18 assumed $0 hosting, which no longer holds for a Docker Space. Decision needed: PRO or another host (DEPLOYMENT.md, section 3). |
+| HF token | Write | `whoami()` reports `auth.type` `access_token` and `auth.accessToken.role` `write`. The token is not fine-grained, so there is no per-repo scope list to check. |
+| Ledger dataset | Created, private | `create_repo(repo_type="dataset", private=True)` created `jegadeesh17/pir-spend-ledger`; `repo_info` reports `private: true`. |
+| HF ledger live gate | Pass | `tests/live/test_live_hf_ledger.py`: 2 passed on the real dataset (6.84 s). A commit on a stale parent is rejected. |
+| Local settings | Needs a change | `.env` sets `SPEND_LEDGER_HF_REPO` but not `SPEND_LEDGER_BACKEND`. `Settings` refuses to load (the backend defaults to `file`, which is refused while the HF repo is set). Set `SPEND_LEDGER_BACKEND=hf_dataset` in the local env file. |
+| Pydantic `ValidationError` output | Pitfall | A `ValidationError` from `Settings()` echoes the input values, so secrets can appear in output. Catch it and print the field names only, as `_ledger_set_caps` in `src/pir/cli.py` already does. |
