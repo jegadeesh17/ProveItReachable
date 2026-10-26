@@ -52,9 +52,67 @@ source = "github:Mambix/co2tools@9f4a255d399cc1f7202330ecfa3185fc0cd5894e"
 [[repo]]
 id = "pyrl"
 source = "github:chaovven/PyRL@edbf80db8edb9a40e91f3d97cecc93d4f3133d0c"
+[[repo]]
+id = "yaml-multi-hop"
+source = "local:eval/fixtures/yaml_multi_hop"
+
+[[repo]]
+id = "yaml-class-method"
+source = "local:eval/fixtures/yaml_class_method"
+
+[[repo]]
+id = "yaml-decorator-wrapped"
+source = "local:eval/fixtures/yaml_decorator_wrapped"
+
+[[repo]]
+id = "yaml-init-reexport"
+source = "local:eval/fixtures/yaml_init_reexport"
+
+[[repo]]
+id = "yaml-conditional-import"
+source = "local:eval/fixtures/yaml_conditional_import"
+
+[[repo]]
+id = "jinja2-direct"
+source = "local:eval/fixtures/jinja2_direct"
+
+[[repo]]
+id = "urllib3-direct"
+source = "local:eval/fixtures/urllib3_direct"
+
+[[repo]]
+id = "yaml-test-only"
+source = "local:eval/fixtures/yaml_test_only"
+
+[[repo]]
+id = "yaml-string-only"
+source = "local:eval/fixtures/yaml_string_only"
+
+[[repo]]
+id = "yaml-dead-code"
+source = "local:eval/fixtures/yaml_dead_code"
+
+[[repo]]
+id = "jinja2-escape-only"
+source = "local:eval/fixtures/jinja2_escape_only"
+
+[[repo]]
+id = "urllib3-unused"
+source = "local:eval/fixtures/urllib3_unused"
+
+[[repo]]
+id = "yaml-dynamic-import"
+source = "local:eval/fixtures/yaml_dynamic_import"
+
+[[repo]]
+id = "jinja2-dynamic"
+source = "local:eval/fixtures/jinja2_dynamic"
+
+[[repo]]
+id = "planesweeppose"
+source = "github:jiahaoLjh/PlaneSweepPose@35d8bc32155dc0488c0a8b37de1afa8a5069117e"
 
 # ---- likely reachable ------------------------------------------------------------------------
-
 [[case]]
 id = "yaml-direct-call"
 repo = "yaml-direct"
@@ -110,9 +168,71 @@ package = "pyyaml"
 advisory = "GHSA-6757-jp84-gxfx"
 label = "likely reachable"
 rationale = "Same yaml.load(f) call in main.py; FullLoader in PyYAML 5.3 is the vulnerable loader."
+[[case]]
+id = "yaml-multi-hop"
+repo = "yaml-multi-hop"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "likely reachable"
+rationale = "4-hop chain: main -> step_one -> step_two -> step_three -> step_four -> yaml.full_load."
+
+[[case]]
+id = "yaml-class-method"
+repo = "yaml-class-method"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "likely reachable"
+rationale = "ConfigLoader.load instance method calls yaml.full_load."
+
+[[case]]
+id = "yaml-decorator-wrapped"
+repo = "yaml-decorator-wrapped"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "likely reachable"
+rationale = "timed decorator wraps parse_payload which invokes yaml.full_load."
+
+[[case]]
+id = "yaml-init-reexport"
+repo = "yaml-init-reexport"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "likely reachable"
+rationale = "pkg/__init__.py re-exports parse_yaml from pkg.sub; app.py calls parse_yaml."
+
+[[case]]
+id = "yaml-conditional-import"
+repo = "yaml-conditional-import"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "likely reachable"
+rationale = "yaml is imported under Python 3.8+ branch and load_data calls yaml.full_load."
+
+[[case]]
+id = "jinja2-env-from-string"
+repo = "jinja2-direct"
+package = "jinja2"
+advisory = "GHSA-g3rq-g295-48cu"
+label = "likely reachable"
+rationale = "render_template calls jinja2.Environment().from_string().render()."
+
+[[case]]
+id = "urllib3-pool-request"
+repo = "urllib3-direct"
+package = "urllib3"
+advisory = "GHSA-34jh-p97f-mpxf"
+label = "likely reachable"
+rationale = "fetch_url creates PoolManager and calls request directly."
+
+[[case]]
+id = "planesweeppose-yaml-load"
+repo = "planesweeppose"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "likely reachable"
+rationale = "PlaneSweepPose eval/train scripts call yaml.load without Loader (implies FullLoader in PyYAML 5.3)."
 
 # ---- no reachable path detected --------------------------------------------------------------
-
 [[case]]
 id = "yaml-imported-never-called"
 repo = "yaml-import-unused"
@@ -144,9 +264,47 @@ package = "pyyaml"
 advisory = "GHSA-8q59-q68h-6hv4"
 label = "no reachable path detected"
 rationale = "co2tools calls yaml.load(f, Loader=SafeLoader); the advisory needs full_load or FullLoader."
+[[case]]
+id = "yaml-test-only"
+repo = "yaml-test-only"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "no reachable path detected"
+rationale = "yaml.full_load is only imported and called in tests/test_config.py, not in app code."
+
+[[case]]
+id = "yaml-string-mention-only"
+repo = "yaml-string-only"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "no reachable path detected"
+rationale = "yaml.full_load appears solely in string constants and print messages; never imported."
+
+[[case]]
+id = "yaml-dead-code-if-false"
+repo = "yaml-dead-code"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "no reachable path detected"
+rationale = "yaml.full_load call is in dead code behind if False; no entry reaches it."
+
+[[case]]
+id = "jinja2-escape-only"
+repo = "jinja2-escape-only"
+package = "jinja2"
+advisory = "GHSA-g3rq-g295-48cu"
+label = "no reachable path detected"
+rationale = "Only jinja2.escape is used; template rendering / SandboxedEnvironment is never called."
+
+[[case]]
+id = "urllib3-unused-internals"
+repo = "urllib3-unused"
+package = "urllib3"
+advisory = "GHSA-q2x7-8rv6-6q7h"
+label = "no reachable path detected"
+rationale = "Repository only imports HTTPError from urllib3.exceptions; never calls parse_url."
 
 # ---- uncertain -------------------------------------------------------------------------------
-
 [[case]]
 id = "yaml-dynamic-getattr"
 repo = "yaml-dynamic"
@@ -170,3 +328,26 @@ package = "wheel"
 advisory = "GHSA-qwmp-2cf2-g9g6"
 label = "uncertain"
 rationale = "The ReDoS advisory points at the wheel CLI file-name regex, not a callable API."
+[[case]]
+id = "yaml-importlib-dynamic"
+repo = "yaml-dynamic-import"
+package = "pyyaml"
+advisory = "GHSA-8q59-q68h-6hv4"
+label = "uncertain"
+rationale = "Module is imported dynamically via importlib.import_module; static analysis cannot trace."
+
+[[case]]
+id = "jinja2-custom-loader-dynamic"
+repo = "jinja2-dynamic"
+package = "jinja2"
+advisory = "GHSA-g3rq-g295-48cu"
+label = "uncertain"
+rationale = "Template engine dispatch is resolved via runtime environment variable lookup."
+
+[[case]]
+id = "planesweeppose-torch-unpack"
+repo = "planesweeppose"
+package = "torch"
+advisory = "GHSA-vgrw-7cvw-pwgx"
+label = "uncertain"
+rationale = "Broad PyTorch memory corruption advisory (unpack_sequence/jit) with indirect framework use."
