@@ -1014,6 +1014,9 @@ body[data-phase="report"] .track-panel {
 }
 .stage__tool {
   grid-area: tool;
+  /* The chip arrives with the step's last event. Its slot is held open at the chip's height
+     (line + padding + border), so a row never grows when it lands. */
+  min-height: calc(1.4 * var(--fs-xs) + 2 * var(--sp-1) + 2px);
 }
 .stage__msg {
   grid-area: msg;
@@ -1089,6 +1092,9 @@ body[data-phase="report"] .track-panel {
   .stage__tool {
     padding-top: var(--sp-1);
   }
+  .stage__tool {
+    min-height: calc(1.4 * var(--fs-xs) + 3 * var(--sp-1) + 2px);
+  }
   .stage__msg {
     padding-top: var(--sp-1);
   }
@@ -1104,6 +1110,7 @@ body[data-phase="report"] .track-panel {
 
 .report {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-6);
   margin-top: var(--sp-5);
 }
@@ -1412,6 +1419,8 @@ body[data-phase="report"] .track-panel {
   grid-column: 1;
 }
 .finding__body {
+  min-width: 0;
+  overflow-wrap: anywhere; /* advisory and model text is untrusted and unbounded: it wraps, it never clips */
   padding: var(--sp-5) var(--sp-4);
   border-top: 1px solid var(--line);
   background: var(--surface);
@@ -1462,6 +1471,7 @@ body[data-phase="report"] .track-panel {
 /* evidence */
 .evidence {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-5) var(--sp-6);
 }
 .block-title {
@@ -1588,6 +1598,7 @@ body[data-phase="report"] .track-panel {
 }
 .links li {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-1);
   padding-block: var(--sp-3);
   border-top: 1px solid var(--line);
@@ -1633,6 +1644,7 @@ body[data-phase="report"] .track-panel {
 }
 .kv {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-2);
   margin-top: var(--sp-4);
   padding-top: var(--sp-4);
@@ -1641,6 +1653,7 @@ body[data-phase="report"] .track-panel {
 }
 .kv > div {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-1) var(--sp-4);
 }
 .kv dt {
@@ -1677,6 +1690,7 @@ body[data-phase="report"] .track-panel {
 /* assessment */
 .assessment {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-4) var(--sp-6);
   margin-top: var(--sp-5);
   padding: var(--sp-4) var(--sp-5);

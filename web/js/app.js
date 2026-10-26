@@ -447,13 +447,15 @@ function renderLimits(config) {
       text: `Live scans take minutes. Each visitor can start ${perHour} per hour and ${perDay} per day, and live scans stop when the spend limit is reached. Demo replays do not count toward these limits.`,
     }),
   );
-  // An accuracy figure appears only when the API provides a scored eval run, with what it was measured on.
+  // A figure appears only when the API provides a scored eval run. It is precision over the model's own
+  // "likely reachable" calls, so the wording says so; the contract carries no count of those calls, so none is shown.
   if (config.eval) {
     const e = config.eval;
+    const percent = Math.floor(e.precision * 100 + 1e-9); // rounded down: a figure is never rounded up to 100
     dom.limits.append(
       el("p", {
         class: "eval-figure",
-        text: `Precision of \u201clikely reachable\u201d verdicts: ${Math.round(e.precision * 100)}%, measured on ${e.n} labelled cases (run ${formatDate(e.run_date)}, model ${e.model}).`,
+        text: `Likely-reachable precision ${percent}%: the share of cases the model called likely reachable that were labelled reachable. Scored on ${e.n} labelled cases, run ${formatDate(e.run_date)}, model ${e.model}. This is not overall accuracy.`,
       }),
     );
   }
