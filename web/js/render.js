@@ -778,8 +778,8 @@ function renderEvidence(f, proofCtl) {
     );
   }
 
-  if (proofCtl && f.verdict === "likely reachable" && f.call_path && f.call_path.length) evidence.append(proofBlock(f, proofCtl));
-  else if (f.proof) evidence.append(renderProof(f.proof));
+  if (f.proof) evidence.append(renderProof(f.proof));
+  else if (proofCtl && f.verdict === "likely reachable" && f.call_path && f.call_path.length) evidence.append(proofBlock(f, proofCtl));
 
   if (f.kind === "advisory") {
     evidence.append(
@@ -879,7 +879,6 @@ function renderFinding(f, proofCtl) {
       { class: "cell" },
       flag(f.verdict),
       f.verdict === "uncertain" && f.reason_code && el("span", { class: "cell__sub", text: `Reason: ${REASON_LABEL[f.reason_code] || f.reason_code}` }),
-      f.proof && f.proof.status === "proven" && el("span", { class: "cell__sub cell__sub--proven", text: "proven in Token Factory Sandbox" }),
     ),
     cell("Package", el("span", { class: "pkg", text: f.package }), " ", el("span", { class: "ver", text: f.version })),
     cell(

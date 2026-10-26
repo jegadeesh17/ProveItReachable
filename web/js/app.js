@@ -452,8 +452,8 @@ async function runProof(finding) {
   return proved.proof;
 }
 
-/** The proof controls exist only when the backend says the feature is on (AC-65) and not in replay mode (ADR-0042). */
-const proofControl = () => (state.config.features.proof && state.run?.kind !== "replay" ? { run: runProof } : null);
+/** The proof controls exist only when the backend says the feature is on (AC-65). */
+const proofControl = () => (state.config.features.proof ? { run: runProof } : null);
 
 
 /* ----------------------------------------------------------------- report */
