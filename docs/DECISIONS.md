@@ -35,7 +35,7 @@ Each significant technical decision for ProveItReachable, with its reasons, the 
 | [ADR-0029](#adr-0029-one-spend-ledger-for-every-spender-with-allowances-and-a-daily-ceiling) | One spend ledger for every spender, with allowances and a daily ceiling | Accepted | 2026-10-25 |
 | [ADR-0030](#adr-0030-images-pinned-by-digest-and-hash-checked-installs) | Images pinned by digest and hash-checked installs | Accepted, amended by ADR-0033 (Sandbox image); image contents partly superseded by ADR-0036 (`eval/results/latest.json`) | 2026-10-25 |
 | [ADR-0031](#adr-0031-tavily-research-with-exact-source-urls-and-a-7-day-cache) | Tavily research with exact source URLs and a 7-day cache | Accepted | 2026-10-25 |
-| [ADR-0032](#adr-0032-no-repository-file-influences-a-network-on-step) | No repository file influences a network-on step | Accepted | 2026-10-25 |
+| [ADR-0032](#adr-0032-no-repository-file-influences-a-network-on-step) | No repository file influences a network-on step | Accepted, amended by ADR-0041 (proof-install also downloads source packages as files) | 2026-10-25 |
 | [ADR-0033](#adr-0033-sandbox-base-image-imported-by-version-tag-and-checked-against-a-reviewed-fingerprint) | Sandbox base image imported by version tag and checked against a reviewed fingerprint | Accepted (amended 2026-10-25: measured on GitHub Actions) | 2026-10-25 |
 | [ADR-0034](#adr-0034-sandbox-contract-corrections-from-the-live-platform-checks) | Sandbox contract corrections from the live platform checks | Accepted | 2026-10-25 |
 | [ADR-0035](#adr-0035-fixed-prompt-token-overhead-in-the-llm-spend-hold) | Fixed prompt-token overhead in the LLM spend hold | Accepted | 2026-10-25 |
@@ -44,6 +44,7 @@ Each significant technical decision for ProveItReachable, with its reasons, the 
 | [ADR-0038](#adr-0038-a-langsmith-run-per-pipeline-step-finding-and-tool-call) | A LangSmith run per pipeline step, finding and tool call | Accepted | 2026-10-26 |
 | [ADR-0039](#adr-0039-call-chain-proof-runs-main-block-entries-as-scripts-and-stubs-the-call-the-repository-makes) | Call-chain proof runs main-block entries as scripts and stubs the call the repository makes | Accepted | 2026-10-26 |
 | [ADR-0040](#adr-0040-host-the-demo-on-google-cloud-run-with-hard-cost-guards) | Host the demo on Google Cloud Run with hard cost guards | Accepted | 2026-10-26 |
+| [ADR-0041](#adr-0041-proof-dependencies-without-a-wheel-are-downloaded-with-the-network-on-and-built-with-it-off) | Proof dependencies without a wheel are downloaded with the network on and built with it off | Accepted | 2026-10-26 |
 
 ## ADR-0001: Python and FastAPI service with typed schemas
 
@@ -1052,6 +1053,8 @@ The eval miss `yaml-dynamic-getattr` has a third cause (the loader is chosen by 
 
 PyRL's `yaml.load(f)` is found for both PyYAML advisories, so a demo can show "likely reachable" with a real call path. Repositories laid out like PlaneSweepPose get call paths through their own helper modules, at medium confidence at most. The index model gains two optional fields; the ast tool is built per finding with the package and version; the verdict check uses the shared matcher. The three demo replays and the published eval result must be re-recorded to show the change. New library defaults need a new reviewed table row with a test. A wrong suffix link could in principle create a false path; it is limited by the conditions above, flagged as heuristic, and guarded by a golden-index test showing that the eval fixtures and the canary are indexed exactly as before.
 
+Note (2026-10-26): the reasoning prompt now tells the model that a call-site item with an `implied_by` field is a use of the vulnerable symbol through a library default (on PyYAML 5.1 to 5.4, `yaml.load(f)` without a `Loader` uses `yaml.FullLoader`), so it can copy such a path into a "likely reachable" verdict (commit c5c5d65; how research names the symbols is in [ARCHITECTURE.md](ARCHITECTURE.md) section 7.4).
+
 ## ADR-0038: A LangSmith run per pipeline step, finding and tool call
 
 Date: 2026-10-26
@@ -1170,3 +1173,66 @@ The user approved the move on 2026-10-26, verbatim: "I approve: create a GCP pro
 - **The public address** becomes Cloud Run's `run.app` URL. The keepalive variable and the README use it from the go-public task on.
 - **Re-planned tasks:** M2-TASK-08 part B rewrites the deploy steps and checks for Cloud Run. M2-TASK-11 makes the service public by granting public invoke access instead of changing a Space's visibility.
 - No new Python dependency. Details are in [ARCHITECTURE.md](ARCHITECTURE.md) section 18.
+
+## ADR-0041: Proof dependencies without a wheel are downloaded with the network on and built with it off
+
+Date: 2026-10-26
+Status: Accepted (amends ADR-0032 for `proof-install`; ADR-0018 and ADR-0039 otherwise unchanged)
+
+### Context
+
+The call-chain proof ([ADR-0039](#adr-0039-call-chain-proof-runs-main-block-entries-as-scripts-and-stubs-the-call-the-repository-makes), M2-TASK-09, commit 977e4b7) installs the repository's pinned dependencies only from ready-made packages ("wheels"). This happens in the `proof-install` step, which has internet access. A dependency that is published only as source code is skipped, and the proof says "not proven: no wheel".
+
+Every demo finding is on PyYAML 5.3.1. On PyPI (checked 2026-10-26) that release has only Windows wheels and a source package, `PyYAML-5.3.1.tar.gz`. It has no wheel for Linux, which is what the Sandbox runs (Python 3.13). So every demo proof ends "not proven: no wheel", and the proof cannot show its value on the demos the user wants to present.
+
+Building a source package means running its build script. That script is third-party code. The project's safety rule ([ADR-0032](#adr-0032-no-repository-file-influences-a-network-on-step)) is that nothing like it may run while the Sandbox has internet access, because that access is unrestricted. But the proof's last step, `proof-run`, already runs the repository's own untrusted code with the network off, with these same dependencies loaded. Running a dependency's build script under exactly those conditions exposes nothing new. The user approved this direction on 2026-10-26.
+
+### Decision
+
+Split the work into a download phase with the network on and a build phase with the network off. The exact contract is in [ARCHITECTURE.md](ARCHITECTURE.md) section 16.
+
+- **Phase 1: download, network on, no package code runs. This stays inside `proof-install`, with no new network-on step.**
+  - Wheels are installed exactly as before.
+  - For each pin without a wheel, our own agent code (not pip or uv) reads PyPI's JSON page for that exact name and version. It takes the source package's address and its published sha256 checksum, and downloads the file from `files.pythonhosted.org` with a 20 MiB cap per file, a 50 MiB cap in total and at most 10 files. It checks the checksum and saves the file. The file is never unpacked or opened, so no metadata step runs.
+  - When at least one source package was saved, the agent also downloads two fixed build tools: `setuptools` 75.8.0 and `wheel` 0.45.1, as wheels. Each must match both PyPI's checksum and a checksum committed in our agent's code.
+  - Downloads share the existing 300-second limit of `proof-install`.
+- **Phase 2: build, network off, in a new step `proof-build`.**
+  - The step starts from the image `proof-install` saved. It re-checks every file and checksum, then runs `uv pip install --no-deps --target /work/deps --offline --no-index --find-links /work/buildwheels --build-constraints <file>`, plus the usual fixed interpreter and no-configuration flags, on each local file.
+  - Each run uses a fresh empty working folder and the fixed environment, the same as `proof-install`.
+  - uv builds in a temporary environment made only from the two local build-tool wheels. Anything else a package needs to build fails the build; nothing is fetched.
+  - Limits: 120 seconds per package, 270 seconds in total, inside a 300-second step limit.
+  - The build's output is never read or logged.
+  - The resulting image is saved, and `proof-run` runs from it.
+- **New rule:** no network-on step ever runs from an image that a build or repository code has touched.
+- **Failures are stated results:**
+  - a source package that cannot be downloaded: "uncertain: no wheel for <name>==<version>; its source package could not be downloaded";
+  - a failed or timed-out build: "uncertain: could not build <name> <version> from source".
+  - Both are "not proven", `proof-run` is skipped, and the verdict never changes.
+- **Audit of the changed and new steps**, in the same form as ADR-0032:
+
+| Step | Network | Working folder | Configuration | Interpreter | Environment and inputs |
+|---|---|---|---|---|---|
+| `proof-install` (uv for wheels; agent's own HTTP for source packages) | ON | fresh empty `/tmp/uvwd` | `--no-config`, `--no-sources` | `--python /usr/local/bin/python3.13`, no downloads | as ADR-0032 for wheels; source packages fetched only from `pypi.org` JSON and `files.pythonhosted.org`, no redirects, checksum-checked, written with exclusive create into fresh `/work/sdists/`, never opened; two build-tool wheels pinned by checksum into fresh `/work/buildwheels/` |
+| `proof-build` (uv, builds) | OFF | fresh empty `/tmp/uvbuild-<i>` per package | `--no-config`, `--no-sources` | `--python /usr/local/bin/python3.13`, no downloads | fixed set without `UV_NO_BUILD`, plus `UV_OFFLINE=1`; `--offline --no-index --find-links /work/buildwheels --build-constraints /tmp/pirbuild/build-constraints.txt`; input only re-checked files under `/work/sdists/`; target `/work/deps`; output discarded |
+
+### Alternatives considered
+
+- **Build with the network on** (drop `--no-build`): a dependency's build script would run with unrestricted internet access on the owner's account. This breaks the core safety rule.
+- **Download with `pip download` or uv's resolver:** both can prepare a source package's metadata, which may run its `setup.py`, while the network is on. The agent's own download from the JSON page provably runs nothing.
+- **A separate network-on step just for downloads:** one more internet-facing step to audit, with no safety gain, because `proof-install` already fetches from PyPI under the same rules.
+- **Let the build fetch its build tools from PyPI:** this needs the network during the build. Fetching two fixed, checksum-pinned wheels beforehand keeps the build offline and repeatable.
+- **Disable build isolation and pre-install the build tools into the image:** this changes the base image, which means a new fingerprint and re-running every live gate. Isolation fed from local wheels needs no image change.
+- **Add a Linux wheel of PyYAML 5.3.1 that we build ourselves:** we would be shipping a modified dependency, and it would only help this one package.
+- **Prove the demos on a newer PyYAML that has wheels:** the proof would no longer be about the version the repository pins.
+
+### Consequences
+
+- The demo proofs on PyYAML 5.3.1 can reach "proven".
+- Other source-only dependencies work if they build with `setuptools` and `wheel` alone and without a C compiler. The slim base image is expected to have none, so a C extension is skipped where the package allows it, as PyYAML does. Others fail with a clear "could not build" reason.
+- A worst-case proof now takes up to 960 seconds of Sandbox operations. That is inside Cloud Run's 1,200-second request limit. The largest single spend hold is $0.30, inside the $0.75 per-scan budget.
+- New code: the `proof-build` agent command, a `TIMEOUT_PROOF_BUILD_S` setting (default 300), the two checksum constants and a client method. No new Python dependency, no base-image change, and the agent protocol version stays 1.
+- AC-66 and AC-68 in [SPEC](SPEC.md) need new wording, because a dependency without a wheel is now built offline instead of skipped.
+- One live check (`test_proof_build_pyyaml_sdist_offline`, about $0.30 of promo credit) must show PyYAML 5.3.1 building on the Sandbox's Python 3.13 with the network off, and a main-block proof reaching "proven".
+- **If PyYAML 5.3.1 does not build on Python 3.13** (for example, its `setup.py` imports `distutils`, which Python 3.13 no longer ships; setuptools normally supplies a replacement, but that is unverified here):
+  - The fallback is a reviewed per-package "copy the pure-Python source" row: for PyYAML 5.x, copy `lib3/yaml/` from the archive into `/work/deps/yaml` with the network off, and run nothing.
+  - Trade-off: it is safer, because no build code runs, but it covers only packages someone has reviewed and installs no package metadata. That fallback needs its own ADR before it is built.
