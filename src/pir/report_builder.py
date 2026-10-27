@@ -7,7 +7,9 @@ the rules below, and every output is validated by the strict models.
 from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
+from pir.fix_commit import _COMMIT_URL_RE
 from pir.models import VERDICTS, Confidence, ReasonCode, Severity, Verdict
 from pir.models.index import AnalysisIndex, TargetSite
 from pir.models.reasoning import ModelVerdict, ReasoningOutcome
@@ -22,6 +24,7 @@ from pir.models.report import (
     CallPathStep,
     Dependency,
     Finding,
+    Remediation,
     RepoRef,
     ReportSummary,
     Resolution,
@@ -222,6 +225,65 @@ def _contradicting_site(
     return None
 
 
+def _parse_version(v: str) -> Any:
+    try:
+        from packaging.version import Version
+
+        return Version(v)
+    except Exception:
+        return None
+
+
+def compute_remediation(
+    candidate: Candidate, links: Iterable[AdvisoryLink] = ()
+) -> Remediation | None:
+    """Deterministic finding remediation guidance (ADR-0044, AC-85)."""
+    if candidate.advisory is None:
+        return None
+    pkg = candidate.package
+    if candidate.advisory.fixed_versions:
+        cand_v = _parse_version(candidate.version)
+        greater: list[tuple[Any, str]] = []
+        if cand_v is not None:
+            for fv in candidate.advisory.fixed_versions:
+                parsed = _parse_version(fv)
+                if parsed is not None and parsed > cand_v:
+                    greater.append((parsed, fv))
+        if greater:
+            target_version = min(greater, key=lambda pair: pair[0])[1]
+        else:
+            target_version = candidate.advisory.fixed_versions[0]
+        return Remediation(
+            package=pkg,
+            target_version=target_version,
+            guidance=f"Upgrade {pkg} to version {target_version} or newer.",
+        )
+
+    all_links = list(links)
+    fix_commit_link = next(
+        (
+            link
+            for link in all_links
+            if link.source == "osv"
+            and (
+                (link.title and "fix commit" in link.title.lower())
+                or bool(_COMMIT_URL_RE.match(link.url))
+                or "/commit/" in link.url
+            )
+        ),
+        None,
+    )
+    if fix_commit_link is not None:
+        guidance = (
+            f"No fixed version is published. Inspect the fix commit at {fix_commit_link.url} "
+            "for remediation guidance."
+        )
+        return Remediation(package=pkg, target_version=None, guidance=guidance)
+
+    guidance = f"No fixed version is published for {pkg}."
+    return Remediation(package=pkg, target_version=None, guidance=guidance)
+
+
 @dataclass(frozen=True)
 class _Base:
     """What every finding of one candidate shares."""
@@ -241,9 +303,12 @@ class _Base:
         call_path: list[CallPathStep] | None = None,
         reason_code: ReasonCode | None = None,
         reason: str | None = None,
+        remediation: Remediation | None = None,
     ) -> Finding:
         cand = self.candidate
         advisory = cand.advisory
+        if remediation is None and advisory is not None:
+            remediation = compute_remediation(cand, self.links)
         return Finding(
             finding_id=compute_finding_id(
                 cand.package, cand.version, advisory.id if advisory else None
@@ -262,6 +327,7 @@ class _Base:
             limitations=limitations,
             reason_code=reason_code,
             reason=reason,
+            remediation=remediation,
         )
 
     def uncertain(

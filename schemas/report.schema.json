@@ -373,6 +373,17 @@
           ],
           "title": "Reason Code"
         },
+        "remediation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Remediation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "source_locations": {
           "items": {
             "$ref": "#/$defs/SourceLocation"
@@ -473,6 +484,37 @@
         "recorded_call"
       ],
       "title": "Proof",
+      "type": "object"
+    },
+    "Remediation": {
+      "additionalProperties": false,
+      "properties": {
+        "guidance": {
+          "title": "Guidance",
+          "type": "string"
+        },
+        "package": {
+          "title": "Package",
+          "type": "string"
+        },
+        "target_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Target Version"
+        }
+      },
+      "required": [
+        "package",
+        "target_version",
+        "guidance"
+      ],
+      "title": "Remediation",
       "type": "object"
     },
     "RepoRef": {

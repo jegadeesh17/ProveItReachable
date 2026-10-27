@@ -3,7 +3,7 @@
 import hashlib
 import re
 from datetime import datetime, timedelta
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 
 from pydantic import Field, field_validator, model_validator
 
@@ -260,6 +260,29 @@ class Proof(Strict):  # M2, cuttable
     recorded_call: str | None
 
 
+class Remediation(Strict):  # ADR-0044: deterministic upgrade guidance
+    package: str
+    target_version: str | None
+    guidance: str
+
+    def __init__(
+        self,
+        package: str,
+        target_version: str | None = None,
+        guidance: str | None = None,
+        **data: Any,
+    ) -> None:
+        if "guidance" in data:
+            guidance = data.pop("guidance")
+        if "package" in data:
+            package = data.pop("package")
+        if "target_version" in data:
+            target_version = data.pop("target_version")
+        if guidance is None:
+            raise TypeError("missing required argument: 'guidance'")
+        super().__init__(package=package, target_version=target_version, guidance=guidance, **data)
+
+
 class Finding(Strict):
     finding_id: str
     kind: Literal["advisory", "not_checked"]
@@ -277,6 +300,7 @@ class Finding(Strict):
     reason_code: ReasonCode | None
     reason: str | None
     proof: Proof | None = None
+    remediation: Remediation | None = None
 
     @model_validator(mode="after")
     def _check(self) -> "Finding":
@@ -287,6 +311,8 @@ class Finding(Strict):
         advisory_id = self.advisory.id if self.advisory else None
         if self.finding_id != compute_finding_id(self.package, self.version, advisory_id):
             raise ValueError("finding_id does not match package, version and advisory")
+        if self.remediation is not None and self.remediation.package != self.package:
+            raise ValueError("remediation package does not match finding package")
         self._check_kind()
         self._check_verdict()
         return self
@@ -300,8 +326,8 @@ class Finding(Strict):
             urls = {link.url for link in self.advisory_links}
             if not set(self.vulnerable_symbol.evidence_urls) <= urls:
                 raise ValueError("evidence_urls must be a subset of the advisory link urls")
-        elif self.advisory or self.vulnerable_symbol or self.advisory_links:
-            raise ValueError("a not_checked finding has no advisory, symbol or links")
+        elif self.advisory or self.vulnerable_symbol or self.advisory_links or self.remediation:
+            raise ValueError("a not_checked finding has no advisory, symbol, links or remediation")
 
     def _check_verdict(self) -> None:
         if self.verdict == "likely reachable":

@@ -15,10 +15,13 @@ from pir.models.report import (
     AdvisoryLink,
     CallPathStep,
     Dependency,
+    Finding,
+    Remediation,
     RepoRef,
     Resolution,
     SourceLocation,
     StepStatus,
+    compute_finding_id,
 )
 from pir.models.research import AdvisoryResearch
 from pir.reasoning.ast_tool import AstTool
@@ -27,6 +30,7 @@ from pir.report_builder import (
     ScanContext,
     build_finding,
     build_report,
+    compute_remediation,
     rank,
     step_tools,
 )
@@ -787,3 +791,123 @@ def test_ac80_no_path_answer_stands_when_only_loader_calls_exist():
     )
     f = build_finding(_cand(), _full_load_research(), no_path(), only_safe, seen_locations=set())
     assert f.verdict == "no reachable path detected"
+
+
+# ---- AC-85: deterministic finding remediation (ADR-0044) -----------------------------------
+
+
+def test_ac85_remediation_selects_lowest_fixed_version_greater_than_current():
+    adv = advisory()
+    adv_multi = adv.model_copy(update={"fixed_versions": ["5.4.1", "5.3.2", "6.0"]})
+    cand = candidate(with_advisory=True)
+    cand_multi = replace(cand, version="5.3.1", advisory=adv_multi)
+
+    rem = compute_remediation(cand_multi, cand.advisory_links)
+    assert rem is not None
+    assert rem.package == "pyyaml"
+    assert rem.target_version == "5.3.2"
+    assert rem.guidance == "Upgrade pyyaml to version 5.3.2 or newer."
+
+
+def test_ac85_remediation_falls_back_to_first_fixed_version_when_none_greater():
+    adv = advisory()
+    adv_older = adv.model_copy(update={"fixed_versions": ["5.2.0", "5.3.0"]})
+    cand = candidate(with_advisory=True)
+    cand_older = replace(cand, version="5.3.1", advisory=adv_older)
+
+    rem = compute_remediation(cand_older, cand.advisory_links)
+    assert rem is not None
+    assert rem.package == "pyyaml"
+    assert rem.target_version == "5.2.0"
+    assert rem.guidance == "Upgrade pyyaml to version 5.2.0 or newer."
+
+
+def test_ac85_remediation_with_osv_fix_commit_link_and_no_fixed_versions():
+    adv = advisory()
+    adv_unversioned = adv.model_copy(update={"fixed_versions": []})
+    fix_commit_url = "https://github.com/yaml/pyyaml/commit/abcdef1234567890abcdef1234567890abcdef12"
+    links = [
+        AdvisoryLink(url=fix_commit_url, source="osv", title="Fix commit"),
+        AdvisoryLink(url="https://example.com/docs", source="tavily", title="Docs"),
+    ]
+    cand = replace(candidate(with_advisory=True), advisory=adv_unversioned, advisory_links=links)
+
+    rem = compute_remediation(cand, links)
+    assert rem is not None
+    assert rem.package == "pyyaml"
+    assert rem.target_version is None
+    assert "Inspect the fix commit" in rem.guidance
+    assert fix_commit_url in rem.guidance
+
+
+def test_ac85_remediation_with_no_fixed_version_and_no_fix_commit():
+    adv = advisory()
+    adv_unfixed = adv.model_copy(update={"fixed_versions": []})
+    links = [
+        AdvisoryLink(url="https://osv.dev/vulnerability/GHSA-1234", source="osv", title="Advisory")
+    ]
+    cand = replace(candidate(with_advisory=True), advisory=adv_unfixed, advisory_links=links)
+
+    rem = compute_remediation(cand, links)
+    assert rem is not None
+    assert rem.package == "pyyaml"
+    assert rem.target_version is None
+    assert "No fixed version is published" in rem.guidance
+
+
+def test_ac85_remediation_attached_to_built_finding():
+    f = build_finding(
+        candidate(with_advisory=True), research(), outcome(), index(), seen_locations=SEEN
+    )
+    assert f.remediation is not None
+    assert f.remediation.package == "pyyaml"
+    assert f.remediation.target_version == "5.4"
+    assert f.remediation.guidance == "Upgrade pyyaml to version 5.4 or newer."
+
+
+def test_ac85_not_checked_finding_has_no_remediation():
+    f = build_finding(candidate(with_advisory=False), None, None, None)
+    assert f.remediation is None
+
+
+def test_ac85_remediation_validation_mismatched_package_raises():
+    rem = Remediation(package="requests", target_version="2.32.0", guidance="Upgrade requests")
+    adv = advisory()
+    fid = compute_finding_id("pyyaml", "5.3.1", adv.id)
+    with pytest.raises(ValidationError, match="remediation package does not match finding package"):
+        Finding.model_validate(
+            {
+                "finding_id": fid,
+                "kind": "advisory",
+                "verdict": "likely reachable",
+                "confidence": "high",
+                "package": "pyyaml",
+                "version": "5.3.1",
+                "advisory": adv.model_dump(),
+                "vulnerable_symbol": {
+                    "identified": True,
+                    "symbols": ["yaml.load"],
+                    "not_identified_reason": None,
+                    "evidence_urls": [OSV_URL],
+                },
+                "advisory_links": [{"url": OSV_URL, "source": "osv", "title": None}],
+                "source_locations": [
+                    {"file": "app.py", "line": 10, "kind": "call", "snippet": "yaml.load(x)"}
+                ],
+                "call_path": [
+                    {"file": "app.py", "line": 3, "edge": "entry", "symbol": "app:main"},
+                    {
+                        "file": "app.py",
+                        "line": 10,
+                        "edge": "vulnerable_call",
+                        "symbol": "yaml.load",
+                    },
+                ],
+                "explanation": "test explanation",
+                "limitations": ["test limitation"],
+                "reason_code": None,
+                "reason": None,
+                "remediation": rem.model_dump(),
+            }
+        )
+

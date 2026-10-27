@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from pir.markdown import code, esc, esc_block, render_markdown, safe_url
-from pir.models.report import AdvisoryLink, ScanReport, SourceLocation
+from pir.models.report import AdvisoryLink, Remediation, ScanReport, SourceLocation
 
 REPORTS = Path(__file__).resolve().parents[2] / "web" / "fixtures" / "reports"
 
@@ -246,3 +246,39 @@ def test_helpers():
 )
 def test_safe_url(url, ok):
     assert (safe_url(url) is not None) is ok
+
+
+# ---- AC-85: remediation guidance markdown rendering (ADR-0044) -----------------------------
+
+
+def test_ac85_markdown_renders_remediation_guidance():
+    report = load("reachable")
+    first = report.findings[0]
+    rem = Remediation(
+        package=first.package,
+        target_version="5.4",
+        guidance=f"Upgrade {first.package} to version 5.4 or newer.",
+    )
+    with_rem = first.model_copy(update={"remediation": rem})
+    rep_with_rem = report.model_copy(update={"findings": [with_rem, *report.findings[1:]]})
+
+    md = render_markdown(rep_with_rem)
+    assert f"**Remediation:** Upgrade {first.package} to version 5.4 or newer." in md
+    positions(md, [f"**Confidence:** {first.confidence}", "**Remediation:**", "**Limitations**"])
+
+
+def test_ac85_markdown_escapes_remediation_guidance_safely():
+    report = load("reachable")
+    first = report.findings[0]
+    rem = Remediation(
+        package=first.package,
+        target_version=None,
+        guidance="Inspect <script>alert(1)</script> fix commit at https://github.com/foo/bar/commit/123",
+    )
+    with_rem = first.model_copy(update={"remediation": rem})
+    rep_with_rem = report.model_copy(update={"findings": [with_rem]})
+
+    md = render_markdown(rep_with_rem)
+    assert "<script>" not in md
+    assert "&lt;script&gt;alert\\(1\\)&lt;/script&gt;" in md
+

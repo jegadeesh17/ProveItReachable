@@ -146,6 +146,8 @@ def _finding(n: int, f: Finding) -> list[str]:
     if f.reason:
         code_part = f" ({esc(f.reason_code)})" if f.reason_code else ""
         lines += [f"**Reason:** {esc(f.reason)}{code_part}", ""]
+    if f.remediation:
+        lines += [f"**Remediation:** {esc(f.remediation.guidance)}", ""]
     lines += ["**Limitations**", ""]
     lines += [f"- {esc(x, start=True)}" for x in f.limitations]
     lines += ["", "**Explanation**", "", esc_block(f.explanation), ""]
