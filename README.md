@@ -23,7 +23,8 @@ The report is available as JSON (`schemas/report.schema.json`) or Markdown. A si
 
 Figures from [`eval/results/latest.json`](eval/results/latest.json): run 2026-10-26, model `nvidia/nemotron-3-super-120b-a12b`, 30 cases, 4 errored; precision 0.91, recall 0.67.
 
-Motivating example only, not a measured result: 41 to 3 reachable findings.
+Measured alert reduction across demo repositories (`scripts/noise_summary.py`): 66 traditional scanner alerts down to 4 likely reachable (and 2 proven in Token Factory Sandbox), cutting alert noise by 93.9%.
+(Motivating example from initial design: 41 to 3 reachable findings).
 
 ## Setup
 
