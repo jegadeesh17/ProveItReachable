@@ -825,7 +825,9 @@ def test_ac85_remediation_falls_back_to_first_fixed_version_when_none_greater():
 def test_ac85_remediation_with_osv_fix_commit_link_and_no_fixed_versions():
     adv = advisory()
     adv_unversioned = adv.model_copy(update={"fixed_versions": []})
-    fix_commit_url = "https://github.com/yaml/pyyaml/commit/abcdef1234567890abcdef1234567890abcdef12"
+    fix_commit_url = (
+        "https://github.com/yaml/pyyaml/commit/abcdef1234567890abcdef1234567890abcdef12"
+    )
     links = [
         AdvisoryLink(url=fix_commit_url, source="osv", title="Fix commit"),
         AdvisoryLink(url="https://example.com/docs", source="tavily", title="Docs"),
@@ -910,4 +912,3 @@ def test_ac85_remediation_validation_mismatched_package_raises():
                 "remediation": rem.model_dump(),
             }
         )
-

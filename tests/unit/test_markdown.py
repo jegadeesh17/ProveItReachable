@@ -281,4 +281,3 @@ def test_ac85_markdown_escapes_remediation_guidance_safely():
     md = render_markdown(rep_with_rem)
     assert "<script>" not in md
     assert "&lt;script&gt;alert\\(1\\)&lt;/script&gt;" in md
-

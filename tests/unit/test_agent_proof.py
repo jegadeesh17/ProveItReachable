@@ -914,9 +914,7 @@ class ScriptedSandbox(httpx.MockTransport):
                 args = protocol.parse_args_b64(tokens[tokens.index("--args-b64") + 1])
                 if "nonce" in args and res_dict.get("status") == "proven":
                     res_dict["nonce"] = args["nonce"]
-            data["metadata"]["result"]["stdout"].update(
-                encoding="ascii", value=line(res_dict)
-            )
+            data["metadata"]["result"]["stdout"].update(encoding="ascii", value=line(res_dict))
             if not body["disposable"]:
                 data["result_image_uuid"] = str(uuid.uuid4())
             self._ops[op_id] = data
