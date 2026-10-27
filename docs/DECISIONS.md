@@ -46,6 +46,8 @@ Each significant technical decision for ProveItReachable, with its reasons, the 
 | [ADR-0040](#adr-0040-host-the-demo-on-google-cloud-run-with-hard-cost-guards) | Host the demo on Google Cloud Run with hard cost guards | Accepted | 2026-10-26 |
 | [ADR-0041](#adr-0041-proof-dependencies-without-a-wheel-are-downloaded-with-the-network-on-and-built-with-it-off) | Proof dependencies without a wheel are downloaded with the network on and built with it off | Accepted | 2026-10-26 |
 | [ADR-0042](#adr-0042-call-path-edge-verification-anti-tuning-eval-protocol-recorded-proof-in-replays-deep-links-and-warm-ping) | Call-path edge verification, anti-tuning eval protocol, recorded proof in replays, deep links and warm ping | Accepted | 2026-10-26 |
+| [ADR-0043](#adr-0043-fix-commit-fallback-for-advisory-research) | Fix-commit fallback for advisory research | Accepted | 2026-10-27 |
+| [ADR-0044](#adr-0044-finding-remediation-native-svg-call-path-view-proof-result-authenticity-nonce-and-judging-window-budget-profile) | Finding remediation, native SVG call-path view, proof-result authenticity nonce, and judging-window budget profile | Accepted | 2026-10-27 |
 
 ## ADR-0001: Python and FastAPI service with typed schemas
 
@@ -1294,3 +1296,86 @@ Adopt five targeted improvements across evidence validation, evaluation rigor, d
 - Deep links (`/?demo=pyrl`) allow direct links from Devpost and README into interactive reports.
 - Cloud Run remains warm and responsive during judging without violating cost caps.
 - No breaking schema changes: `Finding.proof` was already an optional field in `ScanReport` v1.0.
+ 
+## ADR-0043: Fix-commit fallback for advisory research
+
+Date: 2026-10-27
+Status: Accepted
+
+### Context
+
+When researching OSV advisories with Tavily search and Nemotron LLM extraction, some advisories produce no dotted candidate symbols (for example when search snippets lack function names, the LLM extraction fails, or advisory descriptions are concise). Without candidate symbols, reachability analysis cannot evaluate vulnerable call paths and defaults to `no_symbols` or `uncertain`, leaving reachable vulnerabilities unreported. However, many OSV advisories contain direct links to GitHub fix commits in their advisory metadata (`references` with type `FIX` or commit URLs).
+
+### Decision
+
+Introduce a deterministic fix-commit fallback (`src/pir/fix_commit.py`) called by `Researcher._fallback_fix_commit` when Tavily search and LLM extraction yield no dotted symbols:
+1. Extract unique GitHub commit references `(owner, repo, sha)` from advisory links using `commit_refs`.
+2. Fetch the patch diff via the GitHub API (or disk cache at `DATA_DIR/cache/diffs/`).
+3. Discard test files, test fixtures, and non-Python files (`_is_test_file`).
+4. Parse hunk headers (`@@ ... @@`) and definition lines (`def`, `async def`, `class`) from Python source diffs (`changed_functions`).
+5. Qualify extracted symbols with the package import root (mapping package names via PEP 503 normalization and `IMPORT_NAMES`).
+6. Cap candidate symbols at 10 items.
+7. Record the commit URL as an `AdvisoryLink` with `source="osv"` and `title="Fix commit"`, and include it in research `evidence`.
+
+The fallback uses existing GitHub API access and local diff parsing without making additional Tavily search queries or LLM inference calls, incurring zero extra search spend.
+
+### Alternatives considered
+
+- **Additional Tavily search queries or advanced search depth**: Incurs additional latency and consumes paid search credits ($0.008–$0.016 per query) without guaranteeing patch details.
+- **Passing full diffs into Nemotron LLM for extraction**: Incurs LLM token spend, risks exceeding completion token caps, exposes reasoning to prompt injection from repository diffs, and introduces non-deterministic symbol parsing.
+- **Ignoring advisories without LLM-extracted symbols**: Leaves known, reachable vulnerabilities unanalyzed even when the exact fixing patch is already referenced in the OSV record.
+
+### Consequences
+
+- Higher symbol extraction recall for advisories with linked fix commits.
+- Zero search credit cost and zero LLM token cost for the fallback path.
+- Strictly deterministic AST and diff hunk parsing.
+- Cached diffs prevent repeated GitHub API calls across scans.
+- Test files and test helper functions are safely filtered out, preventing false candidate symbols.
+
+## ADR-0044: Finding remediation, native SVG call-path view, proof-result authenticity nonce, and judging-window budget profile
+
+Date: 2026-10-27
+Status: Accepted
+
+### Context
+
+At the close of M2 and preparation for hackathon submission and judging, four key technical needs were identified:
+1. **Actionable remediation advice**: Security reports identify reachable vulnerabilities, but developers need deterministic, actionable guidance on how to fix them (the minimum safe package version to upgrade to, or patch references).
+2. **Visual call-path representation**: Long text call paths in findings are hard to visually parse quickly; a visual diagram showing the flow from repository entry point to the vulnerable sink improves triage.
+3. **Sandbox proof authenticity**: When running untrusted repository code inside `proof-run` in the Sandbox, malicious or crafted code could attempt to spoof the stdout result line (e.g. printing `PIR_PROVEN`) to falsely claim a finding was proven.
+4. **Judging-window budget profile**: Approximately $8 of Nebius promo credits remain. Spreading the budget evenly across 50 days to 2026-12-15 yields ~$0.16/day, which is below the $0.75 reservation needed for even a single live scan, blocking live judge testing.
+
+### Decision
+
+Implement four coordinated architectural enhancements:
+1. **Remediation field in findings**:
+   - Add an optional, additive `remediation: Remediation | None = None` field to `Finding` in `schemas/report.schema.json` and `pir/models/report.py`.
+   - Compute remediation deterministically in `report_builder.py` using OSV `fixed` and `introduced` version ranges to recommend the minimum safe package upgrade target, or pointing to fix-commit guidance.
+   - Non-breaking and fully backward-compatible: existing demo replays and stored reports without `remediation` remain valid without re-recording.
+2. **Native hand-drawn SVG call-path view**:
+   - Implement an interactive, native SVG call-path diagram in `web/js/render.js` without any external charting libraries or NPM dependencies.
+   - Visualize the validated call chain step-by-step from repository entry point to vulnerable sink.
+   - Support light and dark theme tokens, responsive layout down to 375px mobile viewports, and include an accessible text fallback.
+3. **Proof-result authenticity nonce**:
+   - Prevent untrusted repository code executed under `proof-run` from forging a "proven" result line.
+   - The host generates a cryptographically secure random per-run nonce (`proof_nonce`) passed into the isolated execution environment via environment variable / arguments.
+   - The proof runner harness emits the expected nonce token in its result line / exit verification, and the host strictly verifies the token before accepting a `proven` verdict.
+4. **Judging-window budget profile**:
+   - Reshape budget caps in `.env.example` and the spend ledger to support live judge evaluations through 2026-12-15 within the remaining ~$8 Nebius promo credits.
+   - Allow live judge scans by preserving the $0.75 per-scan reservation while tightening the global daily scan limit and maintaining a high-signal judge allowance pool, ensuring live scans run reliably without exhausting promo credits before judging completes.
+
+### Alternatives considered
+
+- **LLM-generated remediation**: Non-deterministic, prone to hallucinated package versions, and incurs additional token spend. Deterministic OSV version range parsing is reliable, instant, and testable.
+- **External diagram libraries (Mermaid.js, D3.js, Cytoscape)**: Violates the no-external-frontend-dependency architecture, bloats client bundle size, and complicates CSP. Native inline SVG requires zero external dependencies.
+- **Relying solely on process exit codes or unauthenticated stdout**: Vulnerable to repository code spoofing proof completion strings.
+- **Flat daily ceiling to 2026-12-15 ($0.16/day)**: Permanently locks out live judge scans since the minimum reservation is $0.75.
+
+### Consequences
+
+- Reports provide actionable, deterministic upgrade guidance per finding.
+- Zero frontend dependencies added; SVG renders smoothly across devices and color themes.
+- Cryptographic proof nonce guarantees that untrusted repo code cannot fake exploitability.
+- Live judge scans are enabled within the hard ~$8 remaining credit ceiling.
+- Backward compatibility is preserved: schema changes are strictly additive and optional.

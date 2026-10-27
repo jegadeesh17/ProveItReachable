@@ -1,7 +1,7 @@
 # Architecture
 
 Status: FROZEN (2026-10-25)
-Amended 2026-10-25 after security design review rounds 1 (ADR-0027 to ADR-0031) and 2 (ADR-0032); see [SECURITY_REVIEW](SECURITY_REVIEW.md). Amended 2026-10-25 after the M1-TASK-08 live Sandbox checks: platform corrections in ADR-0034 (sections 7.1, 7.2, 13, 22.1); base image imported by version tag and checked against a reviewed fingerprint in ADR-0033 (accepted 2026-10-25; sections 7.1, 7.2, 13, 22.1); ADR-0033 amended 2026-10-25: the fingerprint is measured on GitHub Actions, not with local Docker (sections 7.2, 19.1, 20, Security and data, Setup requirements). Amended 2026-10-26 after M1 UAT round 1: call-path matching through default-argument equivalences and inferred source roots in ADR-0037 (sections 6.3, 7.6, 9.1, 9.2); the trace run tree in ADR-0038 (sections 15, 19.2, 22). Amended 2026-10-26 after the HF Space creation failed (HTTP 402, PRO required): hosting moves to Google Cloud Run in ADR-0040 (sections 1, 2, 18, 19.3, Security and data, 22.1, Setup requirements, Expensive to change). Amended 2026-10-26 per ADR-0041 (source packages downloaded online, built offline; sections 7.1, 7.2, 10, 16, 22.1, Security and data, Expensive to change) and ADR-0042 (call-path edge verification in the verdict gate and shared resolution, sections 9.1, 9.2, 10, 22; eval anti-tuning rule and growth to ~30 cases, section 15; warm ping and replay zero-spend, section 11; pir record --proof, recorded proof in replays, UI rendering and deep links, sections 14, 16, 17, 21; second-network proxy check and judging warm ping, sections 18, 19.3, 19.4).
+Amended 2026-10-25 after security review rounds 1–2 (ADR-0027 to ADR-0032), Sandbox platform/fingerprint checks (ADR-0033, ADR-0034); 2026-10-26 after M1 UAT round 1 (ADR-0037, ADR-0038), Cloud Run move (ADR-0040), offline sdist build (ADR-0041), edge verification/eval growth/proof replays (ADR-0042); 2026-10-27 per ADR-0043 (fix-commit fallback) and ADR-0044 (remediation, SVG call-path view, proof authenticity nonce, judging-window budget profile).
 
 The technical design of ProveItReachable: stack, components, contracts, safety boundaries, operations, test commands and setup requirements. Requirements: [SPEC](SPEC.md) and the [project mental model](PROJECT_MENTAL_MODEL.md); lasting decisions: [DECISIONS](DECISIONS.md). Drafted 2026-10-24; frozen 2026-10-25 after the prototype review ([FEEDBACK](FEEDBACK.md)) and the platform spike ([PLATFORM_FEEDBACK](PLATFORM_FEEDBACK.md)); it now changes only through a change request with a superseding ADR. Open questions OQ-1 to OQ-16 are answered in the sections tagged with their IDs (OQ-16: there is no fallback executor, ADR-0032).
 
@@ -103,60 +103,39 @@ ReasonCode = Literal["vulnerable_function_not_identified", "tavily_failed", "neb
 
 ```python
 class RepoRef(Strict):
-    url: str                    # canonical "https://github.com/{owner}/{name}"
-    owner: str; name: str       # owner ^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$; name ^[A-Za-z0-9._-]{1,100}$, not "." or ".."
-    ref_requested: str | None; default_branch: str; commit_sha: str   # ref as submitted, else None; sha ^[0-9a-f]{40}$ (tree analyzed)
+    url: str; owner: str; name: str; ref_requested: str | None; default_branch: str; commit_sha: str
+    # canonical url; owner ^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$; name ^[A-Za-z0-9._-]{1,100}$, not "." or ".."; sha ^[0-9a-f]{40}$
 class StepStatus(Strict):
-    name: StepName; state: StepState; tools: list[ToolName]   # final reports: done | failed | skipped; tools: rule below
-    started_at: datetime | None; finished_at: datetime | None; message: str | None   # message plain text <= 300 chars
+    name: StepName; state: StepState; tools: list[ToolName]; started_at: datetime | None; finished_at: datetime | None; message: str | None
 class Resolution(Strict):
-    method: Literal["lockfile", "compiled", "failed"]; python_version: str | None   # compile target, e.g. "3.12"
-    lockfile: str | None; compiled_from: str | None   # repo-relative path iff lockfile; e.g. "pyproject.toml" iff compiled
-    notes: list[str]            # includes "Versions were compiled with uv pip compile, not locked." (AC-08)
+    method: Literal["lockfile", "compiled", "failed"]; python_version: str | None; lockfile: str | None; compiled_from: str | None; notes: list[str]
 class Dependency(Strict):
-    name: str; source: DependencySource; groups: list[str]   # PEP 503 normalized, then ^[a-z0-9]+(?:-[a-z0-9]+)*$ (finding 6); groups e.g. ["main"]
-    version: str | None; resolved: bool; unresolved_reason: str | None   # version: the anchored PEP 440 regex (packaging's VERSION_PATTERN, re.X | re.I), else unresolved "not a PEP 440 version"; None iff not resolved; reason iff not resolved (AC-09)
-    direct: bool | None; osv_status: Literal["checked", "not_checked", "not_queried"]; osv_error: str | None   # direct: declared in a root manifest, None if unknown; not_queried = unresolved, never guessed; error iff not_checked (AC-26)
+    name: str; source: DependencySource; groups: list[str]; version: str | None; resolved: bool; unresolved_reason: str | None
+    direct: bool | None; osv_status: Literal["checked", "not_checked", "not_queried"]; osv_error: str | None
 class Advisory(Strict):
-    id: str; aliases: list[str]; summary: str | None   # OSV ID as returned; CVE and other IDs, sorted; summary <= 500, untrusted
-    severity: Severity          # lower-cased database_specific.severity (GitHub label), else "unknown"
-    fixed_versions: list[str]; published: datetime | None; modified: datetime | None
-class AdvisoryLink(Strict):
-    url: str; source: Literal["osv", "tavily"]; title: str | None   # url EXACT as returned, ^https?://, <= 2048; title untrusted, <= 200
-class VulnerableSymbol(Strict):
-    identified: bool; symbols: list[str]   # dotted paths, e.g. ["yaml.load"]; non-empty iff identified
-    not_identified_reason: str | None      # "vulnerable function not identified" + detail, iff not identified
-    evidence_urls: list[str]               # subset of the finding's advisory_links urls
+    id: str; aliases: list[str]; summary: str | None; severity: Severity; fixed_versions: list[str]; published: datetime | None; modified: datetime | None
+class AdvisoryLink(Strict): url: str; source: Literal["osv", "tavily"]; title: str | None
+class VulnerableSymbol(Strict): identified: bool; symbols: list[str]; not_identified_reason: str | None; evidence_urls: list[str]
 class SourceLocation(Strict):
-    file: str; line: int        # repo-relative POSIX path, no "..", no leading "/"; 1 <= line <= file lines in the index
-    kind: Literal["import", "call", "reference", "definition"]; snippet: str | None   # the source line, <= 200, untrusted
+    file: str; line: int; kind: Literal["import", "call", "reference", "definition"]; snippet: str | None
 class CallPathStep(Strict):
-    file: str; line: int; edge: Literal["entry", "call", "heuristic_call", "vulnerable_call"]
-    symbol: str                 # "<module>" or "pkg.mod:func" (repo) or the vulnerable symbol
-class Proof(Strict):            # M2, cuttable
-    status: Literal["proven", "not_proven"]; reason: str; ran_at: datetime
-    entry: str; target: str; recorded_call: str | None   # "pkg.mod:func" or "pkg.mod:<module>" (ADR-0039); stubbed symbol; "<target> called from <file>:<line>" when proven
+    file: str; line: int; edge: Literal["entry", "call", "heuristic_call", "vulnerable_call"]; symbol: str
+class Proof(Strict):
+    status: Literal["proven", "not_proven"]; reason: str; ran_at: datetime; entry: str; target: str; recorded_call: str | None
+class Remediation(Strict):  # ADR-0044: deterministic upgrade guidance from OSV ranges or fix-commit advice
+    target_version: str | None; package: str; guidance: str
 class Finding(Strict):
-    finding_id: str             # sha256("{package}|{version}|{advisory_id or 'not_checked'}")[:16]
-    kind: Literal["advisory", "not_checked"]; verdict: Verdict; confidence: Confidence; package: str; version: str
-    advisory: Advisory | None; vulnerable_symbol: VulnerableSymbol | None   # both required iff kind == "advisory"
-    advisory_links: list[AdvisoryLink]      # >= 1 iff kind == "advisory"; [] for not_checked
-    source_locations: list[SourceLocation]  # may be [] only when verdict != "likely reachable"
-    call_path: list[CallPathStep] | None    # non-empty iff verdict == "likely reachable", else None
-    explanation: str                        # <= 2000 chars, untrusted (model) text
-    limitations: list[str]                  # min length 1; no-path includes the scope statement (AC-21)
-    reason_code: ReasonCode | None; reason: str | None   # both required iff verdict == "uncertain"
-    proof: Proof | None = None              # validators also: uncertain => confidence == "low"
+    finding_id: str; kind: Literal["advisory", "not_checked"]; verdict: Verdict; confidence: Confidence; package: str; version: str
+    advisory: Advisory | None; vulnerable_symbol: VulnerableSymbol | None; advisory_links: list[AdvisoryLink]
+    source_locations: list[SourceLocation]; call_path: list[CallPathStep] | None; explanation: str; limitations: list[str]
+    reason_code: ReasonCode | None; reason: str | None; proof: Proof | None = None; remediation: Remediation | None = None
 class ReportSummary(Strict):
     dependencies_total: int; dependencies_checked: int; dependencies_unresolved: int; dependencies_not_checked: int
-    findings_total: int; by_verdict: dict[Verdict, int]   # all three keys always present
+    findings_total: int; by_verdict: dict[Verdict, int]
 class ScanReport(Strict):
-    schema_version: Literal["1.0"]; scan_id: str; tool_version: str; model: str   # uuid4 hex; the NEBIUS_MODEL used
-    generated_at: datetime; repo: RepoRef; outcome: Outcome; resolution: Resolution   # UTC
-    steps: list[StepStatus]                 # exactly the six StepNames, in order (AC-01)
-    dependencies: list[Dependency]          # sorted by name; includes unresolved (AC-45)
-    findings: list[Finding]                 # ranked (section 9.2, rule 6); unique finding_ids
-    summary: ReportSummary; limitations: list[str]   # scan-level scope statement
+    schema_version: Literal["1.0"]; scan_id: str; tool_version: str; model: str; generated_at: datetime; repo: RepoRef
+    outcome: Outcome; resolution: Resolution; steps: list[StepStatus]; dependencies: list[Dependency]; findings: list[Finding]
+    summary: ReportSummary; limitations: list[str]
     # outcome: "clean" iff findings == [] and no unresolved, no not_checked, resolve done (AC-11); "incomplete" iff findings == [] and (unresolved or failed resolve); else "findings"
 ```
 
@@ -195,11 +174,9 @@ The agent produces the index inside the Sandbox as plain JSON; the host validate
 ```python
 class SearchResult(Strict): url: str; title: str | None; content: str   # content <= 2000 chars, untrusted
 class AdvisoryResearch(Strict):   # symbols grounded, dotted ([] if not identified); links exact: OSV refs + osv.dev page + Tavily URLs
-    advisory_id: str; identified: bool; not_identified_reason: str | None; from_cache: bool; symbols: list[str]
-    links: list[AdvisoryLink]; evidence_urls: list[str]; failure: ReasonCode | None   # evidence ⊆ links; tavily_failed / nebius_failed
+    advisory_id: str; identified: bool; not_identified_reason: str | None; from_cache: bool; symbols: list[str]; links: list[AdvisoryLink]; evidence_urls: list[str]; failure: ReasonCode | None
 class ModelVerdict(Strict):       # submit_verdict arguments; explanation <= 2000; limitations >= 1
-    verdict: Verdict; confidence: Confidence; call_path: list[CallPathStep] | None
-    source_locations: list[SourceLocation]; explanation: str; limitations: list[str]
+    verdict: Verdict; confidence: Confidence; call_path: list[CallPathStep] | None; source_locations: list[SourceLocation]; explanation: str; limitations: list[str]
 class ToolCallRecord(Strict): name: str; arguments: dict[str, str | int | list[str]]; ok: bool; result_bytes: int
 class ReasoningOutcome(Strict):   # tool_calls: AC-17 evidence, also traced
     verdict: ModelVerdict | None; tool_calls: list[ToolCallRecord]; attempts: int; failure: ReasonCode | None; failure_detail: str | None
@@ -209,7 +186,7 @@ class ReasoningOutcome(Strict):   # tool_calls: AC-17 evidence, also traced
 
 ```python
 class ScanRequest(Strict):
-    repo_url: str; ref: str | None = None   # url <= 300 chars; ref ^[A-Za-z0-9._/-]{1,100}$, "/"-separated segments non-empty and not starting with "." (so no ".", "..", "//", trailing "/"); all-hex refs over 40 chars rejected
+    repo_url: str; ref: str | None = None   # url <= 300 chars; ref ^[A-Za-z0-9._/-]{1,100}$, "/"-separated segments non-empty and not starting with "."
 class ScanAccepted(Strict): scan_id: str; mode: Mode; status_url: str; events_url: str; report_url: str
 class ScanStatusResponse(Strict):
     scan_id: str; mode: Mode; state: Literal["queued", "running", "completed", "failed"]
@@ -217,25 +194,19 @@ class ScanStatusResponse(Strict):
 ErrorCode = Literal["invalid_url", "repo_not_found", "repo_too_large", "not_python_project",
     "rate_limited", "server_busy", "too_many_requests", "live_scans_paused", "github_unavailable", "scan_not_found",
     "report_not_ready", "demo_not_found", "finding_not_found", "request_invalid", "internal_error"]
-class ErrorBody(Strict):         # message: exact text from pir/messages.py, shown verbatim (AC-43)
-    code: ErrorCode; message: str; details: dict[str, str | int | float] = {}; retry_after_s: int | None = None
+class ErrorBody(Strict): code: ErrorCode; message: str; details: dict[str, str | int | float] = {}; retry_after_s: int | None = None
 class ErrorResponse(Strict): error: ErrorBody
-class ProgressEvent(Strict):     # seq 1, 2, 3 ... per job (also the SSE id); message plain text <= 300; outcome on "done"
+class ProgressEvent(Strict):
     seq: int; scan_id: str; type: Literal["step", "done", "error"]; step: StepName | None; state: StepState | None
-    message: str | None; at: datetime; outcome: Outcome | None
-    tools: list[ToolName]              # on terminal step events, as in StepStatus; otherwise []
-class DemoSummary(Strict):
-    slug: str; title: str; description: str; repo_url: str; commit_sha: str; recorded_at: datetime; by_verdict: dict[Verdict, int]
-class EvalFigure(Strict):        # only from a scored eval run (section 15); precision = LR precision 0-1; n = labeled cases scored
-    precision: float; n: int; run_date: date; model: str
+    message: str | None; at: datetime; outcome: Outcome | None; tools: list[ToolName]
+class DemoSummary(Strict): slug: str; title: str; description: str; repo_url: str; commit_sha: str; recorded_at: datetime; by_verdict: dict[Verdict, int]
+class EvalFigure(Strict): precision: float; n: int; run_date: date; model: str
 class AppConfigResponse(Strict):
     version: str; live_scans_enabled: bool; live_scans_paused_reason: str | None
     features: dict[Literal["progress_feed", "markdown_export", "proof"], bool]
-    limits: dict[Literal["max_repo_mb", "max_repo_files", "live_scans_per_client_hour", "live_scans_per_client_day"], int]   # all four keys always present
-    eval: EvalFigure | None            # None: the UI shows no eval figure (AC-39)
-class HealthResponse(Strict):
-    status: Literal["ok"]; version: str; live_scans: Literal["enabled", "paused", "disabled"]
-    budget_remaining: dict[Pool, float] | None   # clamp((cap - spent_usd) / cap, 0, 1); None if no ledger loaded
+    limits: dict[Literal["max_repo_mb", "max_repo_files", "live_scans_per_client_hour", "live_scans_per_client_day"], int]
+    eval: EvalFigure | None
+class HealthResponse(Strict): status: Literal["ok"]; version: str; live_scans: Literal["enabled", "paused", "disabled"]; budget_remaining: dict[Pool, float] | None
 class ProofRequest(Strict): entry: str | None = None   # M2; must be the symbol of a step in the call path
 ```
 
@@ -243,23 +214,20 @@ class ProofRequest(Strict): entry: str | None = None   # M2; must be the symbol 
 
 ```python
 class RecordedEvent(Strict): offset_ms: int; event: ProgressEvent
-class ScanRecording(Strict):           # demo/replays/<slug>.json
-    schema_version: Literal["1.0"]; slug: str; title: str; description: str
-    recorded_at: datetime; model: str; events: list[RecordedEvent]; report: ScanReport
+class ScanRecording(Strict):
+    schema_version: Literal["1.0"]; slug: str; title: str; description: str; recorded_at: datetime; model: str; events: list[RecordedEvent]; report: ScanReport
 Spender = Literal["hosted", "local"]   # serve = hosted; scan, eval, record = local (section 11.2)
 class PoolState(Strict): spent_usd: float; reserved_usd: float
-class DayState(Strict): day: date; start_spent_usd: dict[Pool, float]   # UTC day; hosted spent at its first reserve
+class DayState(Strict): day: date; start_spent_usd: dict[Pool, float]
 class SpenderState(Strict): allowance_usd: dict[Pool, float]; pools: dict[Pool, PoolState]; day: DayState | None
 class Reservation(Strict): scan_id: str; spender: Spender; created_at: datetime; amounts: dict[Pool, float]
-class CasCheck(Strict): verified_at: datetime; hub_version: str   # HF stale-parent check passed (section 7.8)
-class LedgerState(Strict):   # allowances sum to caps_usd per pool; file ledger: only "local", allowance = build cap, cas_verified None
-    schema_version: Literal[2]; caps_usd: dict[Pool, float]; spenders: dict[Spender, SpenderState]; reservations: list[Reservation]
-    cas_verified: CasCheck | None; updated_at: datetime
-class EvalCase(Strict): id: str; repo: str; package: str; advisory: str; label: Verdict; rationale: str  # a [[case]]; repo = [[repo]] id; advisory = OSV ID
-class EvalRepo(Strict): id: str; source: str   # a [[repo]]: "local:eval/fixtures/<dir>" or "github:<owner>/<repo>@<40-hex sha>"
-class EvalRunSummary(Strict):    # eval/results/latest.json (committed); scored False for --no-langsmith or partial runs
-    scored: bool; run_date: date; model: str; experiment: str | None; n: int; errored: int
-    precision: float | None; recall: float | None; abstention_rate: float; bar: float; bar_met: bool
+class CasCheck(Strict): verified_at: datetime; hub_version: str
+class LedgerState(Strict):
+    schema_version: Literal[2]; caps_usd: dict[Pool, float]; spenders: dict[Spender, SpenderState]; reservations: list[Reservation]; cas_verified: CasCheck | None; updated_at: datetime
+class EvalCase(Strict): id: str; repo: str; package: str; advisory: str; label: Verdict; rationale: str
+class EvalRepo(Strict): id: str; source: str
+class EvalRunSummary(Strict):
+    scored: bool; run_date: date; model: str; experiment: str | None; n: int; errored: int; precision: float | None; recall: float | None; abstention_rate: float; bar: float; bar_met: bool
 ```
 
 ## 7. Interfaces between components
@@ -272,17 +240,14 @@ Amended 2026-10-25 by ADR-0034 (spend denial, `prepare` call, output cap) and AD
 
 ```python
 class ImageRef(Strict): kind: Literal["sandbox", "fake"]; ref: str   # sandbox: image UUID; fake: temp dir
-class ExecResult(Strict):   # timed_out: platform state.timed_out or host deadline (exit_code -1); truncated: output cut at SANDBOX_MAX_OUTPUT_BYTES
-    exit_code: int; stdout: str; stderr: str; timed_out: bool; truncated: bool
-    duration_s: float; cost_usd: float; image: ImageRef | None   # cost: metered (section 11); image iff save=True and not timed_out
+class ExecResult(Strict):
+    exit_code: int; stdout: str; stderr: str; timed_out: bool; truncated: bool; duration_s: float; cost_usd: float; image: ImageRef | None
 class Executor(Protocol):
     kind: Literal["sandbox", "fake"]
     async def prepare(self, files: dict[str, bytes]) -> ImageRef          # base image + trusted files
     async def run(self, image: ImageRef, argv: list[str], *, network: bool, timeout_s: float, save: bool = False, budget: ScanBudget | None = None) -> ExecResult
     async def discard(self, image: ImageRef) -> None                       # best effort; never raises
-# Raises ExecutorUnavailable (auth, HTTP error, status FAILED/CANCELLED, malformed body) or ExecutorSpendDenied; a timeout is a result.
-class ExecutorSpendDenied(Exception):   # executor/base.py; raised by run() before any request when budget.try_spend returns a SpendDenied value
-    denied: SpendDenied                  # pool and reason (spend_cap_reached | scan_budget_reached), unchanged from section 7.8
+class ExecutorSpendDenied(Exception): denied: SpendDenied   # pool and reason unchanged from section 7.8
 ```
 
 **`ContreeExecutor`** (`executor/contree.py`; each fact verified by the spike, PLATFORM_FEEDBACK check c):
@@ -314,7 +279,7 @@ Our stdlib-only agent is zipped at runtime into `agent.pyz`, placed at `/opt/pir
 | `index --targets yaml,jinja2` | OFF | A | no | `AnalysisIndex` |
 | `proof-install --pins-b64` (M2; ADR-0041) | ON | A | P | `{installed: [...], no_wheel: [...], sdists: [{spec, file, sha256}], unfetched: [{spec, reason}]}` (section 16) |
 | `proof-build --builds-b64` (M2; ADR-0041) | OFF | P | P′ | `{built: [...], failed: [{spec, reason}]}` (section 16) |
-| `proof-run --entry --target [--site]` (M2; ADR-0039) | OFF | P′ when `proof-build` ran, else P | no | `Proof` fields |
+| `proof-run --entry --target [--site] [--nonce]` (M2; ADR-0039, ADR-0044) | OFF | P′ when `proof-build` ran, else P | no | `Proof` fields |
 
 **Network ON is unrestricted egress (ADR-0032, superseding ADR-0027).** `networking.enabled` is a plain on/off switch with no allowlist (spike check c): an ON run can reach any internet host. ON is therefore allowed only for the three commands above, each under its timeout cap (section 10: 120 s, 180 s, 300 s), and only under this **invariant: while networking is on, nothing from the repo or from a downloaded source package executes, and no repo-controlled file influences any tool run.** A second rule (ADR-0041): **no network-ON command ever runs from an image that a build or repo code has touched** (P′, or any image derived from it); the chain is A → `proof-install` (ON) → P → `proof-build` (OFF) → P′ → `proof-run` (OFF), and P and P′ are discarded at the end of the proof. No path under `/work/repo` is ever a working directory, configuration, interpreter, environment source or tool input; the agent reads repo files only as data, in its own Python code. How each ON step meets it (audit in ADR-0032):
 
@@ -323,7 +288,7 @@ Our stdlib-only agent is zipped at runtime into `agent.pyz`, placed at `/opt/pir
 - `resolve --compile`: the agent writes a sanitized requirements file to `/tmp/pirin/requirements.in` (directory also created fresh by `os.mkdir`; section 13, rule 5) and passes that absolute path; uv writes its result to `/tmp/pirin/requirements.txt` (`--output-file`, an absolute path in that fresh directory, so no earlier file can act as version preferences; ADR-0034); uv never opens a repo file. `proof-install`: `uv pip install --no-deps --only-binary :all: --target /work/deps` + common flags + `-- <name==version>`, one pin per call; wheels are unpacked, never executed. For a pin uv refuses for lack of a wheel, the agent itself (stdlib HTTP, no uv or pip) reads `https://pypi.org/pypi/<name>/<version>/json`, takes the source package's URL and sha256 from it and downloads the file to `/work/sdists/` without opening or extracting it, and downloads the two hash-pinned build-tool wheels to `/work/buildwheels/` (section 16, ADR-0041); no metadata step, `setup.py` or build backend runs while the network is on.
 - `proof-build` is network OFF and is the only step that runs a dependency's build code (section 16). Its uv call drops `--no-build` and `--index-url` from the common flags and adds `--offline --no-index --find-links /work/buildwheels --build-constraints <file>`, so build isolation is fed only from the local hash-checked wheels.
 
-The only command that runs repo code, `proof-run`, is OFF, and so is the only command that runs a dependency's build code, `proof-build`. `fetch` downloads only `https://codeload.github.com/{owner}/{repo}/tar.gz/{sha}` built from validated parts, streams with a byte cap, and extracts with `tarfile` `filter="data"` (no links leaving the destination, absolute paths or devices) plus member-count and uncompressed-size caps (`MAX_REPO_FILES`, `MAX_REPO_MB`). `proof-install` pins come from validated `Dependency` models (section 6.2 regexes, re-checked by the agent) and the agent builds each `name==version` itself after `--` (live check, section 22.1). The client maps `timed_out` to `SandboxTimeout(step)`, and `truncated`, a missing or invalid result line, or a non-zero exit to `SandboxFailed(step, detail)`; it parses with caps (8 MiB base64, 50 MiB decompressed via `zlib.decompressobj(max_length=...)`) and validates strictly. `ExecutorSpendDenied` from the executor passes through unchanged; the pipeline maps `.denied.reason` to `spend_cap_reached` or `scan_budget_reached` (section 10).
+The only command that runs repo code, `proof-run`, is OFF with an authenticity nonce (ADR-0044), and so is the only command that runs a dependency's build code, `proof-build`. `fetch` downloads only `https://codeload.github.com/{owner}/{repo}/tar.gz/{sha}` built from validated parts, streams with a byte cap, and extracts with `tarfile` `filter="data"` (no links leaving the destination, absolute paths or devices) plus member-count and uncompressed-size caps (`MAX_REPO_FILES`, `MAX_REPO_MB`). `proof-install` pins come from validated `Dependency` models (section 6.2 regexes, re-checked by the agent) and the agent builds each `name==version` itself after `--` (live check, section 22.1). The client maps `timed_out` to `SandboxTimeout(step)`, and `truncated`, a missing or invalid result line, or a non-zero exit to `SandboxFailed(step, detail)`; it parses with caps (8 MiB base64, 50 MiB decompressed via `zlib.decompressobj(max_length=...)`) and validates strictly. `ExecutorSpendDenied` from the executor passes through unchanged; the pipeline maps `.denied.reason` to `spend_cap_reached` or `scan_budget_reached` (section 10).
 
 ```python
 class SandboxAgentClient:   # __init__(executor, settings); raises SandboxTimeout, SandboxFailed or ExecutorSpendDenied
@@ -360,16 +325,15 @@ class AdvisoryResearcher:
     async def research(self, advisory: Advisory, package: str, osv_links: list[AdvisoryLink], budget: ScanBudget) -> AdvisoryResearch  # never raises; failures in .failure
 ```
 
-Tavily: `POST https://api.tavily.com/search` with `Authorization: Bearer <key>`, `query="{package} {advisory_id} {first alias} vulnerable function"`, `search_depth`, `max_results`; only `results[].url`, `title`, `content` are read. Then one Nemotron JSON-mode extraction over the OSV summary and details plus the snippets, returning `{identified, symbols, evidence_urls, reason}`. **Qualifying names first:** the model often names a function as the advisory text does, without the module the code imports it by, so before grounding the researcher prefixes the package's import name (`_IMPORT_NAMES` in `research.py`, e.g. `pyyaml` → `yaml`, `pillow` → `PIL`, `scikit-learn` → `sklearn`; any other package by its PEP 503 name with `-` written as `_`) onto an unqualified name (`full_load` → `yaml.full_load`) or a class-qualified name whose first segment starts with a capital letter (`FullLoader.full_load` → `yaml.FullLoader.full_load`); a lower-case dotted name is a module path and stays as written. For a grounded `<import>.<Class>.<method>` it also emits `<import>.<method>`, listed first, because that module-level call is what repository code writes (`yaml.FullLoader.full_load` also gives `yaml.full_load`), except when `<import>.<method>` is a call in the default-argument equivalence table (section 9.1, ADR-0037; e.g. `yaml.load`), whose bare name would also match its safe calls. Host grounding: each resulting symbol matches `^[A-Za-z_]\w*(\.[A-Za-z_]\w*)+$` and its last segment appears verbatim in the supplied text, and `evidence_urls` must be a subset of the returned URLs; otherwise the symbol is dropped. No grounded symbol → `identified=False`, "vulnerable function not identified" (AC-13). Results are cached per advisory ID in `DATA_DIR/cache/research/` for 7 days (ADR-0031: bounds how long a poisoned search result is served to every visitor; the source links stay visible on each finding).
+Tavily: `POST https://api.tavily.com/search` with `Authorization: Bearer <key>`, `query="{package} {advisory_id} {first alias} vulnerable function"`, `search_depth`, `max_results`; only `results[].url`, `title`, `content` are read. Then one Nemotron JSON-mode extraction over the OSV summary and details plus the snippets, returning `{identified, symbols, evidence_urls, reason}`. **Qualifying names first:** the model often names a function as the advisory text does, without the module the code imports it by, so before grounding the researcher prefixes the package's import name (`_IMPORT_NAMES` in `research.py`, e.g. `pyyaml` → `yaml`, `pillow` → `PIL`, `scikit-learn` → `sklearn`; any other package by its PEP 503 name with `-` written as `_`) onto an unqualified name (`full_load` → `yaml.full_load`) or a class-qualified name whose first segment starts with a capital letter (`FullLoader.full_load` → `yaml.FullLoader.full_load`); a lower-case dotted name is a module path and stays as written. For a grounded `<import>.<Class>.<method>` it also emits `<import>.<method>`, listed first, because that module-level call is what repository code writes (`yaml.FullLoader.full_load` also gives `yaml.full_load`), except when `<import>.<method>` is a call in the default-argument equivalence table (section 9.1, ADR-0037; e.g. `yaml.load`), whose bare name would also match its safe calls. Host grounding: each resulting symbol matches `^[A-Za-z_]\w*(\.[A-Za-z_]\w*)+$` and its last segment appears verbatim in the supplied text, and `evidence_urls` must be a subset of the returned URLs; otherwise the symbol is dropped. **Fix-commit fallback (ADR-0043):** when Tavily search and LLM extraction yield no dotted symbols, `_fallback_fix_commit` inspects GitHub fix commits from OSV references (`commit_refs`). It fetches the diff (cached), drops test files, parses hunk headers and `def`/`class` in non-test `.py` files (`changed_functions`), qualifies candidate names with the package import root, caps at 10 symbols, and records the commit URL as an `AdvisoryLink` (`source="osv"`, `title="Fix commit"`) and evidence, with zero extra search spend. No grounded symbol and no fix-commit symbol → `identified=False`, "vulnerable function not identified" (AC-13). Results are cached per advisory ID in `DATA_DIR/cache/research/` for 7 days (ADR-0031: bounds how long a poisoned search result is served to every visitor; the source links stay visible on each finding).
 
 ### 7.5 LLM client (`pir/llm.py`)
 
 ```python
 TOKEN_FACTORY_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"   # constant, not configurable (AC-16)
-class ChatResult(Strict):   # content: leading/trailing whitespace stripped; ToolCall(id, name, arguments_json)
-    content: str | None; finish_reason: str | None; tool_calls: list[ToolCall]
-    usage: Usage                        # prompt_tokens, completion_tokens, reasoning_tokens, estimated: bool
-class LLMClient(Protocol):              # raises LLMError(kind: "timeout" | "http" | "rate_limited" | "bad_response" | "budget")
+class ChatResult(Strict):
+    content: str | None; finish_reason: str | None; tool_calls: list[ToolCall]; usage: Usage
+class LLMClient(Protocol):   # raises LLMError(kind: "timeout" | "http" | "rate_limited" | "bad_response" | "budget")
     model: str
     async def chat(self, messages: list[ChatMessage], *, tools: list[ToolSpec] | None = None, tool_choice: Literal["auto", "none"] | ForcedTool | None = None,
                    json_mode: bool = False, max_tokens: int, temperature: float = 0.0, timeout_s: float, budget: ScanBudget) -> ChatResult
@@ -407,7 +371,7 @@ class JobManager:       # get raises ScanNotFound
     def get(self, scan_id: str) -> Job;  def events(self, scan_id: str, after_seq: int) -> AsyncIterator[ProgressEvent]
 ```
 
-The replay path imports nothing from the pipeline or any client module (a fast test inspects `pir.replay`'s imports). `ReplayStore.get` accepts only slugs matching `^[a-z0-9-]{1,40}$` that are keys of the loaded set (a dict lookup, never a path join); anything else, such as `../x`, raises `DemoNotFound` without touching the filesystem. Jobs run as `asyncio` tasks in the single worker; each task first binds the scan log context (section 19). **Eviction:** queued and running jobs are never evicted; finished jobs are kept for `JOB_TTL_S`, at most `MAX_JOBS` finished, oldest finished evicted first. Running jobs are bounded by the concurrency caps of section 8.
+The replay path imports nothing from the pipeline or any client module (a fast test inspects `pir.replay`'s imports). `ReplayStore.get` accepts only slugs matching `^[a-z0-9-]{1,40}$` that are keys of the loaded set (a dict lookup, never a path join); anything else, such as `../x`, raises `DemoNotFound` without touching the filesystem. Jobs run as `asyncio` tasks in the single worker; each task first binds the scan log context (section 19). `build_finding` computes `remediation` deterministically from OSV fixed/introduced versions or fix-commit advice (ADR-0044). **Eviction:** queued and running jobs are never evicted; finished jobs are kept for `JOB_TTL_S`, at most `MAX_JOBS` finished, oldest finished evicted first. Running jobs are bounded by the concurrency caps of section 8.
 
 ### 7.8 Admission (`pir/ratelimit.py`, `pir/spend.py`)
 
@@ -533,6 +497,7 @@ OSV and GitHub are free and only counted. `SANDBOX_USD_PER_SECOND=0.001` is twic
 5. Replays never touch the meter or ledger (AC-47, AC-52). Replays serving recorded proofs (ADR-0042) execute entirely offline without Sandbox or LLM calls, ensuring $0 demo cost. Kill switch: `LIVE_SCANS_ENABLED=false`. CLI, eval and record print spend used and remaining allowance per pool to stderr at the end.
 6. `remaining_fractions()` feeds `HealthResponse.budget_remaining`: per pool `clamp((cap - total spent_usd) / cap, 0, 1)` over settled spend of all spenders as of the last load or save (open reservations excluded so the alert does not flap mid-scan; a cap of 0 gives 0.0).
 7. **Warm ping zero-spend (ADR-0042):** The 10-minute judging warm ping queries `/api/health`, which is keyless, reads in-memory metrics, and bypasses the spend meter. Its ~4,320 requests/month consume no API tokens and fit easily within Cloud Run's 2,000,000 free-tier request quota at $0.
+8. **Judging-window budget profile (ADR-0044):** Reshapes budget caps to allocate remaining ~$8 Nebius promo credits through 2026-12-15: retains $0.75 per-scan reservation for live judge scans while enforcing a tight daily ceiling and high-signal judge allowance pool.
 
 **Rate limits (OQ-3):** live-scan and proof requests (replay and stream caps: section 8). Client key: `request.client.host`; with `TRUSTED_PROXY_HOPS=n > 0`, the n-th address from the right of `X-Forwarded-For` only if the header has at least n entries, otherwise (fewer entries, missing or malformed) the connection address, never the leftmost entry (finding 8; the hop count is verified at deploy, section 18). Limits: 3 per client per hour, 10 per client per day, 10 globally per UTC day (lowered from 30; the daily spend ceiling is the binding control), 2 concurrent (then `server_busy`). Every request that passes URL parsing counts (protecting the GitHub quota too). Counters are in memory; the durable cap is the backstop. Logs hold only a salted hash of the key. The per-client values are published in `AppConfigResponse.limits`.
 
@@ -571,7 +536,7 @@ Inside the Sandbox, root manifests only (monorepos are a limitation), names PEP 
 ## 16. Call-chain proof (M2, cuttable; ADR-0018, ADR-0039, ADR-0041, OQ-15)
 
 - Built only if M1 passed (the Sandbox spike passed 2026-10-25); enabled only with `FEATURE_PROOF=true` **and** `EXECUTOR=sandbox`; otherwise the route is not registered and `/api/config` reports `proof: false` (AC-65). **Entry:** the first step of the validated call path (`pkg.mod:func` or `pkg.mod:<module>`); `ProofRequest.entry` may name another step of that path, nothing else. **Recorded demo proof (ADR-0042):** `pir record --proof` runs this Sandbox proof pipeline after a live scan for each `likely reachable` finding and embeds the verified `Proof` in `Finding.proof` inside the recording. Replay clients inspect the authentic Token Factory Sandbox proof immediately with zero latency and zero live Sandbox calls.
-- From image A, `proof-install` (ON) installs the resolved pins that have a wheel **from wheels only** (`uv pip install --no-deps --only-binary :all: --target /work/deps` + the section 7.2 common flags + `-- <name==version>`, run from the fresh empty `/tmp/uvwd` with `--python /usr/local/bin/python3.13`; nothing from the repo or any sdist runs, and no repo file influences uv, while the network is on; ADR-0032), and only **downloads** the source package of each pin without a wheel (next bullet) → image P. The agent installs one pin per uv call so a missing wheel is attributed: such a pin is listed in `no_wheel`. If any pin without a wheel is not then built from source (it is in `unfetched` or `proof-build` failed for it), the proof is `not_proven` with an `uncertain` reason (below; AC-68 pairs `uncertain` with "not proven") and `proof-run` is skipped. `proof-run` (OFF) puts the repo and `/work/deps` on `sys.path`, sets `sys.argv = [<entry file path>]` and an empty `sys.stdin`, captures the entry's stdout and stderr in 64 KiB buffers (the result line goes to the harness's saved stdout), and patches the **stubbed target** with `unittest.mock.patch(target, side_effect=recorder)` before the entry is imported or run. The stubbed target (`--target`, `Proof.target`) is the `target` of the last call-path step's `TargetSite`, the name repository code calls (`yaml.load` for PyRL); when that site matched only through a default-argument equivalence (ADR-0037), the host also passes `--site <file>:<line>` and the recorder counts only calls whose nearest repository frame is that line, returning a `MagicMock` to any other caller (ADR-0039). On a counted call the recorder records the nearest repository frame's `file:line` and stops the run by raising a private `BaseException` subclass. A function entry: import the entry module and call the entry with `unittest.mock.sentinel` placeholders; a `<module>` entry: next bullet. A watchdog thread at 55 s (the `proof-run` timeout minus 5 s) reports from the recorder state and ends the process. "proven" if the recorder fired (also when repo code swallowed the stop), else "not proven" with the reason; a timeout with nothing recorded gives "not proven", "sandbox timeout" (AC-68). Proof never changes the verdict (AC-67). No payloads (AC-69): only harness-made sentinels and MagicMocks; no invented arguments, environment values or input.
+- From image A, `proof-install` (ON) installs the resolved pins that have a wheel **from wheels only** (`uv pip install --no-deps --only-binary :all: --target /work/deps` + the section 7.2 common flags + `-- <name==version>`, run from the fresh empty `/tmp/uvwd` with `--python /usr/local/bin/python3.13`; nothing from the repo or any sdist runs, and no repo file influences uv, while the network is on; ADR-0032), and only **downloads** the source package of each pin without a wheel (next bullet) → image P. The agent installs one pin per uv call so a missing wheel is attributed: such a pin is listed in `no_wheel`. If any pin without a wheel is not then built from source (it is in `unfetched` or `proof-build` failed for it), the proof is `not_proven` with an `uncertain` reason (below; AC-68 pairs `uncertain` with "not proven") and `proof-run` is skipped. `proof-run` (OFF) puts the repo and `/work/deps` on `sys.path`, sets `sys.argv = [<entry file path>]` and an empty `sys.stdin`, captures the entry's stdout and stderr in 64 KiB buffers (the result line goes to the harness's saved stdout), and patches the **stubbed target** with `unittest.mock.patch(target, side_effect=recorder)` before the entry is imported or run. The stubbed target (`--target`, `Proof.target`) is the `target` of the last call-path step's `TargetSite`, the name repository code calls (`yaml.load` for PyRL); when that site matched only through a default-argument equivalence (ADR-0037), the host also passes `--site <file>:<line>` and the recorder counts only calls whose nearest repository frame is that line, returning a `MagicMock` to any other caller (ADR-0039). On a counted call the recorder records the nearest repository frame's `file:line` and stops the run by raising a private `BaseException` subclass. A function entry: import the entry module and call the entry with `unittest.mock.sentinel` placeholders; a `<module>` entry: next bullet. A watchdog thread at 55 s (the `proof-run` timeout minus 5 s) reports from the recorder state and ends the process. **Proof authenticity (ADR-0044):** The host generates a random per-run `proof_nonce` passed to the sandbox execution environment; the runner stub emits this expected nonce token in its result line / exit verification, verified by the host before accepting a `proven` verdict, preventing repository code under test from forging proof results. "proven" if the recorder fired (also when repo code swallowed the stop), else "not proven" with the reason; a timeout with nothing recorded gives "not proven", "sandbox timeout" (AC-68). Proof never changes the verdict (AC-67). No payloads (AC-69): only harness-made sentinels and MagicMocks; no invented arguments, environment values or input.
 - **Source packages, phase 1: download only, inside `proof-install` (network ON; ADR-0041).** Nothing from a source package runs and no tool opens it. For each `no_wheel` spec, in order, at most `MAX_SDISTS` = 10: the agent's own stdlib code (the `fetch` module's HTTPS opener that refuses redirects, 30 s per request) GETs `https://pypi.org/pypi/<name>/<version>/json` (name and version re-validated, path segments quoted; body cap `MAX_PYPI_JSON_BYTES` = 5 MiB). From `urls[]` it takes the entries with `packagetype == "sdist"`, preferring a filename ending `.tar.gz`, else `.zip`. The filename must match `^[A-Za-z0-9][A-Za-z0-9._+-]{0,200}\.(tar\.gz|zip)$`; the URL must be `https://files.pythonhosted.org/packages/...` with no userinfo, port, query or fragment; `digests.sha256` must be 64 lowercase hex; `size` must be at most `MAX_SDIST_BYTES` = 20 MiB. The file streams with that cap, and a running total of at most `MAX_SDIST_TOTAL_BYTES` = 50 MiB, to `/work/sdists/<filename>`. The directory is created fresh by `os.mkdir`, the file is opened with `O_CREAT | O_EXCL | O_NOFOLLOW` and hashed while written, and a hash mismatch deletes it. If at least one source package was saved, the agent also downloads the two build-tool wheels `setuptools-75.8.0-py3-none-any.whl` and `wheel-0.45.1-py3-none-any.whl` the same way (JSON API entry with that exact filename) into a fresh `/work/buildwheels/`. Each must equal both the API's sha256 and the constant committed in `sandbox_agent/proof.py` (`BUILD_BACKEND_WHEELS`); if either fails, every saved source package moves to `unfetched` with `backend_unavailable`. Downloads share `proof-install`'s 270 s budget. Result additions: `sdists: [{spec, file, sha256}]` and `unfetched: [{spec, reason}]`, reason one of `no_sdist` (no `urls[]` entry passes the filename, URL and sha256 rules), `too_large`, `hash_mismatch`, `pypi_error` (status not 200, a redirect, timeout, invalid JSON), `limit` (over 10 or over the total), `time_limit`, `backend_unavailable`. Every `no_wheel` spec appears in exactly one of the two lists, and the host checks this as it checks `installed + no_wheel`. Any `unfetched` spec → `not_proven`, "uncertain: no wheel for <name>==<version>; its source package could not be downloaded" (specs joined with ", ").
 - **Source packages, phase 2: `proof-build` (network OFF; ADR-0041).** Runs only when `sdists` is non-empty and `unfetched` is empty, from image P with `save=True` → image P′, platform timeout `TIMEOUT_PROOF_BUILD_S` = 300 (agent budget `BUILD_BUDGET_S` = 270, at most `BUILD_TIMEOUT_S` = 120 per package). **Args:** `{"builds": [{"name", "version", "file", "sha256"}]}`, 1 to 10 items copied from `sdists`. The agent re-checks each (pin rules; `file` is `/work/sdists/<filename>` with the filename rule; `os.lstat` shows a regular file of at most 20 MiB; its sha256 recomputed equals `sha256`), and checks that `/work/buildwheels/` holds exactly the two pinned wheels with their pinned hashes; any mismatch is exit 2 (`SandboxFailed`). It writes `/tmp/pirbuild/build-constraints.txt` (fresh directory) with `setuptools==75.8.0` and `wheel==0.45.1`. **Per package, in order:** a fresh empty working directory `/tmp/uvbuild-<i>` (`os.mkdir`); `env` = the section 7.1 fixed environment without `UV_NO_BUILD`, plus `UV_OFFLINE=1`; stdin, stdout and stderr all `DEVNULL` (build output is untrusted and never read or logged); argv `/usr/local/bin/uv pip install --no-deps --target /work/deps --python /usr/local/bin/python3.13 --no-config --no-sources --offline --no-index --find-links /work/buildwheels --build-constraints /tmp/pirbuild/build-constraints.txt -- /work/sdists/<filename>`. Build isolation stays on: uv builds in a temporary environment made only from the two local wheels, and a build requirement not among them fails the build. **Output:** `{built: [spec], failed: [{spec, reason}]}`, reason `build_failed` (non-zero exit) or `build_timeout` (killed at its timeout, or the budget ran out before it started). Every requested spec appears in exactly one list, and the command exits 0. **Host mapping:** any `failed` → `not_proven`, "uncertain: could not build <name> <version> from source" (packages joined with ", "), and `proof-run` is skipped. A platform timeout → "sandbox timeout"; any other failure → "the Sandbox could not complete the proof (proof-build)"; a spend denial → "not run: the spend limit was reached". The verdict never changes (AC-67). Otherwise `proof-run` runs from P′. P and P′ are both discarded at the end. **Trust:** the build runs third-party code under exactly `proof-run`'s conditions (network OFF, uid 65534, `env -i`, no secrets), in an image no network-ON step ever uses, so a hostile source package can at most falsify this proof, as a hostile repo can. **Time and spend:** worst case for one proof is `selfcheck` 60 s (first use per process) + `fetch` 120 + `index` 120 + `proof-install` 300 + `proof-build` 300 + `proof-run` 60 = 960 s. That is inside Cloud Run's 1,200 s request limit (section 18) and the platform's 3,600 s maximum, and the 55 s watchdog stays inside `proof-run`'s 60 s. The largest single spend hold is 300 s × $0.001 = $0.30, inside the $0.75 per-scan budget, and each hold is settled after its operation.
 - **`<module>` entries (ADR-0039):** the agent reads the entry file's `entry_kind` with the index's own guard check (`ast` only, nothing runs). `main_block`: the harness inserts the file's directory at `sys.path[0]`, sets the working directory to the repo root and calls `runpy.run_path(<repo>/<file>, run_name="__main__")` with `sys.argv == [<repo>/<file>]`, as `python <file>` would, so the `if __name__ == "__main__":` body runs. Any other `<module>` kind is imported (module scope runs on import). Same `proof-run` step: image P, network OFF, `env -i`, the 60 s timeout, the same stub and recorder. Outcomes before the recorder fired, each "not proven": `SystemExit` ends the run (never the harness) → "entry exited with code <code> before reaching <target>"; code 2 with captured stderr starting `usage:` (an `argparse` failure, e.g. a missing required argument) → "entry needs command-line arguments; the proof supplies none (exit code 2 before reaching <target>)"; any other exception → "entry raised <class name, at most 100 chars> before reaching <target>"; the process ends without a result line (e.g. `os._exit`) → "entry ended the process before the harness reported". Captured output is never copied into a reason (untrusted). The harness catches `BaseException` around the run, writes exactly one result line (a lock shared with the watchdog), then leaves with `os._exit(0)` so repo threads and `atexit` handlers cannot change it; the host maps any `proof-run` failure to `not_proven`, so a proof never fails the scan or the job (NFR-06).
@@ -595,7 +560,7 @@ export interface Api {
 ```
 
 - **Mock adapter:** `?api=mock&scenario=<name>`: `reachable` (default), `clean`, `incomplete`, `partial-failure`, `error-invalid-url`, `error-not-found`, `error-too-large`, `error-not-python`, `rate-limited`, `paused`, `demo-not-found`, `too-many-requests` (an allowlist: any other value falls back to `reachable` and never reaches a fixture path); `DEMO_SCENARIO` matches slugs from `demos.json`; `&jump=report` skips the feed animation. Fixtures follow the frozen models exactly (including `tools`, the `scan_not_found`, `report_not_ready` and `demo_not_found` messages, and the new config fields); fast tests validate every report, event, proof and config fixture and compare `errors.json` with `pir/messages.py`.
-- **Contract use:** stage tool chips render from `tools` (the client-side tool column of `render.js` `STAGES` is removed); "Sandbox" appears only when `sandbox` is listed; the rate-limit note reads `limits.live_scans_per_client_*`; the eval figure renders only when `config.eval` is not null, labeled with `n` and `run_date`. Flags: `progress_feed=false` → one busy state and `getStatus` polling (AC-42); `markdown_export=false` → JSON only (AC-64); `proof=false` → no proof controls (AC-65). **Deep link and recorded proof (ADR-0042):** `/?demo=<slug>` on page load auto-starts that replay on the real HTTP adapter and mock. In replay reports where `Finding.proof != null`, the UI renders "proven in Token Factory Sandbox" directly with caller details without calling `requestProof`.
+- **Contract use:** stage tool chips render from `tools` (the client-side tool column of `render.js` `STAGES` is removed); "Sandbox" appears only when `sandbox` is listed; the rate-limit note reads `limits.live_scans_per_client_*`; the eval figure renders only when `config.eval` is not null, labeled with `n` and `run_date`. Flags: `progress_feed=false` → one busy state and `getStatus` polling (AC-42); `markdown_export=false` → JSON only (AC-64); `proof=false` → no proof controls (AC-65). **Deep link and recorded proof (ADR-0042):** `/?demo=<slug>` on page load auto-starts that replay on the real HTTP adapter and mock. In replay reports where `Finding.proof != null`, the UI renders "proven in Token Factory Sandbox" directly with caller details without calling `requestProof`. **Call-path graph and remediation (ADR-0044):** `render.js` renders a native hand-drawn SVG call graph (zero external charting libraries/dependencies) showing the chain from entry point to vulnerable sink, with light/dark tokens, responsive scaling down to 375px, and an accessible text fallback. Findings display deterministic remediation guidance with a one-click copy button.
 - **Untrusted text (AC-60, AC-57):** only `textContent` and `document.createElement`; `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, `eval` and `new Function` are banned (a fast test scans `web/js/**/*.js`). Links only if `new URL(u).protocol` is `http:` or `https:`, `href` = the exact report string, `target="_blank"`, `rel="noopener noreferrer"`. `uncertain` cards carry `data-verdict="uncertain"`, a distinct class and the visible text `uncertain` (AC-56). Card order: evidence (call path, advisory links, vulnerable function), then confidence, limitations, explanation (AC-55).
 - **Preview command (prototype):** `npx --yes http-server web -p 5173 -c-1`, then open `http://localhost:5173/?api=mock`. **Preview (real backend):** `python -m pir serve --port 8000`, then `http://127.0.0.1:8000/` (replays need no keys with `LIVE_SCANS_ENABLED=false`). **Screenshot command:** `npx playwright screenshot --viewport-size=1280,900 --full-page --wait-for-timeout=1500 "http://localhost:5173/?api=mock&scenario=reachable&jump=report" .ui-review/report.png` (swap `scenario` for other states).
 
@@ -643,8 +608,8 @@ Google Cloud Run terminates TLS at the Google Front End (GFE), which appends the
 ProveItReachable/
   pyproject.toml  Dockerfile  .dockerignore  README.md (CI badge)  LICENSE (MIT)  .env.example
   .github/workflows/{ci,keepalive,fingerprint}.yml   schemas/report.schema.json (generated; checked by a fast test)
-  src/pir/  {__init__,__main__,cli,config,messages,deps,logs,tracing,keepalive,http,github,osv,research,llm,
-            agent_client,pipeline,report_builder,markdown,jobs,replay,ratelimit,spend}.py
+  src/pir/  {__init__,__main__,cli,config,messages,deps,logs,tracing,keepalive,http,github,osv,research,fix_commit,
+            llm,agent_client,pipeline,report_builder,markdown,jobs,replay,ratelimit,spend}.py
     models/{report,index,research,reasoning,api,recording,ledger,eval}.py   api/{app,routes,sse,errors,security_headers}.py
     reasoning/{strategy,tool_calling,ast_tool,prompts}.py   executor/{base,contree,fake}.py + base_image_fingerprint.json   evaluation/{cases,metrics,runner}.py
     sandbox_agent/{__main__,fetch,resolve,index,proof,protocol,selfcheck}.py   # stdlib only
