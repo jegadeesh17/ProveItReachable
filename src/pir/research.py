@@ -24,7 +24,8 @@ import httpx
 from pydantic import ValidationError
 
 from pir.config import Settings, load_settings, require
-from pir.http import MIB, OutboundBlocked, make_client
+from pir.fix_commit import changed_functions, commit_refs, fetch_diff
+from pir.http import GITHUB_HOST, GITHUB_MAX_BYTES, MIB, OutboundBlocked, make_client
 from pir.llm import LLMClient, LLMError
 from pir.models import ReasonCode
 from pir.models.report import NOT_IDENTIFIED_PREFIX, Advisory, AdvisoryLink
@@ -234,6 +235,8 @@ class AdvisoryResearcher:
         *,
         search: SearchClient,
         llm: LLMClient,
+        github_client: httpx.AsyncClient | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
         clock: Callable[[], float] = time.time,
         bill_search: bool = True,
     ) -> None:
@@ -242,9 +245,12 @@ class AdvisoryResearcher:
         self._settings = settings or load_settings()
         self._search = search
         self._llm = llm
+        self._github_client = github_client
+        self._transport = transport
         self._clock = clock
         self._bill_search = bill_search
         self._cache_dir = Path(self._settings.data_dir) / "cache" / "research"
+        self._diff_cache_dir = Path(self._settings.data_dir) / "cache" / "diffs"
 
     async def research(
         self, advisory: Advisory, package: str, osv_links: list[AdvisoryLink], budget: ScanBudget
@@ -274,6 +280,10 @@ class AdvisoryResearcher:
             results = await self._run_search(advisory, package, budget)
             stage = "nebius_failed"
             symbols, evidence = await self._extract(advisory, package, results, budget)
+            if not symbols:
+                symbols, commit_url = await self._fallback_fix_commit(package, osv)
+                if symbols and commit_url:
+                    evidence = [commit_url]
         except _StageFailed as exc:
             logger.warning("research failed: %s", exc.failure, extra={"service": "research"})
             return self._result(advisory.id, osv, results, [], [], failure=exc.failure)
@@ -364,6 +374,80 @@ class AdvisoryResearcher:
                 if url in returned and url not in evidence:
                     evidence.append(url)
         return symbols, evidence
+
+    async def _fallback_fix_commit(
+        self, package: str, osv: list[AdvisoryLink]
+    ) -> tuple[list[str], str | None]:
+        refs = commit_refs(osv)
+        if not refs:
+            return [], None
+
+        root = _import_root(package)
+        for owner, repo, sha in refs:
+            diff_text = await self._fetch_diff(owner, repo, sha)
+            if not diff_text:
+                continue
+            funcs = changed_functions(diff_text, root)
+            if not funcs:
+                continue
+
+            symbols: list[str] = []
+            for named in funcs:
+                for symbol in _candidates(named, root):
+                    if symbol not in symbols:
+                        symbols.append(symbol)
+                if len(symbols) >= _MAX_SYMBOLS:
+                    symbols = symbols[:_MAX_SYMBOLS]
+                    break
+
+            if not symbols:
+                continue
+
+            commit_url = None
+            sha_lower = sha.lower()
+            for link in osv:
+                if f"/commit/{sha_lower}" in link.url.lower():
+                    commit_url = link.url
+                    break
+            if not commit_url:
+                commit_url = f"https://github.com/{owner}/{repo}/commit/{sha_lower}"
+                osv.append(AdvisoryLink(url=commit_url, source="osv", title="Fix commit"))
+
+            return symbols, commit_url
+
+        return [], None
+
+    async def _fetch_diff(self, owner: str, repo: str, sha: str) -> str:
+        if self._github_client is not None:
+            return await fetch_diff(
+                self._github_client, owner, repo, sha, cache_dir=self._diff_cache_dir
+            )
+        headers = {
+            "Accept": "application/vnd.github.diff",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "ProveItReachable",
+        }
+        if (
+            self._settings.github_token is not None
+            and self._settings.github_token.get_secret_value()
+        ):
+            headers["Authorization"] = f"Bearer {self._settings.github_token.get_secret_value()}"
+        try:
+            async with make_client(
+                {GITHUB_HOST},
+                GITHUB_MAX_BYTES,
+                self._settings.timeout_github_s,
+                headers=headers,
+                transport=self._transport,
+            ) as client:
+                return await fetch_diff(client, owner, repo, sha, cache_dir=self._diff_cache_dir)
+        except Exception as exc:
+            logger.warning(
+                "failed to create github client or fetch diff: %s",
+                exc,
+                extra={"service": "research"},
+            )
+            return ""
 
     # ---- result -----------------------------------------------------------------------
 

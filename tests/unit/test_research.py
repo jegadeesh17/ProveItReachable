@@ -223,6 +223,10 @@ def _researcher(tmp_path, search=None, llm=None, clock=None, **kw):
     extra = {"clock": clock} if clock else {}
     if "bill_search" in kw:
         extra["bill_search"] = kw.pop("bill_search")
+    if "github_client" in kw:
+        extra["github_client"] = kw.pop("github_client")
+    if "transport" in kw:
+        extra["transport"] = kw.pop("transport")
     return (
         AdvisoryResearcher(_settings(tmp_path, **kw), search=search, llm=llm, **extra),
         search,
@@ -424,6 +428,49 @@ async def test_ac13_evidence_is_dropped_when_nothing_is_identified(tmp_path):
     researcher, _, _ = _researcher(tmp_path, llm=llm)
     result = await _research(researcher)
     assert not result.identified and result.evidence_urls == []
+
+
+async def test_fix_commit_fallback_identifies_symbols_and_records_commit_evidence(tmp_path):
+    sha = "be846822b4b3a5a54b6163e794b42dc06fba54a3"
+    commit_url = f"https://github.com/aio-libs/aiohttp/commit/{sha}"
+    osv_links = [
+        AdvisoryLink(url=PAGE, source="osv", title=None),
+        AdvisoryLink(url=commit_url, source="osv", title=None),
+    ]
+    # Tavily returns search results, but LLM returns no identified symbols
+    llm = FakeLLM([json_result({"identified": False, "symbols": []})])
+    diff_content = """diff --git a/aiohttp/web_protocol.py b/aiohttp/web_protocol.py
+--- a/aiohttp/web_protocol.py
++++ b/aiohttp/web_protocol.py
+@@ -334,6 +334,7 @@ class RequestHandler:
+     def connection_made(self, transport):
+-        pass
++        # fix
+"""
+
+    def github_handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == f"https://api.github.com/repos/aio-libs/aiohttp/commits/{sha}"
+        return httpx.Response(200, text=diff_content)
+
+    transport = httpx.MockTransport(github_handler)
+    researcher, _, _ = _researcher(tmp_path, llm=llm, transport=transport)
+    result = await researcher.research(
+        _advisory(advisory_id="GHSA-5wr8-gcqf-gqf3"), "aiohttp", osv_links, _budget()
+    )
+
+    assert result.identified is True
+    assert result.symbols == ["aiohttp.web_protocol.RequestHandler.connection_made"]
+    assert result.evidence_urls == [commit_url]
+    assert result.failure is None
+    assert result.not_identified_reason is None
+
+    # Verify second call hits the cache
+    cached_result = await researcher.research(
+        _advisory(advisory_id="GHSA-5wr8-gcqf-gqf3"), "aiohttp", osv_links, _budget()
+    )
+    assert cached_result.from_cache is True
+    assert cached_result.symbols == ["aiohttp.web_protocol.RequestHandler.connection_made"]
+    assert cached_result.evidence_urls == [commit_url]
 
 
 async def test_ac12_grounding_uses_summary_text_too(tmp_path):
