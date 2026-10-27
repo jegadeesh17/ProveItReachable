@@ -12,7 +12,7 @@ Given a public GitHub repository URL, the service:
 
 1. reads the repository's pinned dependencies (GitHub metadata only);
 2. looks up known advisories for them on OSV.dev;
-3. uses Tavily to research each advisory and find the vulnerable function;
+3. uses Tavily to research each advisory and find the vulnerable function, falling back to OSV GitHub fix-commit diffs when search yields none;
 4. builds a deterministic `ast` index of the repository inside a Nebius Token Factory Sandbox;
 5. lets Nemotron (Token Factory) decide reachability by querying that index through tool calls;
 6. validates every answer (labels, call path, source URLs) and ranks the findings in a deterministic report builder.
@@ -24,7 +24,6 @@ The report is available as JSON (`schemas/report.schema.json`) or Markdown. A si
 Figures from [`eval/results/latest.json`](eval/results/latest.json): run 2026-10-26, model `nvidia/nemotron-3-super-120b-a12b`, 30 cases, 4 errored; precision 0.91, recall 0.67.
 
 Measured alert reduction across demo repositories (`scripts/noise_summary.py`): 66 traditional scanner alerts down to 4 likely reachable (and 2 proven in Token Factory Sandbox), cutting alert noise by 93.9%.
-(Motivating example from initial design: 41 to 3 reachable findings).
 
 ## Setup
 
@@ -58,6 +57,7 @@ Run with `.venv` active.
 | Check configuration | `python -m pir check-config --for scan` |
 | Serve the API and web UI locally | `python -m pir serve` (binds `127.0.0.1:8000` by default) |
 | Scan a repository | `python -m pir scan https://github.com/owner/repo` |
+| Measure alert noise reduction | `python scripts/noise_summary.py` |
 | Evaluation (spends credits) | `python -m pir eval` |
 
 Tests never touch the network: a guard in `tests/conftest.py` makes any non-loopback connection raise, and `live` tests are skipped unless `PIR_LIVE_TESTS=1`.
