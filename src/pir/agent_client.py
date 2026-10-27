@@ -20,6 +20,7 @@ import io
 import json
 import logging
 import re
+import secrets
 import tarfile
 import zipfile
 import zlib
@@ -191,6 +192,9 @@ _RECORDED_CALL_RE = re.compile(
     r"(?P<target>[A-Za-z0-9_.]+) called from (?P<file>.+):(?P<line>[0-9]+)"
 )
 ENTRY_ENDED_REASON = "entry ended the process before the harness reported"
+PROOF_UNAUTHENTICATED_REASON = (
+    "not proven: proof authenticity check failed (invalid or missing nonce)"
+)
 
 
 def _check_pins(values: list[str]) -> list[str]:
@@ -317,6 +321,7 @@ class ProofRunResult(Strict):
     entry: str
     target: str
     recorded_call: str | None
+    nonce: str | None = None
 
     @field_validator("reason")
     @classmethod
@@ -752,13 +757,15 @@ class SandboxAgentClient:
         entry: str,
         target: str,
         site: str | None = None,
+        nonce: str | None = None,
     ) -> ProofRunResult:
         """Run the entry with `target` stubbed (network OFF, from P, nothing saved).
 
         Raises SandboxTimeout (the platform timeout) or SandboxFailed. A clean exit with no result
         line (repository code ended the process) is a "not proven" result, not a failure.
         """
-        args: dict[str, Any] = {"entry": entry, "target": target}
+        expected_nonce = secrets.token_hex(16) if nonce is None else nonce
+        args: dict[str, Any] = {"entry": entry, "target": target, "nonce": expected_nonce}
         if site is not None:
             args["site"] = site
         result = await self._run(
@@ -782,10 +789,20 @@ class SandboxAgentClient:
                 entry=entry,
                 target=target,
                 recorded_call=None,
+                nonce=None,
             )
         run = self._validate("proof-run", ProofRunResult, parse_result("proof-run", result))
         if (run.entry, run.target) != (entry, target):
             raise SandboxFailed("proof-run", "the result is for a different entry or target")
+        if run.status == "proven" and run.nonce != expected_nonce:
+            return ProofRunResult(
+                status="not_proven",
+                reason=PROOF_UNAUTHENTICATED_REASON,
+                entry=entry,
+                target=target,
+                recorded_call=None,
+                nonce=run.nonce,
+            )
         return run
 
     async def close(self, ws: Workspace) -> None:
@@ -807,6 +824,7 @@ __all__ = [
     "ProofImage",
     "ProofInstallResult",
     "ProofRunResult",
+    "PROOF_UNAUTHENTICATED_REASON",
     "ResolveResult",
     "ResolvedDependency",
     "SandboxAgentClient",

@@ -94,6 +94,8 @@ MODULE_ENTRY = "<module>"
 SDIST_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,200}\.(?:tar\.gz|zip)")
 FILES_URL_RE = re.compile(r"https://files\.pythonhosted\.org/packages/[A-Za-z0-9._~%+/-]{1,500}")
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
+NONCE_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+MAX_NONCE_CHARS = 64
 
 
 # ---- proof-install ---------------------------------------------------------------------------
@@ -844,7 +846,7 @@ class _Reporter:
             self._finish(code)
 
 
-def _parse_args(args: dict[str, Any]) -> tuple[str, str, tuple[str, int] | None]:
+def _parse_args(args: dict[str, Any]) -> tuple[str, str, tuple[str, int] | None, str | None]:
     entry = require_str(args, "entry")
     target = require_str(args, "target")
     if len(entry) > 300 or ENTRY_RE.fullmatch(entry) is None:
@@ -860,7 +862,19 @@ def _parse_args(args: dict[str, Any]) -> tuple[str, str, tuple[str, int] | None]
         if match.group("file").startswith("/"):
             raise BadInput("site must be a repo-relative path")
         site = (match.group("file"), int(match.group("line")))
-    return entry, target, site
+    nonce: str | None = None
+    raw_nonce = args.get("nonce")
+    if raw_nonce is not None:
+        if (
+            not isinstance(raw_nonce, str)
+            or len(raw_nonce) > MAX_NONCE_CHARS
+            or NONCE_RE.fullmatch(raw_nonce) is None
+        ):
+            raise BadInput(
+                "nonce must be an alphanumeric/dash/underscore string up to 64 characters"
+            )
+        nonce = raw_nonce
+    return entry, target, site, nonce
 
 
 def proof_run_command(
@@ -870,12 +884,12 @@ def proof_run_command(
     deps_root: str = DEPS_ROOT,
     finish: Callable[[int], object] = os._exit,
 ) -> dict[str, Any]:
-    """`proof-run` handler. Args: `entry`, `target` and optionally `site` (`file:line`).
+    """`proof-run` handler. Args: `entry`, `target` and optionally `site` (`file:line`) and `nonce`.
 
     Runs the entry with the target stubbed, reports once and leaves the process with
     `finish(0)`. It returns the payload only when `finish` returns (tests).
     """
-    entry, target, site = _parse_args(args)
+    entry, target, site, nonce = _parse_args(args)
     reporter = _Reporter(sys.stdout, finish)
     recorder = _Recorder(repo_root, site)
     out_raw, out_stream = _capture()
@@ -884,21 +898,27 @@ def proof_run_command(
     def payload(ended: _Ended | None) -> dict[str, Any]:
         recorded = recorder.recorded(target)
         if recorded is not None:  # reached: proven, even if repository code swallowed the stop
-            return {
+            data: dict[str, Any] = {
                 "status": "proven",
                 "reason": f"{target} was reached from {entry}",
                 "entry": entry,
                 "target": target,
                 "recorded_call": recorded,
             }
+            if nonce is not None:
+                data["nonce"] = nonce
+            return data
         reason = "sandbox timeout" if ended is None else _reason(ended, target, err_raw.text())
-        return {
+        data = {
             "status": "not_proven",
             "reason": reason,
             "entry": entry,
             "target": target,
             "recorded_call": None,
         }
+        if nonce is not None:
+            data["nonce"] = nonce
+        return data
 
     watchdog = threading.Timer(WATCHDOG_S, lambda: reporter.report(payload(None)))
     watchdog.daemon = True

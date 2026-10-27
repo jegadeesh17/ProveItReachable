@@ -52,6 +52,7 @@ from pir import agent_client
 from pir.agent_client import (
     AGENT_PATH,
     ENTRY_ENDED_REASON,
+    PROOF_UNAUTHENTICATED_REASON,
     LocalFixtureTarget,
     ProofImage,
     SandboxAgentClient,
@@ -828,20 +829,32 @@ async def run_proof_step(stub, **kw):
 
 
 async def test_ac70_proof_run_is_network_off_from_p_and_saves_nothing():
-    stub = Scripted(exec_result(stdout=line(PROVEN)))
-    result = await run_proof_step(stub, site="main.py:10")
+    nonce = "a" * 32
+    stub = Scripted(exec_result(stdout=line({**PROVEN, "nonce": nonce})))
+    result = await run_proof_step(stub, site="main.py:10", nonce=nonce)
     (call,) = stub.calls
     assert call.argv[3:6] == [AGENT_PATH, "proof-run", "--args-b64"]
     assert (call.network, call.save, call.image) == (False, False, P_IMAGE)
     assert call.timeout_s == SETTINGS.timeout_proof_run_s == 60
-    assert args_of(call) == {"entry": "main:<module>", "target": "yaml.load", "site": "main.py:10"}
+    assert args_of(call) == {
+        "entry": "main:<module>",
+        "target": "yaml.load",
+        "site": "main.py:10",
+        "nonce": nonce,
+    }
     assert result.status == "proven" and result.recorded_call == PROVEN["recorded_call"]
+    assert result.nonce == nonce
 
 
 async def test_proof_run_omits_site_unless_given():
-    stub = Scripted(exec_result(stdout=line(PROVEN)))
-    await run_proof_step(stub)
-    assert args_of(stub.calls[0]) == {"entry": "main:<module>", "target": "yaml.load"}
+    nonce = "b" * 32
+    stub = Scripted(exec_result(stdout=line({**PROVEN, "nonce": nonce})))
+    await run_proof_step(stub, nonce=nonce)
+    assert args_of(stub.calls[0]) == {
+        "entry": "main:<module>",
+        "target": "yaml.load",
+        "nonce": nonce,
+    }
 
 
 async def test_ac68_a_timed_out_proof_run_is_sandbox_timeout():
@@ -896,8 +909,13 @@ class ScriptedSandbox(httpx.MockTransport):
             command = tokens[tokens.index(AGENT_PATH) + 1]
             op_id = str(uuid.uuid4())
             data = fixture_json("contree", "op_success.json")
+            res_dict = dict(self.results[command])
+            if command == "proof-run":
+                args = protocol.parse_args_b64(tokens[tokens.index("--args-b64") + 1])
+                if "nonce" in args and res_dict.get("status") == "proven":
+                    res_dict["nonce"] = args["nonce"]
             data["metadata"]["result"]["stdout"].update(
-                encoding="ascii", value=line(self.results[command])
+                encoding="ascii", value=line(res_dict)
             )
             if not body["disposable"]:
                 data["result_image_uuid"] = str(uuid.uuid4())
@@ -2000,3 +2018,126 @@ def test_the_proof_install_argv_and_environment_never_combine_only_binary_with_n
     assert resolve.UV_BUILD_ENV["UV_OFFLINE"] == "1"
     assert "--no-build" in resolve.UV_COMMON_FLAGS  # compile has no --only-binary
     assert resolve.UV_ENV["UV_NO_BUILD"] == "1"
+
+
+# ---- AC-87: proof-result authenticity nonce verification (ADR-0044) --------------------------
+
+
+def test_ac87_proof_run_command_includes_nonce_when_provided():
+    repo, deps = fixture("proof_reached")
+    out = proof.proof_run_command(
+        {
+            "entry": "app.handler:handle",
+            "target": "yaml.unsafe_load",
+            "nonce": "test-nonce-12345",
+        },
+        repo_root=str(repo),
+        deps_root=str(deps),
+        finish=lambda code: None,
+    )
+    assert out["status"] == "proven"
+    assert out["nonce"] == "test-nonce-12345"
+
+
+def test_ac87_proof_run_command_omits_nonce_when_not_provided():
+    repo, deps = fixture("proof_reached")
+    out = proof.proof_run_command(
+        {
+            "entry": "app.handler:handle",
+            "target": "yaml.unsafe_load",
+        },
+        repo_root=str(repo),
+        deps_root=str(deps),
+        finish=lambda code: None,
+    )
+    assert out["status"] == "proven"
+    assert "nonce" not in out
+
+
+@pytest.mark.parametrize(
+    "bad_nonce",
+    [
+        "",  # empty string
+        "a" * 65,  # > 64 chars
+        "bad nonce with spaces",
+        "bad$char!",
+        12345,  # not a string
+    ],
+)
+def test_ac87_proof_run_command_refuses_invalid_nonce(bad_nonce):
+    repo, deps = fixture("proof_reached")
+    with pytest.raises(protocol.BadInput):
+        proof.proof_run_command(
+            {
+                "entry": "app.handler:handle",
+                "target": "yaml.unsafe_load",
+                "nonce": bad_nonce,
+            },
+            repo_root=str(repo),
+            deps_root=str(deps),
+            finish=lambda code: None,
+        )
+
+
+async def test_ac87_client_generates_random_nonce_and_verifies_matching_nonce():
+    ws = workspace()
+    captured_args = None
+
+    class CaptureExecutor:
+        kind = "fake"
+
+        async def run(self, image, argv, *, network, timeout_s, save=False, budget=None):
+            nonlocal captured_args
+            captured_args = protocol.parse_args_b64(argv[-1])
+            # Return matching nonce as the isolated runner harness does
+            proven_payload = {**PROVEN, "nonce": captured_args["nonce"]}
+            return exec_result(stdout=line(proven_payload))
+
+        async def discard(self, image):
+            pass
+
+    client = SandboxAgentClient(CaptureExecutor(), SETTINGS)
+    result = await client.proof_run(
+        ws,
+        a_proof_image(),
+        entry="main:<module>",
+        target="yaml.load",
+    )
+    assert captured_args is not None
+    assert "nonce" in captured_args
+    # Nonce is a cryptographically secure 16-byte hex token (32 hex characters)
+    assert len(captured_args["nonce"]) == 32
+    assert result.status == "proven"
+    assert result.nonce == captured_args["nonce"]
+    assert result.recorded_call == PROVEN["recorded_call"]
+
+
+async def test_ac87_client_rejects_missing_nonce_as_not_proven():
+    # Repository code prints a PIR-RESULT line without the random nonce
+    stub = Scripted(exec_result(stdout=line(PROVEN)))
+    result = await SandboxAgentClient(stub, SETTINGS).proof_run(
+        workspace(),
+        a_proof_image(),
+        entry="main:<module>",
+        target="yaml.load",
+    )
+    assert result.status == "not_proven"
+    assert result.recorded_call is None
+    assert result.reason == PROOF_UNAUTHENTICATED_REASON
+    assert "authenticity check failed" in result.reason
+
+
+async def test_ac87_client_rejects_mismatched_nonce_as_not_proven():
+    # Repository code prints a PIR-RESULT line with a guessed or forged nonce
+    forged = {**PROVEN, "nonce": "guessed_or_spoofed_nonce_123"}
+    stub = Scripted(exec_result(stdout=line(forged)))
+    result = await SandboxAgentClient(stub, SETTINGS).proof_run(
+        workspace(),
+        a_proof_image(),
+        entry="main:<module>",
+        target="yaml.load",
+        nonce="expected_host_nonce_456",
+    )
+    assert result.status == "not_proven"
+    assert result.recorded_call is None
+    assert result.reason == PROOF_UNAUTHENTICATED_REASON
