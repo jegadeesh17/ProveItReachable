@@ -358,3 +358,30 @@ Caveat: budget data can lag a few hours behind actual spend, and spend keeps acc
 - **Risk:** if the unlink is refused, billing stays on and the function logs `ERROR failed to disable billing: permission denied`. The kill switch then fails silently for the user, apart from the log line. Watch the logs after any budget alert at or above 80.
 - Budget messages come from the budget service, not from the function. A cost reading that lags spend can still let spend pass INR 100 (see 13.6).
 - To disarm: `gcloud functions deploy ... --set-env-vars=KILL_AT_COST=80,DRY_RUN=true` (same flags as above) or remove the project binding with `gcloud projects remove-iam-policy-binding proveitreachable --member=serviceAccount:billing-kill@proveitreachable.iam.gserviceaccount.com --role=roles/billing.projectManager`.
+
+## 14. Active judging-window budget profile (ADR-0044, Option A)
+
+To support evaluation during the active hackathon judging window (~Oct 28 to Nov 8, 2026) within the remaining ~$8 Nebius promo credits (Tavily has ample credits), the budget profile is configured under Option A:
+
+| Dimension | Specification | Notes / Rationale |
+|---|---|---|
+| **Remaining credit pool** | ~$8.00 (Nebius) | Promo credits expiring 2026-12-15; Tavily has ample credit surplus |
+| **Hosted judge allowance** | **$6.50** | Retains **$1.50 safety headroom** against the ~$8 credit pool |
+| **Per-scan reservation** | **$0.75** (Nebius) / **$0.40** (Tavily) | Preserved unchanged; provides full scanning & proof-building capacity |
+| **Global daily scan limit** | **2 live scans / day** (`RATE_LIMIT_GLOBAL_DAY=2`) | Enforces a maximum spend of ~$1.50/day ($0.75 × 2) |
+| **Window scan capacity** | **~8–10 live judge scans** | Sustained across the 12-day active judging evaluation window |
+| **Fail-safe fallback** | Graceful pause (`HTTP 429` / `daily_limit` / `paused`) | Zero-cost demo replays with real Sandbox proofs remain 100% accessible |
+
+### 14.1 Pacing rationale & design
+
+Spreading the remaining ~$8 evenly over 50 days to 2026-12-15 would have yielded ~$0.16/day, falling below the $0.75 reservation needed to admit a single scan and permanently locking out judge evaluations. Option A concentrates the available credits over the active judging period (~Oct 28 to Nov 8):
+1. **$0.75 reservation preserved**: Live scans run at full fidelity (AST indexing, deep model reasoning with Nemotron, and Sandbox proof verification) without cutting corners or compromising scan accuracy.
+2. **2 scans/day ceiling**: Paced via `RATE_LIMIT_GLOBAL_DAY=2` in application configuration, capping daily draw at $1.50/day and ensuring credits last across the judging window.
+3. **Safety buffer**: $1.50 headroom ensures token overrun or concurrency jitter cannot cause an unplanned billing overrun.
+
+### 14.2 Fail-safe behavior for judges
+
+When the daily scan ceiling (`RATE_LIMIT_GLOBAL_DAY=2`) or the hosted Nebius allowance ($6.50) is reached:
+- **Live scans pause gracefully**: New live scan admission requests return `HTTP 429 Too Many Requests` (with `retry-after` header and `daily_limit` or `paused` state). The user is clearly informed that the daily evaluation quota has been reached.
+- **Demo replays remain unaffected**: Pre-computed demo replays (`planesweeppose`, `pyrl`, `co2tools`) with authentic Token Factory Sandbox proof badges bypass the spend meter entirely ($0 cost, 0 credit reservation, 0 wait time). Judges can test and inspect complete reachability analysis and exploit verification workflows at any time regardless of live budget limits.
+

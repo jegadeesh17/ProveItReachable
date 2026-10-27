@@ -12,6 +12,7 @@ from fakes.ledger import MemorySpendLedger, make_state
 from pir.config import Settings
 from pir.models import Pool
 from pir.models.ledger import DayState, PoolState, Reservation
+from pir.ratelimit import Allowed, Limited, RateLimiter
 from pir.spend import (
     Refused,
     ScanBudget,
@@ -34,6 +35,7 @@ def _meter(
     spender: str,
     clock: FrozenClock,
     sleeps: list[float] | None = None,
+    end_date: date = END_DATE,
 ) -> SpendMeter:
     async def sleep(seconds: float) -> None:
         if sleeps is not None:
@@ -45,7 +47,7 @@ def _meter(
         LIMITS,
         clock,
         scan_timeout_s=SCAN_TIMEOUT_S,
-        end_date=END_DATE,
+        end_date=end_date,
         sleep=sleep,
     )
 
@@ -639,3 +641,171 @@ def test_scan_budget_limits_from_settings():
     limits = ScanBudgetLimits.from_settings(settings)
     assert limits.usd == {"nebius": 0.75, "tavily": 0.40}
     assert limits.min_start_usd == 0.05
+
+
+# --- judging-window budget profile (AC-88 / ADR-0044) -----------------------------------
+
+
+async def test_ac88_judging_window_budget_profile_preserves_reservations(frozen_clock):
+    """AC-88 / ADR-0044: Hosted judging allowance ($6.50 Nebius / $3.00 Tavily with $1.50 headroom
+    from ~$8 pool) preserves exact $0.75 Nebius and $0.40 Tavily per-scan reservations."""
+    state = make_state(
+        frozen_clock.now(),
+        {"hosted": {"nebius": 6.50, "tavily": 3.00}, "local": {"nebius": 0.0, "tavily": 0.0}},
+    )
+    ledger = MemorySpendLedger(state)
+    # Shaped daily ceiling during active evaluation window allows per-scan reservations
+    meter = _meter(ledger, "hosted", frozen_clock, end_date=frozen_clock.now().date())
+
+    # First judge scan reserved at full fidelity ($0.75 Nebius, $0.40 Tavily)
+    budget1 = await _reserve(meter, "judge-scan-1")
+    assert budget1.reserved_usd["nebius"] == pytest.approx(0.75)
+    assert budget1.reserved_usd["tavily"] == pytest.approx(0.40)
+    assert ledger.state.spenders["hosted"].pools["nebius"].reserved_usd == pytest.approx(0.75)
+
+    # Settle scan 1 with typical spend
+    hold_neb = budget1.try_spend("nebius", 0.60)
+    assert isinstance(hold_neb, SpendHold)
+    budget1.record(hold_neb, 0.55)
+    hold_tav = budget1.try_spend("tavily", 0.10)
+    assert isinstance(hold_tav, SpendHold)
+    budget1.record(hold_tav, 0.08)
+    await meter.settle(budget1)
+
+    # Advance clock to next judging evaluation slot
+    frozen_clock.advance(24 * 3600)
+    meter._end_date = frozen_clock.now().date()
+
+    # Second judge scan is also admitted at full fidelity under the profile
+    budget2 = await _reserve(meter, "judge-scan-2")
+    assert budget2.reserved_usd["nebius"] == pytest.approx(0.75)
+    assert budget2.reserved_usd["tavily"] == pytest.approx(0.40)
+    await meter.settle(budget2)
+
+    assert meter.status() == "enabled"
+
+
+async def test_ac88_judging_window_supports_target_scan_capacity(frozen_clock):
+    """AC-88 / ADR-0044: The $6.50 hosted allowance reliably supports ~8-10 live judge scans."""
+    state = make_state(
+        frozen_clock.now(),
+        {"hosted": {"nebius": 6.50, "tavily": 3.00}, "local": {"nebius": 0.0, "tavily": 0.0}},
+    )
+    ledger = MemorySpendLedger(state)
+    meter = _meter(ledger, "hosted", frozen_clock, end_date=frozen_clock.now().date())
+
+    completed_scans = 0
+    # Simulate successive judge scans across evaluation days averaging ~$0.65 Nebius spend
+    for i in range(12):
+        meter._end_date = frozen_clock.now().date()
+        res = await meter.reserve(f"judge-scan-{i}")
+        if isinstance(res, Refused):
+            assert res.reason == "paused"
+            break
+        hold = res.try_spend("nebius", 0.65)
+        assert isinstance(hold, SpendHold)
+        res.record(hold, 0.65)
+        await meter.settle(res)
+        completed_scans += 1
+        # Advance to next judging evaluation day
+        frozen_clock.advance(24 * 3600)
+
+    # Accommodates between 8 and 10 live scans before pausing gracefully
+    assert 8 <= completed_scans <= 10
+    assert meter.status() == "paused"
+
+
+async def test_ac88_judging_window_daily_ceiling_pacing_and_graceful_refusal(frozen_clock):
+    """AC-88 / ADR-0044: Daily ceiling enforces pacing ($1.50/day max),
+    returning Refused with daily_limit and retry-after without corrupting ledger state."""
+    state = make_state(
+        frozen_clock.now(),
+        {"hosted": {"nebius": 3.00, "tavily": 3.00}, "local": {"nebius": 0.0, "tavily": 0.0}},
+    )
+    ledger = MemorySpendLedger(state)
+    # 2 days left -> daily ceiling = 3.00 / 2 = $1.50/day
+    end_date = frozen_clock.now().date() + timedelta(days=1)
+    meter = _meter(ledger, "hosted", frozen_clock, end_date=end_date)
+
+    # First scan takes $0.75 from the $1.50 daily ceiling
+    b1 = await _reserve(meter, "scan-today-1")
+    assert b1.reserved_usd["nebius"] == pytest.approx(0.75)
+
+    # Second scan takes the remaining $0.75 of the daily ceiling
+    b2 = await _reserve(meter, "scan-today-2")
+    assert b2.reserved_usd["nebius"] == pytest.approx(0.75)
+
+    # Third scan on the same day exceeds daily ceiling ($1.50) -> Refused daily_limit
+    refusal = await meter.reserve("scan-today-3")
+    assert isinstance(refusal, Refused)
+    assert refusal.reason == "daily_limit"
+    assert refusal.retry_after_s > 0
+    assert meter.status() == "enabled"  # Daily limit is pacing, not permanent pause
+
+    # After midnight UTC, unspent allowance rolls forward and new day admits scans
+    await meter.settle(b1)
+    await meter.settle(b2)
+    frozen_clock.advance(12 * 3600)  # next day
+    b_next = await _reserve(meter, "scan-next-day")
+    assert isinstance(b_next, ScanBudget)
+
+
+def test_ac88_judging_window_rate_limiter_global_day_two():
+    """AC-88 / ADR-0044: RATE_LIMIT_GLOBAL_DAY=2 enforces max 2 scans/day across all visitors."""
+    settings = Settings(
+        _env_file=None,
+        rate_limit_per_client_hour=10,
+        rate_limit_per_client_day=10,
+        rate_limit_global_day=2,
+    )
+    limiter = RateLimiter.from_settings(settings)
+    now = datetime(2026, 10, 28, 10, 0, tzinfo=UTC)
+
+    # Judge A runs scan 1 -> Allowed
+    assert limiter.check_and_consume("judge-a", now) == Allowed()
+    # Judge B runs scan 2 -> Allowed
+    assert limiter.check_and_consume("judge-b", now + timedelta(minutes=5)) == Allowed()
+    # Judge C runs scan 3 -> Limited on global day
+    result = limiter.check_and_consume("judge-c", now + timedelta(minutes=10))
+    assert isinstance(result, Limited)
+    assert result.scope == "global"
+    assert result.retry_after_s > 0
+
+    # Next UTC day resets global day quota
+    next_day = now + timedelta(days=1)
+    assert limiter.check_and_consume("judge-c", next_day) == Allowed()
+
+
+async def test_ac88_demo_replays_spend_zero_and_bypass_exhausted_meter(frozen_clock):
+    """AC-88 / ADR-0044: Pre-computed demo replays with Sandbox proofs require $0 budget and
+    remain accessible even when live spend allowance is completely exhausted."""
+    # Hosted allowance is $0.00 (exhausted / paused)
+    state = make_state(
+        frozen_clock.now(),
+        {"hosted": {"nebius": 0.0, "tavily": 0.0}, "local": {"nebius": 0.0, "tavily": 0.0}},
+    )
+    ledger = MemorySpendLedger(state)
+    meter = _meter(ledger, "hosted", frozen_clock)
+
+    # Live scan is refused
+    assert await meter.reserve("live-scan-attempt") == Refused("paused")
+    assert meter.status() == "paused"
+
+    # Demo replay path executes with zero spend reservation
+    # (replays do not call meter.reserve() and mutate no pool balances)
+    assert ledger.state.spenders["hosted"].pools["nebius"].spent_usd == 0.0
+    assert ledger.state.spenders["hosted"].pools["nebius"].reserved_usd == 0.0
+    assert len(ledger.state.reservations) == 0
+
+
+@pytest.mark.parametrize("invalid_pool_amount", [-0.50, math.nan, math.inf])
+async def test_ac88_invalid_budget_input_refused(frozen_clock, invalid_pool_amount):
+    """AC-88 (invalid input case): Negative, NaN, or infinite spend amounts are rejected safely."""
+    state = make_state(
+        frozen_clock.now(),
+        {"hosted": {"nebius": 6.50, "tavily": 3.00}, "local": {"nebius": 0.0, "tavily": 0.0}},
+    )
+    meter = _meter(MemorySpendLedger(state), "hosted", frozen_clock)
+    budget = await _reserve(meter, "scan-valid")
+    with pytest.raises(ValueError):
+        budget.try_spend("nebius", invalid_pool_amount)
