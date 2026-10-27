@@ -342,6 +342,11 @@
         "entry": "app.main:cli",
         "target": "yaml.load",
         "recorded_call": "yaml.load called from app/config.py:12"
+      },
+      "remediation": {
+        "package": "pyyaml",
+        "target_version": "5.4",
+        "guidance": "Upgrade pyyaml to version 5.4 or newer."
       }
     },
     {
@@ -435,6 +440,11 @@
         "entry": "app.web:show_note",
         "target": "jinja2.utils.urlize",
         "recorded_call": null
+      },
+      "remediation": {
+        "package": "jinja2",
+        "target_version": "2.11.3",
+        "guidance": "Upgrade jinja2 to version 2.11.3 or newer."
       }
     },
     {
@@ -492,7 +502,12 @@
       ],
       "reason_code": "vulnerable_function_not_identified",
       "reason": "vulnerable function not identified: the advisory names no function or API to search for.",
-      "proof": null
+      "proof": null,
+      "remediation": {
+        "package": "flask",
+        "target_version": "2.2.5",
+        "guidance": "Upgrade flask to version 2.2.5 or newer."
+      }
     },
     {
       "finding_id": "a1bf91f34f89c323",
@@ -682,6 +697,6 @@
     "Prototype fixture: the repository, versions, locations and findings are placeholders, not measurements. Advisory identifiers are real; the code evidence is invented for the demo.",
     "Only public Python repositories are examined. Code is read and indexed, never run.",
     "Advisories come from OSV for the exact resolved versions; a vulnerability OSV does not list cannot be found.",
-    "Reachability is judged by static analysis of the repository’s own code. Dynamic imports, reflection and runtime configuration are not examined."
+    "Reachability is judged by static analysis of the repository\u2019s own code. Dynamic imports, reflection and runtime configuration are not examined."
   ]
 }

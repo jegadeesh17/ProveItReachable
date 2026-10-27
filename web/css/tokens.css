@@ -130,3 +130,32 @@
     --gutter: 32px;
   }
 }
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #21262d;
+    --line: #30363d;
+    --line-strong: #484f58;
+    --control-edge: #8b949e;
+    --disabled-fill: #21262d;
+    --ink: #f0f6fc;
+    --ink-2: #c9d1d9;
+    --ink-3: #8b949e;
+    --accent: #58a6ff;
+    --accent-deep: #79c0ff;
+    --accent-tint: #162a45;
+    --accent-wash: #0c1a2c;
+    --focus: #58a6ff;
+    --reach: #f85149;
+    --reach-deep: #ff7b72;
+    --reach-tint: #490202;
+    --reach-wash: #2d0505;
+    --unsure: #d29922;
+    --unsure-edge: #bb8009;
+    --unsure-tint: #3e2e04;
+    --unsure-wash: #271d05;
+  }
+}
+

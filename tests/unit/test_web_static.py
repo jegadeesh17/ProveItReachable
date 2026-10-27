@@ -135,3 +135,42 @@ def test_stage_tools_come_from_the_api_not_a_client_table():
         "each stage is [key, label, short label]"
     )
     assert "Sandbox" not in (WEB / "index.html").read_text(encoding="utf-8")
+
+
+def test_ac86_native_svg_callgraph_in_render_js():
+    """AC-86 (ADR-0044): Native inline SVG call-path diagram, accessible fallback,
+    and remediation."""
+    render = (WEB / "js" / "render.js").read_text(encoding="utf-8")
+    assert "renderCallPathSvg" in render
+    assert "renderCallPath" in render
+    assert "renderRemediation" in render
+    assert 'svgEl("svg"' in render
+    assert 'class: "callgraph-svg"' in render
+    assert "viewBox" in render
+    # No external charting libraries
+    assert not re.search(r"\b(d3|mermaid|chart\.js|cytoscape)\b", render, re.I)
+    # Accessible text fallback is preserved
+    assert 'class: "callpath"' in render
+    # Copy guidance button interacts with clipboard
+    assert "navigator.clipboard.writeText" in render
+    assert "Copy guidance" in render
+
+
+def test_ac86_callgraph_and_remediation_css():
+    """AC-86 (ADR-0044): Call graph responsive styling, dark mode support, and remediation."""
+    app_css = (WEB / "css" / "app.css").read_text(encoding="utf-8")
+    tokens_css = (WEB / "css" / "tokens.css").read_text(encoding="utf-8")
+
+    assert ".callgraph-svg" in app_css
+    assert ".callgraph-node" in app_css
+    assert ".callgraph-edge" in app_css
+    assert ".ev-remediation" in app_css
+    assert ".remediation__badge" in app_css
+    assert ".btn--copy" in app_css
+
+    # Zero hard-coded hex colors in app.css (token discipline)
+    filtered_css = app_css.replace("#banner", "").replace("#explain", "")
+    assert not re.search(r"#[0-9a-fA-F]{3,8}\b", filtered_css)
+
+    # Dark mode tokens support
+    assert "@media (prefers-color-scheme: dark)" in tokens_css

@@ -1,4 +1,6 @@
-"""Empirically measure security alert noise reduction across ProveItReachable demo replays and evaluation results.
+# ruff: noqa: T201
+"""Empirically measure security alert noise reduction across ProveItReachable demo replays
+and evaluation results.
 
 Calculates:
 - Total advisory alerts flagged by traditional SCA / manifest scanners (every CVE entry)
@@ -83,4 +85,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

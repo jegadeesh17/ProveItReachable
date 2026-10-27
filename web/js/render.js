@@ -728,6 +728,377 @@ function proofBlock(f, ctl) {
   return block;
 }
 
+function svgEl(tag, props = {}, ...kids) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [key, value] of Object.entries(props)) {
+    if (value === undefined || value === null || value === false) continue;
+    if (key === "text") node.textContent = value;
+    else if (key === "class") node.setAttribute("class", value);
+    else node.setAttribute(key, String(value));
+  }
+  for (const kid of kids.flat(Infinity)) {
+    if (kid === null || kid === undefined || kid === false) continue;
+    node.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  }
+  return node;
+}
+
+export function renderCallPathSvg(callPath, findingId) {
+  const totalSteps = callPath.length;
+  const nodeH = 64;
+  const gap = 32;
+  const stepDist = nodeH + gap;
+  const totalH = Math.max(84, 20 + totalSteps * stepDist - gap);
+
+  const svg = svgEl("svg", {
+    class: "callgraph-svg",
+    viewBox: `0 0 340 ${totalH}`,
+    role: "img",
+    "aria-label": `Call path diagram from ${callPath[0].symbol} to ${callPath[totalSteps - 1].symbol}`,
+  });
+
+  const arrowNorm = `arrow-norm-${findingId}`;
+  const arrowSink = `arrow-sink-${findingId}`;
+  const arrowHeur = `arrow-heur-${findingId}`;
+
+  const defs = svgEl(
+    "defs",
+    {},
+    svgEl(
+      "marker",
+      {
+        id: arrowNorm,
+        viewBox: "0 0 10 10",
+        refX: "7",
+        refY: "5",
+        markerWidth: "6",
+        markerHeight: "6",
+        orient: "auto-start-reverse",
+      },
+      svgEl("path", { d: "M 0 1.5 L 8 5 L 0 8.5 z", class: "callgraph-arrow-head" }),
+    ),
+    svgEl(
+      "marker",
+      {
+        id: arrowSink,
+        viewBox: "0 0 10 10",
+        refX: "7",
+        refY: "5",
+        markerWidth: "6",
+        markerHeight: "6",
+        orient: "auto-start-reverse",
+      },
+      svgEl("path", { d: "M 0 1.5 L 8 5 L 0 8.5 z", class: "callgraph-arrow-head callgraph-arrow-head--sink" }),
+    ),
+    svgEl(
+      "marker",
+      {
+        id: arrowHeur,
+        viewBox: "0 0 10 10",
+        refX: "7",
+        refY: "5",
+        markerWidth: "6",
+        markerHeight: "6",
+        orient: "auto-start-reverse",
+      },
+      svgEl("path", { d: "M 0 1.5 L 8 5 L 0 8.5 z", class: "callgraph-arrow-head callgraph-arrow-head--heuristic" }),
+    ),
+  );
+  svg.append(defs);
+
+  callPath.forEach((step, i) => {
+    const nodeY = 10 + i * stepDist;
+    const isSink = step.edge === "vulnerable_call";
+    const isEntry = step.edge === "entry";
+    const isHeuristic = step.edge === "heuristic_call";
+
+    if (i < totalSteps - 1) {
+      const nextStep = callPath[i + 1];
+      const nextSink = nextStep.edge === "vulnerable_call";
+      const nextHeur = nextStep.edge === "heuristic_call";
+      const lineY1 = nodeY + nodeH;
+      const lineY2 = nodeY + stepDist;
+      const markerId = nextSink ? arrowSink : nextHeur ? arrowHeur : arrowNorm;
+
+      const edgeLine = svgEl("line", {
+        class: `callgraph-edge${nextSink ? " callgraph-edge--sink" : nextHeur ? " callgraph-edge--heuristic" : ""}`,
+        x1: "34",
+        y1: String(lineY1),
+        x2: "34",
+        y2: String(lineY2 - 3),
+        "marker-end": `url(#${markerId})`,
+      });
+
+      const edgeText = nextSink ? "vulnerable call" : nextHeur ? "heuristic call" : "direct call";
+      const edgeLabel = svgEl("text", {
+        class: `callgraph-edge-label${nextSink ? " callgraph-edge-label--sink" : nextHeur ? " callgraph-edge-label--heuristic" : ""}`,
+        x: "48",
+        y: String(lineY1 + 17),
+        text: edgeText,
+      });
+
+      svg.append(edgeLine, edgeLabel);
+    }
+
+    const nodeGroup = svgEl("g", {
+      class: `callgraph-node${isSink ? " callgraph-node--sink" : isEntry ? " callgraph-node--entry" : ""}`,
+      tabindex: "0",
+      role: "button",
+      "aria-label": `Step ${i + 1}: ${step.symbol} at ${step.file} line ${step.line}. Click to copy location.`,
+    });
+
+    const titleEl = svgEl("title", {
+      text: `${step.symbol} (${step.file}:${step.line}) - click to copy`,
+    });
+    nodeGroup.append(titleEl);
+
+    const bgRect = svgEl("rect", {
+      class: `callgraph-node-bg${isSink ? " callgraph-node-bg--sink" : isEntry ? " callgraph-node-bg--entry" : ""}`,
+      x: "10",
+      y: String(nodeY),
+      width: "320",
+      height: String(nodeH),
+      rx: "8",
+    });
+    nodeGroup.append(bgRect);
+
+    const badgeCircle = svgEl("circle", {
+      class: `callgraph-badge-circle${isSink ? " callgraph-badge-circle--sink" : ""}`,
+      cx: "34",
+      cy: String(nodeY + 32),
+      r: "13",
+    });
+    const badgeNum = svgEl("text", {
+      class: `callgraph-badge-num${isSink ? " callgraph-badge-num--sink" : ""}`,
+      x: "34",
+      y: String(nodeY + 32),
+      text: String(i + 1),
+    });
+    nodeGroup.append(badgeCircle, badgeNum);
+
+    const tagLabel = isSink ? "SINK" : isEntry ? "ENTRY" : isHeuristic ? "HEURISTIC" : "CALL";
+    const tagWidth = isHeuristic ? 76 : isSink ? 46 : isEntry ? 52 : 46;
+    const tagX = 320 - tagWidth;
+    const tagRect = svgEl("rect", {
+      class: `callgraph-tag-bg${isSink ? " callgraph-tag-bg--sink" : isEntry ? " callgraph-tag-bg--entry" : ""}`,
+      x: String(tagX),
+      y: String(nodeY + 8),
+      width: String(tagWidth),
+      height: "18",
+      rx: "4",
+    });
+    const tagText = svgEl("text", {
+      class: `callgraph-tag-text${isSink ? " callgraph-tag-text--sink" : isEntry ? " callgraph-tag-text--entry" : ""}`,
+      x: String(tagX + tagWidth / 2),
+      y: String(nodeY + 17),
+      text: tagLabel,
+    });
+    nodeGroup.append(tagRect, tagText);
+
+    const displaySymbol = step.symbol.length > 22
+      ? `${step.symbol.slice(0, 10)}…${step.symbol.slice(-10)}`
+      : step.symbol;
+    const symbolText = svgEl("text", {
+      class: "callgraph-node-symbol",
+      x: "56",
+      y: String(nodeY + 26),
+      text: displaySymbol,
+    });
+    nodeGroup.append(symbolText);
+
+    const loc = `${step.file}:${step.line}`;
+    const displayLoc = loc.length > 34 ? `…${loc.slice(-32)}` : loc;
+    const locText = svgEl("text", {
+      class: "callgraph-node-loc",
+      x: "56",
+      y: String(nodeY + 48),
+      text: displayLoc,
+    });
+    nodeGroup.append(locText);
+
+    const copyLocation = async () => {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(loc);
+        }
+      } catch {
+        // silent
+      }
+      locText.textContent = "Copied location!";
+      setTimeout(() => {
+        locText.textContent = displayLoc;
+      }, 1800);
+    };
+
+    nodeGroup.addEventListener("click", copyLocation);
+    nodeGroup.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        copyLocation();
+      }
+    });
+
+    svg.append(nodeGroup);
+  });
+
+  return svg;
+}
+
+export function renderCallPath(f) {
+  const pathBox = el("div", { class: "ev-path" });
+  const svgId = `callpath-svg-${f.finding_id}`;
+  const listId = `callpath-list-${f.finding_id}`;
+
+  const svgWrap = el("div", { class: "callgraph-wrap", id: svgId });
+  const svg = renderCallPathSvg(f.call_path, f.finding_id);
+  svgWrap.append(svg);
+
+  const textList = el(
+    "ol",
+    { class: "callpath", id: listId, hidden: true },
+    f.call_path.map((step, i) => {
+      const sink = step.edge === "vulnerable_call";
+      return el(
+        "li",
+        { dataset: { edge: step.edge } },
+        el("span", { class: `n${sink ? " n--sink" : ""}`, text: String(i + 1) }),
+        el(
+          "div",
+          {},
+          el("p", { class: "where", text: `${step.file}:${step.line}` }),
+          el(
+            "p",
+            { class: "what" },
+            el("code", { text: step.symbol }),
+            el(
+              "span",
+              { class: `edge${step.edge === "heuristic_call" ? " edge--heuristic" : ""}` },
+              sink && icon("mark-reach", "icon icon--sm"),
+              sink ? " " : "",
+              EDGE_LABEL[step.edge] || step.edge,
+            ),
+          ),
+        ),
+      );
+    }),
+  );
+
+  const btnDiagram = el("button", {
+    type: "button",
+    role: "tab",
+    class: "callpath-switcher__btn is-active",
+    "aria-selected": "true",
+    "aria-controls": svgId,
+    text: "Diagram",
+  });
+
+  const btnSteps = el("button", {
+    type: "button",
+    role: "tab",
+    class: "callpath-switcher__btn",
+    "aria-selected": "false",
+    "aria-controls": listId,
+    text: "Text steps",
+  });
+
+  btnDiagram.addEventListener("click", () => {
+    btnDiagram.classList.add("is-active");
+    btnDiagram.setAttribute("aria-selected", "true");
+    btnSteps.classList.remove("is-active");
+    btnSteps.setAttribute("aria-selected", "false");
+    svgWrap.hidden = false;
+    textList.hidden = true;
+  });
+
+  btnSteps.addEventListener("click", () => {
+    btnSteps.classList.add("is-active");
+    btnSteps.setAttribute("aria-selected", "true");
+    btnDiagram.classList.remove("is-active");
+    btnDiagram.setAttribute("aria-selected", "false");
+    svgWrap.hidden = true;
+    textList.hidden = false;
+  });
+
+  const switcher = el(
+    "div",
+    { class: "callpath-switcher", role: "tablist", "aria-label": "Call path view mode" },
+    btnDiagram,
+    btnSteps,
+  );
+
+  const header = el(
+    "div",
+    { class: "callpath-header" },
+    el("h4", { class: "block-title", text: "Call path from your code" }),
+    switcher,
+  );
+
+  pathBox.append(header, svgWrap, textList);
+  return pathBox;
+}
+
+export function renderRemediation(rem) {
+  const block = el("div", { class: "ev-remediation" });
+
+  const isPatch = !rem.target_version && (rem.guidance.toLowerCase().includes("commit") || rem.guidance.toLowerCase().includes("patch"));
+  const targetLabel = rem.target_version
+    ? el("span", { class: "remediation__target" }, "Target: ", el("code", { class: "remediation__ver", text: rem.target_version }))
+    : el("span", { class: "remediation__target remediation__target--note", text: isPatch ? "Patch available" : "No fixed version published" });
+
+  const header = el(
+    "div",
+    { class: "remediation__header" },
+    el(
+      "div",
+      { class: "remediation__meta" },
+      el("span", { class: "remediation__badge", text: "Remediation" }),
+      el("span", { class: "remediation__pkg" }, el("code", { class: "pkg", text: rem.package })),
+      targetLabel,
+    ),
+  );
+
+  const copyBtn = el(
+    "button",
+    {
+      class: "btn btn--copy remediation__copy",
+      type: "button",
+      "aria-label": "Copy remediation guidance",
+    },
+    el("span", { class: "remediation__copy-label", text: "Copy guidance" }),
+  );
+
+  copyBtn.addEventListener("click", async () => {
+    let copied = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(rem.guidance);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+    const label = copyBtn.querySelector(".remediation__copy-label");
+    if (label) {
+      label.textContent = copied ? "Copied!" : "Copied";
+      copyBtn.classList.add("is-copied");
+      setTimeout(() => {
+        label.textContent = "Copy guidance";
+        copyBtn.classList.remove("is-copied");
+      }, 2000);
+    }
+  });
+
+  const body = el(
+    "div",
+    { class: "remediation__body" },
+    el("p", { class: "remediation__guidance", text: rem.guidance }),
+    el("div", { class: "remediation__actions" }, copyBtn),
+  );
+
+  block.append(header, body);
+  return block;
+}
+
 function renderEvidence(f, proofCtl) {
   const evidence = el("div", { class: "evidence" });
 
@@ -746,40 +1117,15 @@ function renderEvidence(f, proofCtl) {
   }
 
   if (f.call_path && f.call_path.length) {
-    evidence.append(
-      el(
-        "div",
-        { class: "ev-path" },
-        el("h4", { class: "block-title", text: "Call path from your code" }),
-        el(
-          "ol",
-          { class: "callpath" },
-          f.call_path.map((step, i) => {
-            const sink = step.edge === "vulnerable_call";
-            return el(
-              "li",
-              { dataset: { edge: step.edge } },
-              el("span", { class: `n${sink ? " n--sink" : ""}`, text: String(i + 1) }),
-              el(
-                "div",
-                {},
-                el("p", { class: "where", text: `${step.file}:${step.line}` }),
-                el(
-                  "p",
-                  { class: "what" },
-                  el("code", { text: step.symbol }),
-                  el("span", { class: `edge${step.edge === "heuristic_call" ? " edge--heuristic" : ""}` }, sink && icon("mark-reach", "icon icon--sm"), sink ? " " : "", EDGE_LABEL[step.edge] || step.edge),
-                ),
-              ),
-            );
-          }),
-        ),
-      ),
-    );
+    evidence.append(renderCallPath(f));
   }
 
   if (f.proof) evidence.append(renderProof(f.proof));
   else if (proofCtl && f.verdict === "likely reachable" && f.call_path && f.call_path.length) evidence.append(proofBlock(f, proofCtl));
+
+  if (f.remediation) {
+    evidence.append(renderRemediation(f.remediation));
+  }
 
   if (f.kind === "advisory") {
     evidence.append(

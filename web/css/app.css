@@ -1505,6 +1505,222 @@ body[data-phase="report"] .track-panel {
   font-size: var(--fs-sm);
   color: var(--ink-3);
 }
+/* --------------------------------------------------- call-path visual diagram */
+
+.callpath-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  margin-bottom: var(--sp-3);
+}
+
+.callpath-switcher {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  gap: 2px;
+}
+
+.callpath-switcher__btn {
+  padding: var(--sp-1) var(--sp-3);
+  background: transparent;
+  color: var(--ink-2);
+  border: 0;
+  border-radius: var(--r-sm);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.callpath-switcher__btn:hover {
+  color: var(--ink);
+}
+
+.callpath-switcher__btn.is-active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-1);
+}
+
+.callgraph-wrap {
+  width: 100%;
+  max-width: 440px;
+}
+
+.callgraph-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.callgraph-node {
+  cursor: pointer;
+  outline: none;
+}
+
+.callgraph-node:focus-visible .callgraph-node-bg {
+  stroke: var(--focus);
+  stroke-width: 2px;
+}
+
+.callgraph-node-bg {
+  fill: var(--surface);
+  stroke: var(--line-strong);
+  stroke-width: 1px;
+  transition:
+    fill var(--dur-fast) var(--ease-out),
+    stroke var(--dur-fast) var(--ease-out);
+}
+
+.callgraph-node:hover .callgraph-node-bg {
+  fill: var(--surface-2);
+  stroke: var(--control-edge);
+}
+
+.callgraph-node-bg--entry {
+  stroke-width: 1.5px;
+}
+
+.callgraph-node-bg--sink {
+  fill: var(--reach-wash);
+  stroke: var(--reach);
+  stroke-width: 1.5px;
+}
+
+.callgraph-node:hover .callgraph-node-bg--sink {
+  fill: var(--reach-tint);
+  stroke: var(--reach-deep);
+}
+
+.callgraph-badge-circle {
+  fill: var(--surface);
+  stroke: var(--ink-3);
+  stroke-width: 1.5px;
+}
+
+.callgraph-badge-circle--sink {
+  fill: var(--reach-tint);
+  stroke: var(--reach-deep);
+}
+
+.callgraph-badge-num {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  fill: var(--ink);
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.callgraph-badge-num--sink {
+  fill: var(--reach-deep);
+}
+
+.callgraph-node-symbol {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: var(--fw-semibold);
+  fill: var(--ink);
+}
+
+.callgraph-node-loc {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  fill: var(--ink-3);
+}
+
+.callgraph-node:hover .callgraph-node-loc {
+  fill: var(--ink-2);
+}
+
+.callgraph-tag-bg {
+  fill: var(--surface-2);
+  stroke: var(--line);
+  stroke-width: 1px;
+}
+
+.callgraph-tag-bg--sink {
+  fill: var(--reach-tint);
+  stroke: var(--reach);
+}
+
+.callgraph-tag-bg--entry {
+  fill: var(--accent-wash);
+  stroke: var(--accent-tint);
+}
+
+.callgraph-tag-text {
+  font-family: var(--font-sans);
+  font-size: 9.5px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
+  fill: var(--ink-2);
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.callgraph-tag-text--sink {
+  fill: var(--reach-deep);
+}
+
+.callgraph-tag-text--entry {
+  fill: var(--accent-deep);
+}
+
+.callgraph-edge {
+  stroke: var(--line-strong);
+  stroke-width: 2px;
+  fill: none;
+}
+
+.callgraph-edge--heuristic {
+  stroke: var(--control-edge);
+  stroke-dasharray: 4 3;
+}
+
+.callgraph-edge--sink {
+  stroke: var(--reach-deep);
+}
+
+.callgraph-arrow-head {
+  fill: var(--line-strong);
+}
+
+.callgraph-arrow-head--heuristic {
+  fill: var(--control-edge);
+}
+
+.callgraph-arrow-head--sink {
+  fill: var(--reach-deep);
+}
+
+.callgraph-edge-label {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: var(--fw-medium);
+  fill: var(--ink-3);
+  dominant-baseline: central;
+}
+
+.callgraph-edge-label--heuristic {
+  font-style: italic;
+}
+
+.callgraph-edge-label--sink {
+  fill: var(--reach-deep);
+  font-weight: var(--fw-semibold);
+}
+
 .callpath li {
   position: relative;
   display: grid;
@@ -1670,6 +1886,7 @@ body[data-phase="report"] .track-panel {
   }
   .ev-fn,
   .ev-proof,
+  .ev-remediation,
   .ev-links {
     grid-column: 1 / -1;
   }
@@ -1797,6 +2014,110 @@ body[data-phase="report"] .track-panel {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ------------------------------------------------------------- remediation */
+
+.ev-remediation {
+  padding: var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--r-md);
+}
+
+.remediation__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.remediation__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.remediation__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--sp-2);
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.3;
+}
+
+.remediation__pkg {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-sm);
+  color: var(--ink);
+}
+
+.remediation__target {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.remediation__target code {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-medium);
+  padding: 1px var(--sp-1);
+  background: var(--surface-2);
+  border-radius: var(--r-sm);
+}
+
+.remediation__target--note {
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+.remediation__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+@media (min-width: 36rem) {
+  .remediation__body {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.remediation__guidance {
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  line-height: 1.5;
+  margin: 0;
+  flex: 1;
+}
+
+.remediation__actions {
+  flex-shrink: 0;
+}
+
+.btn--copy {
+  min-height: 36px;
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-xs);
+  border-radius: var(--r-sm);
+}
+
+.btn--copy.is-copied {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--accent-deep);
 }
 
 /* assessment */

@@ -98,6 +98,7 @@ def test_proof_report_fixture_validates():
     report = load_report("proof")
     assert report.outcome == "findings"
     assert any(f.proof is not None for f in report.findings)
+    assert any(f.remediation is not None for f in report.findings)
 
 
 # ---- events ---------------------------------------------------------------------------------
