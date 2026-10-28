@@ -157,7 +157,7 @@ async def test_ac05_happy_path_reads_repo_commit_tree():
 
 
 async def test_ac05_a_renamed_repo_is_fetched_under_its_canonical_name():
-    # M1-FIX-02: the owner/name later steps use (codeload, the report URL) is GitHub's full_name
+    # the owner/name later steps use (codeload, the report URL) is GitHub's full_name
     renamed = {"name": "Sample-Renamed", "full_name": "NewOwner/Sample-Renamed", "private": False}
     transport = _routes(**{f"GET {API}": json_response(200, {**renamed, "default_branch": "main"})})
     target = await validate_repo(COORDS, None, settings=_settings(), transport=transport)

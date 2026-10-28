@@ -1,4 +1,4 @@
-"""Browser end-to-end fixtures (M2-TASK-07, slow).
+"""Browser end-to-end fixtures (slow).
 
 `create_app()` runs under uvicorn on a loopback port, in a thread of the test process, so the
 tests can read the fakes behind it. Live scans run the real pipeline on small local repositories

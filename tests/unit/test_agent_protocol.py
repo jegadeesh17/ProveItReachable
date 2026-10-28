@@ -1,4 +1,4 @@
-"""Sandbox agent protocol (M1-TASK-05): args, result line, exit codes, stdlib-only imports."""
+"""Sandbox agent protocol: args, result line, exit codes, stdlib-only imports."""
 
 import ast
 import base64
@@ -44,7 +44,7 @@ def test_handler_log_lines_reach_the_captured_stderr_not_the_process_one(capsys)
     assert capsys.readouterr().err == ""
 
 
-def test_result_line_round_trips_through_base64_and_gzip():  # M1-TASK-05 protocol
+def test_result_line_round_trips_through_base64_and_gzip():  # protocol
     payload = {"b": [1, 2, {"z": None}], "a": "café", "commit_sha": "a" * 40}
     line = protocol.encode_result(payload)
     assert line.startswith("PIR-RESULT:")
@@ -122,7 +122,7 @@ def test_success_prints_exactly_one_result_line_and_exits_0():
         ["nosuchcommand", "--args-b64", base64.b64encode(b"{}").decode()],
     ],
 )
-def test_bad_args_exit_2_without_a_result_line(argv):  # M1-TASK-05 protocol: bad args exit 2
+def test_bad_args_exit_2_without_a_result_line(argv):  # protocol: bad args exit 2
     code, out, err = _run(argv, {"echo": lambda args: {}})
     assert code == protocol.EXIT_BAD_INPUT == 2
     assert out == ""
@@ -134,7 +134,7 @@ def test_args_over_the_cap_are_refused():
         protocol.parse_args_b64("A" * (protocol.MAX_ARGS_B64_BYTES + 1))
 
 
-def test_limit_exceeded_exits_3():  # M1-TASK-05 protocol: limit exceeded exits 3
+def test_limit_exceeded_exits_3():  # protocol: limit exceeded exits 3
     def handler(args):
         raise protocol.LimitExceeded("too many files")
 
@@ -168,8 +168,8 @@ def test_main_dispatches_the_part_one_and_two_commands():
         "index",
         "resolve",
         "selfcheck",
-        "proof-install",  # M2-TASK-09
-        "proof-build",  # M2-TASK-16
+        "proof-install",
+        "proof-build",
         "proof-run",
     }
     code = agent_main.main(["fetch", "--args-b64", _b64({"owner": "../x"})])
@@ -184,7 +184,7 @@ def test_run_changes_directory_to_root_first(monkeypatch):
     assert calls == ["chdir:/", "main"]
 
 
-def test_sandbox_agent_imports_only_the_standard_library():  # M1-TASK-05 stdlib-only
+def test_sandbox_agent_imports_only_the_standard_library():  # stdlib-only
     sources = sorted(AGENT_DIR.glob("*.py"))
     assert {p.name for p in sources} >= {"__init__.py", "__main__.py", "protocol.py", "fetch.py"}
     for source in sources:

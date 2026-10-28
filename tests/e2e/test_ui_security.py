@@ -1,6 +1,6 @@
-"""Untrusted text and the page's security posture, in a real browser (M2-TASK-07, slow).
+"""Untrusted text and the page's security posture, in a real browser (slow).
 
-AC-57 (links), AC-60 (text only, CSP 'self'), SECURITY_REVIEW findings 7 and 9: a `javascript:` or
+AC-57 (links), AC-60 (text only, CSP 'self'), security review findings 7 and 9: a `javascript:` or
 `data:` advisory link is never a link, advisory and model text with markup renders as text and
 does not run, the Content Security Policy is enforced and nothing is loaded from another origin,
 and `?scenario=` accepts allowlisted names only.
@@ -50,7 +50,7 @@ def pwned(ui):
     return ui.page.evaluate("window.__pwned === undefined ? null : window.__pwned")
 
 
-# ---- SECURITY_REVIEW finding 9 / AC-57: link schemes ----------------------------------------
+# ---- security review finding 9 / AC-57: link schemes ----------------------------------------
 
 
 def test_ac57_javascript_and_data_advisory_links_are_never_rendered_as_links(server, ui_factory):
@@ -239,7 +239,7 @@ def test_csp_is_enforced_and_a_full_visit_makes_no_violation_and_no_foreign_requ
     assert ui.csp_violations() != []
 
 
-# ---- SECURITY_REVIEW finding 7: ?scenario= is an allowlist -----------------------------------
+# ---- security review finding 7: ?scenario= is an allowlist -----------------------------------
 
 
 @pytest.mark.parametrize(

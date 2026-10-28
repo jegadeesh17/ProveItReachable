@@ -1,4 +1,4 @@
-"""The HTTP API through `httpx.ASGITransport` with fakes (section 8, M2-TASK-01).
+"""The HTTP API through `httpx.ASGITransport` with fakes (section 8).
 
 Covers AC-02 to AC-06 (API side), AC-32, AC-43, AC-50, AC-51, AC-61 (server part), AC-76, the
 config and schema routes, static serving and the `serve` command.
@@ -628,7 +628,7 @@ def test_serve_builds_hosted_deps_when_live_scans_are_enabled(serve_env, monkeyp
     assert app.state.ctx.deps is not None
 
 
-# ---- Markdown export (M2-TASK-04: AC-62 server part, AC-63, AC-64) --------------------------
+# ---- Markdown export (AC-62 server part, AC-63, AC-64) --------------------------
 
 
 async def test_ac62_report_md_renders_the_finished_scan_and_download_names_the_file(api):

@@ -1,4 +1,4 @@
-"""AstTool: the seven section 9.1 tools over an index (M1-TASK-10; AC-17)."""
+"""AstTool: the seven section 9.1 tools over an index (AC-17)."""
 
 import json
 import shutil

@@ -748,7 +748,7 @@ def test_package_names_are_compared_in_normalized_form():
     assert normalize_package("Foo_Bar.baz") == "foo-bar-baz"
 
 
-# ---- M1-FIX-02: read-back, trace tree, unscored reasons ---------------------------------------
+# ---- read-back, trace tree, unscored reasons ---------------------------------------
 
 
 class FakeSleeper:
@@ -868,7 +868,7 @@ async def test_ac37_each_case_root_trace_has_children_and_holds_or_names_the_sca
     assert update["outputs"]["scan_trace_id"] == roots["c-tp"]
 
 
-# ---- M1-FIX-02 attempt 2: feedback arguments, replayed Tavily is free -------------------------
+# ---- feedback arguments, replayed Tavily is free -------------------------
 
 
 def test_feedback_fake_rejects_project_id_with_a_run_id_like_the_sdk():

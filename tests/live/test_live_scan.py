@@ -1,7 +1,7 @@
-"""Live end-to-end scan (M1-TASK-11, milestone verification): run with PIR_LIVE_TESTS=1.
+"""Live end-to-end scan (milestone verification): run with PIR_LIVE_TESTS=1.
 
 Scans one small public Python repository through the real Sandbox, OSV, Tavily and Nemotron and
-validates the report. Spend is printed. Run only after the M1-TASK-08 live gates have passed
+validates the report. Spend is printed. Run only after the live Sandbox gates have passed
 (`test_uv_repo_interpreter_never_runs` and `test_base_image_fingerprint_matches`).
 """
 

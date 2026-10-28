@@ -227,7 +227,7 @@ async def test_ac51_two_meters_on_one_file_never_both_take_the_last_money(tmp_pa
     assert Refused("paused") in results
 
 
-# ---- M1-FIX-02: missing-file warning and the cross-process lock ----------------------------
+# ---- missing-file warning and the cross-process lock ----------------------------
 
 
 async def test_ac51_a_missing_ledger_file_logs_a_warning(tmp_path, frozen_clock):

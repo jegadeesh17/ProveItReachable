@@ -1,4 +1,4 @@
-"""Sandbox agent `resolve --compile`: sanitized input and the isolated uv call (M1-TASK-06)."""
+"""Sandbox agent `resolve --compile`: sanitized input and the isolated uv call ."""
 
 import importlib.util
 import os

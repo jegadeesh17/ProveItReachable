@@ -1,4 +1,4 @@
-"""Sandbox agent ast index on synthetic fixture repos, in-process (M1-TASK-05; AC-14, AC-15)."""
+"""Sandbox agent ast index on synthetic fixture repos, in-process (AC-14, AC-15)."""
 
 import base64
 import io

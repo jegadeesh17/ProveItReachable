@@ -1,5 +1,5 @@
-"""render_markdown (M2-TASK-04): AC-62 content and order, and the escaping carry-over of
-SECURITY_REVIEW finding 7 (javascript:/data: links, HTML, backticks in snippets)."""
+"""render_markdown: AC-62 content and order, and the escaping carry-over of
+security review finding 7 (javascript:/data: links, HTML, backticks in snippets)."""
 
 import json
 import re

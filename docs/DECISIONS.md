@@ -666,7 +666,7 @@ Status: Accepted
 
 ### Context
 
-The accepted prototype and the orchestrator raised contract questions for the freeze: the UI cannot show the live-scan limits; some errors have no fixed message; a Sandbox timeout can turn a whole report uncertain; the UI wants an evaluation figure only when one was really measured; the tool behind each step is mapped in the browser; and the UI should claim "Sandbox" only when one actually ran. Nothing has been recorded yet, so the report format can still change cheaply.
+The accepted prototype raised contract questions for the freeze: the UI cannot show the live-scan limits; some errors have no fixed message; a Sandbox timeout can turn a whole report uncertain; the UI wants an evaluation figure only when one was really measured; the tool behind each step is mapped in the browser; and the UI should claim "Sandbox" only when one actually ran. Nothing has been recorded yet, so the report format can still change cheaply.
 
 ### Decision
 
@@ -880,12 +880,12 @@ uv can no longer be steered by anything inside a repository, and the guarantee i
 ## ADR-0033: Sandbox base image imported by version tag and checked against a reviewed fingerprint
 
 Date: 2026-10-25
-Status: Accepted (approved by the user on 2026-10-25; amends ADR-0030 for the Sandbox image only, and the Space image stays pinned by digest). Open item: the version tag `ghcr.io/astral-sh/uv:0.9.30-python3.13-bookworm-slim` must be confirmed and its index digest recorded during the M1-TASK-08 rework. The contract details are in ARCHITECTURE sections 7.1 and 7.2.
+Status: Accepted (approved by the user on 2026-10-25; amends ADR-0030 for the Sandbox image only, and the Space image stays pinned by digest). Open item: the version tag `ghcr.io/astral-sh/uv:0.9.30-python3.13-bookworm-slim` must be confirmed and its index digest recorded during the Sandbox-image rework. The contract details are in ARCHITECTURE sections 7.1 and 7.2.
 Amended 2026-10-25 (approved by the user): the fingerprint and the tag's digest are measured on a GitHub Actions runner instead of with Docker on the developer's machine. This changes only where the measurement runs, not what is checked; see "Amendment 2026-10-25" below and ARCHITECTURE sections 7.2 and 19.1.
 
 ### Context
 
-ADR-0030 says the Sandbox's starting image must be named by its exact fingerprint (an `@sha256:` digest), so nobody can swap it under us by moving a tag. The live check on 2026-10-25 (M1-TASK-08) found that the Sandbox's image importer (contree-sdk 0.3.6 `images.oci`) answers `HTTP 404 page not found` for every digest reference it was given: the ghcr.io index digest, the amd64 manifest digest, with or without a tag, and docker.io as well. Plain tags import fine. Without a `tag=` override the SDK also invents a local name containing `@`, which then fails with 400. As written, live scans cannot start. The demo is on 2026-10-30.
+ADR-0030 says the Sandbox's starting image must be named by its exact fingerprint (an `@sha256:` digest), so nobody can swap it under us by moving a tag. The live check on 2026-10-25  found that the Sandbox's image importer (contree-sdk 0.3.6 `images.oci`) answers `HTTP 404 page not found` for every digest reference it was given: the ghcr.io index digest, the amd64 manifest digest, with or without a tag, and docker.io as well. Plain tags import fine. Without a `tag=` override the SDK also invents a local name containing `@`, which then fails with 400. As written, live scans cannot start. The demo is on 2026-10-30.
 
 What a swapped image could do: it runs only inside the Sandbox, which holds no secrets, so it cannot steal keys. It could falsify every scan's report, and its Python and uv run our network-on steps (ADR-0032), so it could use those steps (each capped at 120 to 300 seconds and metered) to send traffic from our account. The Python and uv in the image are therefore part of what ADR-0032's guarantee relies on.
 
@@ -947,7 +947,7 @@ Status: Accepted (amends ADR-0028 for the compile output and the authoritative u
 
 ### Context
 
-The first runs against the real Nebius Sandbox (M1-TASK-08, 2026-10-25) showed five places where the frozen design did not match how the tools actually behave. None of them changes the safety guarantees; they make the contract describe what the platform and uv really do.
+The first runs against the real Nebius Sandbox (2026-10-25) showed five places where the frozen design did not match how the tools actually behave. None of them changes the safety guarantees; they make the contract describe what the platform and uv really do.
 
 ### Decision
 
@@ -961,7 +961,7 @@ The first runs against the real Nebius Sandbox (M1-TASK-08, 2026-10-25) showed f
 
 - Dropping `--output-file` and reading the screen output: shorter, but not checked live, and it depends on how uv treats `--quiet`; a file path in our own folder is unambiguous.
 - Keeping a 10 MiB result cap with 10 MiB truncation: a result near the cap would be cut and wrongly reported as a Sandbox failure.
-- Making `SpendDenied` itself an exception: changes the spend meter (M1-TASK-07, done) and every caller of it, for no gain.
+- Making `SpendDenied` itself an exception: changes the spend meter (done) and every caller of it, for no gain.
 - Matching uv error text across versions exactly: impossible, as the layouts differ; aligning the development pin to 0.9.30 could change the lock file format for no safety benefit.
 
 ### Consequences
@@ -975,7 +975,7 @@ Status: Accepted (amends the LLM hold estimate of ADR-0029; corrects ARCHITECTUR
 
 ### Context
 
-Before every model call the spend meter sets aside ("holds") an upper-bound estimate of its cost. The prompt part of that estimate was the prompt length in characters divided by 2.5. The first live calls (M1-TASK-09, 2026-10-25) showed that Token Factory's chat template adds about 20 prompt tokens to every call that this does not cover: a 43-character prompt was billed 32 prompt tokens against an estimate of 18. A call that uses its full answer allowance can then cost more than its hold; the scan budget then marks the scan as overrun and refuses all later spending in that scan, so reasoning ends early.
+Before every model call the spend meter sets aside ("holds") an upper-bound estimate of its cost. The prompt part of that estimate was the prompt length in characters divided by 2.5. The first live calls (2026-10-25) showed that Token Factory's chat template adds about 20 prompt tokens to every call that this does not cover: a 43-character prompt was billed 32 prompt tokens against an estimate of 18. A call that uses its full answer allowance can then cost more than its hold; the scan budget then marks the scan as overrun and refuses all later spending in that scan, so reasoning ends early.
 
 ### Decision
 
@@ -998,7 +998,7 @@ Status: Accepted (partly supersedes the image-contents rule recorded with ADR-00
 
 ### Context
 
-The security review (round 1) asked that the Space image never contain secrets or local output, and the hosting section of [ARCHITECTURE.md](ARCHITECTURE.md) (section 18), written alongside ADR-0030, turned that into a rule: `.dockerignore` excludes all of `eval/results/`. M2-TASK-08 part A (commit 9a013b7) followed the rule. But the web page's evaluation figure ("precision on N cases") is read at runtime from `eval/results/latest.json`, so the deployed demo would show no figure at all, even after a scored evaluation run. The rule's own text in ADR-0030 is about pinning images and checking package hashes; the blanket exclusion of `eval/results/` lives in section 18 and the security review's test list.
+The security review (round 1) asked that the Space image never contain secrets or local output, and the hosting section of [ARCHITECTURE.md](ARCHITECTURE.md) (section 18), written alongside ADR-0030, turned that into a rule: `.dockerignore` excludes all of `eval/results/`. The first Cloud Run build step (commit 9a013b7) followed the rule. But the web page's evaluation figure ("precision on N cases") is read at runtime from `eval/results/latest.json`, so the deployed demo would show no figure at all, even after a scored evaluation run. The rule's own text in ADR-0030 is about pinning images and checking package hashes; the blanket exclusion of `eval/results/` lives in section 18 and the security review's test list.
 
 `eval/results/latest.json` is different from the rest of that folder. It is committed to git, so it is already public with the repository. It holds only aggregate figures (the `EvalRunSummary` model: whether the run was scored, run date, model name, LangSmith experiment name, case count, errored count, precision, recall, abstention rate, the bar and whether it was met). It holds no per-case traces, no repository code, no prompts or model text, and no keys. The other files in `eval/results/` (timestamped per-run JSON and Markdown) are gitignored and may hold per-case detail; `latest.md` is committed but the app does not read it.
 
@@ -1028,7 +1028,7 @@ Status: Accepted
 
 ### Context
 
-In the M1 user acceptance review (see [FEEDBACK](FEEDBACK.md), "M1 UAT round 1"), the tool said "no reachable path detected" for PyRL, although its `main.py` calls `yaml.load(f)` on PyYAML 5.3 every time it starts. The first suspicion was that code inside `if __name__ == "__main__":` does not count as an entry point. The code shows that it does: every module-level statement, including the body of that `if` and any `with` or `try` inside it, belongs to the module's entry point (`main_block`). A recorded run confirms it: the eval case for the same call under advisory GHSA-6757-jp84-gxfx was judged "likely reachable" with a valid path.
+In the M1 user acceptance review, the tool said "no reachable path detected" for PyRL, although its `main.py` calls `yaml.load(f)` on PyYAML 5.3 every time it starts. The first suspicion was that code inside `if __name__ == "__main__":` does not count as an entry point. The code shows that it does: every module-level statement, including the body of that `if` and any `with` or `try` inside it, belongs to the module's entry point (`main_block`). A recorded run confirms it: the eval case for the same call under advisory GHSA-6757-jp84-gxfx was judged "likely reachable" with a valid path.
 
 The real causes are two others.
 
@@ -1148,7 +1148,7 @@ The user approved the move on 2026-10-26, verbatim: "I approve: create a GCP pro
   - the app's own limits unchanged: per-visitor and daily rate limits, and the spend caps of $10.00 for Token Factory and $5.00 for Tavily.
 - **Secrets:** `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `TAVILY_API_KEY`, `HF_TOKEN` and `LANGSMITH_API_KEY` (plus `GITHUB_TOKEN` if set) are stored in Google Secret Manager, one version each, which stays within its free allowance of 6 active versions. Cloud Run hands them to the app as environment variables, so the app still reads secrets only from its environment ([ADR-0020](#adr-0020-mit-license-and-secrets-only-from-environment-variables)). The app runs as its own service account, which may read only these secrets. The values are piped from the local `.env` into Google by a script that never prints them.
 - **Spend ledger:** unchanged: the private Hugging Face dataset, with `SPEND_LEDGER_BACKEND=hf_dataset`.
-- **Access:** the service starts private, with no public access. Checks before launch send the developer's Google identity token. Making it public is the go-public task (M2-TASK-11), done only after the user confirms.
+- **Access:** the service starts private, with no public access. Checks before launch send the developer's Google identity token. Making it public is the go-public task, done only after the user confirms.
 - **Long-running streams:** each request may last up to 1,200 seconds (`--timeout 1200`). That covers a scan's progress stream (the scan deadline is 900 seconds), and a cut stream resumes where it stopped.
 - **Visitor address:** Google's front end adds the visitor's address to the `X-Forwarded-For` header. `TRUSTED_PROXY_HOPS` stays at the safe value 0 until a deploy check measures the right value.
 - **Logs:** the app's JSON lines go to Cloud Logging. Cloud Run's own request logs record raw visitor IP addresses, so they are excluded from storage, keeping the rule that no raw IP is logged.
@@ -1174,7 +1174,7 @@ The user approved the move on 2026-10-26, verbatim: "I approve: create a GCP pro
 - **Scans need a watcher:** because CPU is given only while a request is open, a scan advances while the visitor's page holds its progress stream or polls the status (the UI does both). An abandoned scan stalls, and its spend reservation counts as fully spent after twice the scan deadline, which errs on the safe side.
 - **Deploying** needs `gcloud` and the user's billing account. Rotating a key means adding a Secret Manager version, disabling the old one and redeploying.
 - **The public address** becomes Cloud Run's `run.app` URL. The keepalive variable and the README use it from the go-public task on.
-- **Re-planned tasks:** M2-TASK-08 part B rewrites the deploy steps and checks for Cloud Run. M2-TASK-11 makes the service public by granting public invoke access instead of changing a Space's visibility.
+- **Re-planned tasks:** The deploy steps rewrite the deploy steps and checks for Cloud Run. The go-public step makes the service public by granting public invoke access instead of changing a Space's visibility.
 - No new Python dependency. Details are in [ARCHITECTURE.md](ARCHITECTURE.md) section 18.
 
 ## ADR-0041: Proof dependencies without a wheel are downloaded with the network on and built with it off
@@ -1184,7 +1184,7 @@ Status: Accepted (amends ADR-0032 for `proof-install`; ADR-0018 and ADR-0039 oth
 
 ### Context
 
-The call-chain proof ([ADR-0039](#adr-0039-call-chain-proof-runs-main-block-entries-as-scripts-and-stubs-the-call-the-repository-makes), M2-TASK-09, commit 977e4b7) installs the repository's pinned dependencies only from ready-made packages ("wheels"). This happens in the `proof-install` step, which has internet access. A dependency that is published only as source code is skipped, and the proof says "not proven: no wheel".
+The call-chain proof ([ADR-0039](#adr-0039-call-chain-proof-runs-main-block-entries-as-scripts-and-stubs-the-call-the-repository-makes), commit 977e4b7) installs the repository's pinned dependencies only from ready-made packages ("wheels"). This happens in the `proof-install` step, which has internet access. A dependency that is published only as source code is skipped, and the proof says "not proven: no wheel".
 
 Every demo finding is on PyYAML 5.3.1. On PyPI (checked 2026-10-26) that release has only Windows wheels and a source package, `PyYAML-5.3.1.tar.gz`. It has no wheel for Linux, which is what the Sandbox runs (Python 3.13). So every demo proof ends "not proven: no wheel", and the proof cannot show its value on the demos the user wants to present.
 
@@ -1279,7 +1279,7 @@ Adopt five targeted improvements across evidence validation, evaluation rigor, d
    - Synchronize mock chip scenarios in `web/js/api/mock.js` with `web/fixtures/demos.json`.
 5. **Judging warm ping and proxy hop verification**:
    - Add a 10-minute warm ping cron (`*/10 * * * *`) in `.github/workflows/keepalive.yml` calling `/api/health` during the active judging window. This keeps Cloud Run warm without exceeding the free tier (<4,500 requests/month out of 2M free allowance) and within the ₹100 budget cap.
-   - Verify `TRUSTED_PROXY_HOPS` during M2-TASK-11 via a second-network test (mobile data connection) to properly isolate visitor rate limits.
+   - Verify `TRUSTED_PROXY_HOPS` during the go-public step via a second-network test (mobile data connection) to properly isolate visitor rate limits.
 
 ### Alternatives considered
 

@@ -1,4 +1,4 @@
-"""The scan pipeline with all fakes (M1-TASK-11).
+"""The scan pipeline with all fakes.
 
 AC-01 (step order, final states, tools rule), AC-09, AC-11, AC-24 to AC-27, AC-30, AC-53,
 NFR-06 (a failing external call never stops the report), ADR-0033 (selfcheck fails closed),
@@ -64,7 +64,7 @@ def tools(report) -> dict[str, list[str]]:
 
 
 async def test_a_local_fixture_scan_says_it_was_not_fetched_from_github(tmp_path):
-    # M1-FIX-02: `scan --local` reports a made-up GitHub URL, so the report must say so
+    # `scan --local` reports a made-up GitHub URL, so the report must say so
     report = await scan(make_harness(tmp_path), tmp_path)
     assert "local fixture, not fetched from GitHub" in report.limitations
 
@@ -531,7 +531,7 @@ def _model_following_the_listed_symbol(
 async def test_eval_regression_unqualified_research_symbols_still_reach_the_called_function(
     tmp_path,
 ):
-    # M2-TASK-15 attempt 2. In eval-20261026T083111Z the research reply named "full_load" and
+    # Found in a live eval. In eval-20261026T083111Z the research reply named "full_load" and
     # "FullLoader.full_load" (no "yaml." prefix) for GHSA-8q59-q68h-6hv4: the bare name was dropped,
     # the class-qualified one made the analysis index target a module called "FullLoader", the
     # code index saw no `yaml` use at all, and four likely-reachable cases became "no path".
@@ -549,7 +549,7 @@ async def test_eval_regression_unqualified_research_symbols_still_reach_the_call
 async def test_eval_regression_class_qualified_research_draw_still_reaches_the_module_function(
     tmp_path,
 ):
-    # M2-TASK-15 attempt 4. In the 09:24Z eval the research reply was exactly
+    # Found in a later eval. In the 09:24Z eval the research reply was exactly
     # ["FullLoader.full_load"] for GHSA-8q59-q68h-6hv4. It became `yaml.FullLoader.full_load`, a
     # name no call site matches (the code calls the module-level `yaml.full_load`), so every
     # yaml case read "no reachable path". The module-level function is now listed first.

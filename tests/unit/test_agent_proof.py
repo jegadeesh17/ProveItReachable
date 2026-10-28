@@ -1,8 +1,8 @@
-"""Call-chain proof, agent and client side (M2-TASK-09, M2-TASK-16).
+"""Call-chain proof, agent and client side.
 
 AC-66 (wheels-only install argv, uv isolation), AC-67 and AC-82 (the harness: reached, not reached,
 main block, argparse, exit), AC-68 (no wheel, timeout), AC-69 (sentinel placeholders only), AC-70
-(network ON only for proof-install, OFF for proof-run, asserted on the REST body). M2-TASK-16
+(network ON only for proof-install, OFF for proof-run, asserted on the REST body). ADR-0041
 (ADR-0041, AC-83): proof-install downloads the source package of a pin without a wheel (never
 opened), proof-build builds it offline, and the client and the REST body for both.
 
@@ -1928,7 +1928,7 @@ async def test_the_fake_executor_saves_a_copy_of_the_image_for_a_recorded_proof_
     assert not os.path.exists(built.image.ref) and not os.path.exists(installed.image.ref)
 
 
-# ---- the real uv accepts the proof argv and environment (found live in M2-TASK-16) -------------
+# ---- the real uv accepts the proof argv and environment (found live) -------------
 
 
 def real_uv() -> str:

@@ -1,4 +1,4 @@
-"""Golden index of the eval fixtures and the canary (M2-TASK-12, ADR-0037, AC-80).
+"""Golden index of the eval fixtures and the canary (ADR-0037, AC-80).
 
 Each repo is indexed in-process and compared exactly to a snapshot in
 `tests/fixtures/golden_index/`, so a change to the index (default-argument fields, source roots)

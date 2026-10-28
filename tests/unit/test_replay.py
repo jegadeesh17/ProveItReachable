@@ -1,4 +1,4 @@
-"""The replay store, pacing, recorder and the `record` command (M2-TASK-03).
+"""The replay store, pacing, recorder and the `record` command.
 
 Covers AC-46 (store), AC-48 (fidelity), AC-49 (pacing), the demo slug allowlist (finding 5) and the
 rule that `pir.replay` imports nothing from the pipeline or a client module.

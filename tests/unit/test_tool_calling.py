@@ -1,4 +1,4 @@
-"""The tool_calling strategy with FakeLLM scripts (M1-TASK-10; AC-17, AC-25, AC-28)."""
+"""The tool_calling strategy with FakeLLM scripts (AC-17, AC-25, AC-28)."""
 
 from pathlib import Path
 

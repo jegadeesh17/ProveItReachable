@@ -1,4 +1,4 @@
-"""Sandbox agent fetch and unpack with safe tar extraction (M1-TASK-05)."""
+"""Sandbox agent fetch and unpack with safe tar extraction ."""
 
 import gzip
 import io
@@ -71,7 +71,7 @@ def _opener(payload: bytes, seen: list[str] | None = None):
     return open_url
 
 
-def test_build_url_uses_only_codeload_with_validated_parts():  # M1-TASK-05 fetch URL
+def test_build_url_uses_only_codeload_with_validated_parts():  # fetch URL
     url = agent_fetch.build_url("octo", "demo.py_x-1", SHA)
     assert url == f"https://codeload.github.com/octo/demo.py_x-1/tar.gz/{SHA}"
 
@@ -112,7 +112,7 @@ def test_open_https_refuses_other_hosts_before_any_io():
             agent_fetch.open_https(url)
 
 
-def test_fetch_extracts_into_repo_root_and_reports_fetch_result(tmp_path):  # M1-TASK-05 fetch
+def test_fetch_extracts_into_repo_root_and_reports_fetch_result(tmp_path):  # fetch
     seen: list[str] = []
     result = agent_fetch.fetch(
         ARGS, repo_root=str(tmp_path / "repo"), opener=_opener(_tarball(_good_members()), seen)
@@ -130,7 +130,7 @@ def test_fetch_extracts_into_repo_root_and_reports_fetch_result(tmp_path):  # M1
     assert not (tmp_path / "repo" / TOP).exists()
 
 
-def test_fetch_download_over_the_byte_cap_is_a_limit(tmp_path):  # M1-TASK-05 download cap
+def test_fetch_download_over_the_byte_cap_is_a_limit(tmp_path):  # download cap
     payload = gzip.compress(os.urandom(5000))
     args = {**ARGS, "max_bytes": 1000}
     with pytest.raises(LimitExceeded):
@@ -153,7 +153,7 @@ def test_fetch_of_a_garbage_body_is_a_failure_not_a_crash(tmp_path):
         )
 
 
-def test_unpack_reads_the_local_tarball(tmp_path):  # M1-TASK-05 unpack
+def test_unpack_reads_the_local_tarball(tmp_path):  # unpack
     tarball = tmp_path / "src.tar.gz"
     tarball.write_bytes(_tarball(_good_members()))
     args = {"sha": SHA, "max_bytes": 1_000_000, "max_files": 100}

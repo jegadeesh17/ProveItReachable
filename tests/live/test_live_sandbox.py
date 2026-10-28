@@ -254,7 +254,7 @@ async def test_uv_no_build_refuses_sdist(executor, budget):
     assert result.stdout == ""  # nothing compiled
     assert BUILD_NEEDED_RE.search(result.stderr), result.stderr
     # The image's uv (0.9.30) words the error differently from the dev uv that recorded the
-    # M1-TASK-06 fixture (wrapping, "x ... " heading): its exact text is pinned beside the REST
+    # fixture (wrapping, "x ... " heading): its exact text is pinned beside the REST
     # fixtures, and both texts carry the same cause and hint sentences.
     assert result.stderr == pinned
     for text in (result.stderr, local):

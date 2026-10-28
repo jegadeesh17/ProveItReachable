@@ -1,4 +1,4 @@
-"""The demo routes through `httpx.ASGITransport` (M2-TASK-03).
+"""The demo routes through `httpx.ASGITransport`.
 
 Covers AC-46 (API), AC-47, AC-48, AC-49 (computed pacing), AC-52, AC-63 (server part), AC-78
 (replay part) and the demo slug allowlist (finding 5).

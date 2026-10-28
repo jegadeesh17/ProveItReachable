@@ -34,7 +34,7 @@ A running log of friction and wins with Nebius Token Factory, Sandboxes and Nemo
 | e. OSV | PASS | `/v1/query` returns `vulns[]` with keys `id, summary, details, aliases, modified, published, database_specific, references, affected, schema_version, severity`; `severity` is a list of CVSS vectors (`CVSS_V3`, `CVSS_V4`); `database_specific.severity` holds the GitHub label. `/v1/querybatch` returns `results[].vulns[]` with IDs only. |
 | f. LangSmith | PASS | `wrap_openai` around the Token Factory client + `@traceable` produced a run found by name in project `ProveItReachable`. `Client.list_runs` is deprecated (removal after 2027-01-31); use `client.runs.query()`. |
 
-## Offline build facts (2026-10-26, M2-TASK-08 part A)
+## Offline build facts (2026-10-26)
 
 | Check | Result | Facts for the deploy |
 |---|---|---|
@@ -45,7 +45,7 @@ A running log of friction and wins with Nebius Token Factory, Sandboxes and Nemo
 | Dependency lock | Generated | `uv pip compile pyproject.toml --universal --generate-hashes --python-version 3.13` (uv 0.13.5) wrote `requirements.lock` with a hash on every locked file. |
 | Docker on the build machine | Not run | Docker CLI present; daemon not running, so the image build and loopback run are pending (see `docs/DEPLOYMENT.md`, section 2). |
 
-## Deploy facts (2026-10-26, M2-TASK-08 part B, attempt 1: blocked)
+## Deploy facts (2026-10-26, attempt 1: blocked)
 
 | Check | Result | Facts for the deploy |
 |---|---|---|
@@ -56,7 +56,7 @@ A running log of friction and wins with Nebius Token Factory, Sandboxes and Nemo
 | Local settings | Needs a change | `.env` sets `SPEND_LEDGER_HF_REPO` but not `SPEND_LEDGER_BACKEND`. `Settings` refuses to load (the backend defaults to `file`, which is refused while the HF repo is set). Set `SPEND_LEDGER_BACKEND=hf_dataset` in the local env file. |
 | Pydantic `ValidationError` output | Pitfall | A `ValidationError` from `Settings()` echoes the input values, so secrets can appear in output. Catch it and print the field names only, as `_ledger_set_caps` in `src/pir/cli.py` already does. |
 
-## Cloud Run deploy facts (2026-10-26, M2-TASK-08 part B, attempt 2: Google Cloud Run)
+## Cloud Run deploy facts (2026-10-26, attempt 2: Google Cloud Run)
 
 Attempt 1 (Hugging Face Space) stopped at the HTTP 402 above. ADR-0040 moved the host to Cloud Run. The Space plan below is no longer used.
 
@@ -78,7 +78,7 @@ Attempt 1 (Hugging Face Space) stopped at the HTTP 402 above. ADR-0040 moved the
 | `SANDBOX_BASE_IMAGE` | Needed for live scans | Not required at startup (default `None`), but the sandbox executor raises `SANDBOX_BASE_IMAGE is not set` at scan time. It was added with `LIVE_SCANS_ENABLED=true`. |
 | Cloud Run startup CPU boost | On | `run.googleapis.com/startup-cpu-boost: true` on the service; the deploy did not set it. |
 
-## Real-money cap facts (2026-10-26, M2-TASK-08-COSTCAP, kill switch)
+## Real-money cap facts (2026-10-26, kill switch)
 
 | Check | Result | Facts for the cap |
 |---|---|---|

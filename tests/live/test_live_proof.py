@@ -1,8 +1,8 @@
 """Live checks of the call-chain proof (ARCHITECTURE 22.1): run with PIR_LIVE_TESTS=1 (slow + live).
 
-These are the gates for enabling FEATURE_PROOF anywhere (M2-TASK-09): proof-install never runs repo
+These are the gates for enabling FEATURE_PROOF anywhere: proof-install never runs repo
 code (the uv-canary gate), uv accepts `--` before the pin with the full argv, `--no-build` refuses
-an sdist, proof-run has no network, and a fixture is proven in a real Sandbox. M2-TASK-16 (ADR-0041)
+an sdist, proof-run has no network, and a fixture is proven in a real Sandbox. ADR-0041
 adds `test_proof_build_pyyaml_sdist_offline`: a source-only pin is downloaded with the network on,
 built with it off, and proven. Each test spends a few Sandbox operations (metered at
 SANDBOX_USD_PER_SECOND; the whole file is well under USD 1; the ADR-0041 test about USD 0.30).
@@ -44,7 +44,7 @@ pytestmark = [pytest.mark.slow, pytest.mark.live]
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "repos"
 YAML_PIN = ("pyyaml", "6.0.2")  # publishes cp313 wheels; the fixtures use only wheel dependencies
-SDIST_PIN = ("antlr4-python3-runtime", "4.9.3")  # sdist only (the M1-TASK-06 fixture)
+SDIST_PIN = ("antlr4-python3-runtime", "4.9.3")  # sdist only (the sdist fixture)
 
 
 @pytest.fixture

@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     # Executor and Sandbox
     executor: Literal["sandbox", "fake"] = "sandbox"
     # Version tag (imported) and index digest (checked through the fingerprint file, ADR-0033);
-    # Python 3.13.11, uv 0.9.30. Digest read from the registry on 2026-10-25 (M1-TASK-08).
+    # Python 3.13.11, uv 0.9.30. Digest read from the registry on 2026-10-25.
     sandbox_base_image: str | None = (
         "ghcr.io/astral-sh/uv:0.9.30-python3.13-bookworm-slim"
         "@sha256:531f855bda2c73cd6ef67d56b733b357cea384185b3022bd09f05e002cd144ca"

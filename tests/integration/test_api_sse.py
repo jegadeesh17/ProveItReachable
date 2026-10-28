@@ -1,4 +1,4 @@
-"""The progress feed `GET /api/scans/{id}/events` (M2-TASK-05).
+"""The progress feed `GET /api/scans/{id}/events`.
 
 Covers AC-41 (stream part), AC-42 (server part), AC-48 (feed part) and AC-78 (stream part).
 Finished jobs are read through `httpx.ASGITransport`; open (never-ending) streams, which that

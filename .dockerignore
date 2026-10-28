@@ -1,5 +1,5 @@
 # Secrets: never in the build context or the image (ARCHITECTURE section 18; ADR-0020, ADR-0030;
-# SECURITY_REVIEW round 1, test cases to carry).
+# security review round 1, test cases to carry).
 .env
 .env.*
 !.env.example

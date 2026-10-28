@@ -1,8 +1,8 @@
 # Deployment
 
-Hosting per ARCHITECTURE section 18 (ADR-0040, which supersedes ADR-0013; ADR-0030, ADR-0033 and ADR-0036 for the image; ADR-0020 for secrets). Part A (offline build) was done on 2026-10-26 (M2-TASK-08, commit 9a013b7). Part B attempt 1 (Hugging Face Space) was blocked by HTTP 402 (a Docker Space needs a PRO subscription). Part B attempt 2 (Google Cloud Run) was run on 2026-10-26.
+Hosting per ARCHITECTURE section 18 (ADR-0040, which supersedes ADR-0013; ADR-0030, ADR-0033 and ADR-0036 for the image; ADR-0020 for secrets). Part A (offline build) was done on 2026-10-26 (commit 9a013b7). Part B attempt 1 (Hugging Face Space) was blocked by HTTP 402 (a Docker Space needs a PRO subscription). Part B attempt 2 (Google Cloud Run) was run on 2026-10-26.
 
-**Status (2026-10-26, part B attempt 2): DEPLOYED, PRIVATE, live scans enabled.** Nothing is public. The service has no `allUsers` or `allAuthenticatedUsers` binding. M2-TASK-11 (go public) is not done.
+**Status (2026-10-26, attempt 2): DEPLOYED, PRIVATE, live scans enabled.** Nothing is public. The service has no `allUsers` or `allAuthenticatedUsers` binding. Going public is not done.
 
 | Item | Value |
 |---|---|
@@ -69,7 +69,7 @@ Run from the project root in Git Bash. Values captured from gcloud had `tr -d '\
 | 13 | `/api/health` shows `budget_remaining` for both pools | Section 7 | **PASS.** `{"nebius":1.0,"tavily":1.0}`, with `LIVE_SCANS_ENABLED=true`. |
 | 14 | Browser check through `gcloud run services proxy` | Optional in the plan | **NOT RUN** (optional; no browser session in this run). |
 | 15 | Cold start after idle | Section 6 | **MEASURED:** about 20 s to the first byte after 16 minutes idle; warm requests about 0.5 s. |
-| 16 | Keepalive `workflow_dispatch` | M2-TASK-11 | **DEFERRED** (private URL needs a token; no workflow triggered). |
+| 16 | Keepalive `workflow_dispatch` | go-public step | **DEFERRED** (private URL needs a token; no workflow triggered). |
 | 17 | Live scan | Not requested | **NOT RUN** (the user asked for no live scan). |
 
 ## 5. XFF measurement and `TRUSTED_PROXY_HOPS`
@@ -111,7 +111,7 @@ Live scans were enabled after this, and `/api/health` reports `budget_remaining`
 
 ## 8. Fast checks (local, on the current tree)
 
-`python -m ruff check .`: all checks passed. `python -m ruff format --check .`: 133 files already formatted. `python -m pytest -q -m "not slow"`: 1730 passed, 3 skipped, 135 deselected. Recorded in `docs/QA_RESULTS.json` (M2-TASK-08, attempt 2, part B).
+`python -m ruff check .`: all checks passed. `python -m ruff format --check .`: 133 files already formatted. `python -m pytest -q -m "not slow"`: 1730 passed, 3 skipped, 135 deselected.
 
 ## 9. Environment changes after the first deploy
 
@@ -126,7 +126,7 @@ Live scans were enabled after this, and `/api/health` reports `budget_remaining`
 - **Spend state** lives in the HF ledger dataset and is not touched by any of these. The caps are in ledger state.
 - **Secret rotation:** add a new Secret Manager version, disable the old one, and redeploy (ADR-0040).
 
-## 11. M2-TASK-11 (go public): steps for later, after the user confirms
+## 11. Go public: steps for later, after the user confirms
 
 1. Redeploy from `git archive HEAD` after any change (the same build-folder procedure as section 2, step 8), then run the image check (section 4, check 2) on the new digest.
 2. Grant public invoke access: `gcloud run services add-iam-policy-binding proveitreachable --region=us-central1 --member=allUsers --role=roles/run.invoker`. Only after the user says so.
@@ -143,7 +143,7 @@ Live scans were enabled after this, and `/api/health` reports `budget_remaining`
 - Nothing has been made public, and no GitHub setting or workflow was changed.
 ## 13. Real-money cap (₹100)
 
-**Status (2026-10-26, after M2-TASK-08-COSTCAP attempt 2): ARMED.** The kill switch is live with `DRY_RUN=false` and `KILL_AT_COST=80`. Any budget message with `costAmount` of 80 or more unlinks billing on `proveitreachable`. Billing is still enabled. The unlink itself was **not tested**, because testing it would unlink billing (section 13.6).
+**Status (2026-10-26, after cost-cap attempt 2): ARMED.** The kill switch is live with `DRY_RUN=false` and `KILL_AT_COST=80`. Any budget message with `costAmount` of 80 or more unlinks billing on `proveitreachable`. Billing is still enabled. The unlink itself was **not tested**, because testing it would unlink billing (section 13.6).
 
 ### 13.1 Budget
 
@@ -339,7 +339,7 @@ No message at or above 80 was pending when the switch was armed.
 | Backlog | 0 (metric, 09:39 to 09:42). |
 | Budget | INR 100, thresholds 50/80/90/100 (current spend), topic `billing-kill`. |
 
-**Nebius `budget_remaining`.** The value was 1.0 in section 4 (check 4) and section 7. It was 0.923 at about 08:50 UTC and is 0.876 at 09:43 UTC. The 0.923 is explained by the M2-TASK-15 eval, which spent $0.7686 on the shared HF ledger: 1 − 0.7686/10 ≈ 0.923. The further drop to 0.876 is not covered by that figure (it implies about $1.24 spent on the $10 cap). This task ran no scan. Check the ledger before the next live scan.
+**Nebius `budget_remaining`.** The value was 1.0 in section 4 (check 4) and section 7. It was 0.923 at about 08:50 UTC and is 0.876 at 09:43 UTC. The 0.923 is explained by the eval run, which spent $0.7686 on the shared HF ledger: 1 − 0.7686/10 ≈ 0.923. The further drop to 0.876 is not covered by that figure (it implies about $1.24 spent on the $10 cap). This task ran no scan. Check the ledger before the next live scan.
 
 ### 13.6 Re-enabling billing after a trip
 

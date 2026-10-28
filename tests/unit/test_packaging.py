@@ -1,6 +1,6 @@
 """Packaging and delivery checks: hashed lock, Docker inputs, Sandbox digest, wheel, docs.
 
-ADR-0030, ARCHITECTURE section 18 (with the SECURITY_REVIEW round 1 test cases to carry),
+ADR-0030, ARCHITECTURE section 18 (with the security review round 1 test cases to carry),
 ADR-0033, ADR-0036, AC-39, NFR-08. The fast checks read files
 only. The wheel test builds one in a temporary copy of the project (slow).
 """
@@ -184,7 +184,7 @@ def test_arch18_dockerfile_declares_no_secret_values():
     assert re.search(r"(?im)^(ENV|ARG)\b.*(KEY|TOKEN|SECRET|PASSWORD)", text) is None
 
 
-# ARCHITECTURE section 18 and SECURITY_REVIEW round 1 (test cases to carry): .dockerignore.
+# ARCHITECTURE section 18 and security review round 1 (test cases to carry): .dockerignore.
 
 
 def test_arch18_dockerignore_excludes_secrets_data_and_eval_results():

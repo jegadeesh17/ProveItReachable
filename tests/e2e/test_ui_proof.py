@@ -1,4 +1,4 @@
-"""Call-chain proof controls in the UI (M2-TASK-10).
+"""Call-chain proof controls in the UI.
 
 AC-65 (no control unless `features.proof` is true), AC-66 (proven shows the recorded call), AC-67
 (not proven shows the reason; the verdict is not upgraded), AC-68 (`uncertain: ...` and

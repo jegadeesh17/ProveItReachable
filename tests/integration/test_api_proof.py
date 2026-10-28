@@ -1,4 +1,4 @@
-"""The call-chain proof through the job runner and the HTTP route (M2-TASK-09).
+"""The call-chain proof through the job runner and the HTTP route.
 
 AC-65 (gated route and config), AC-66, AC-67, AC-68, AC-82 and AC-83 (`run_proof` on the proof
 fixtures,

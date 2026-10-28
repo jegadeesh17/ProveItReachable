@@ -61,7 +61,7 @@ def test_ac12_research_prompt_without_results_or_summary():
 
 
 def test_ac80_reasoning_prompt_says_an_implied_by_call_is_a_use_of_the_symbol():
-    # M2-TASK-15 attempt 2: in eval-20261026T083111Z the model got two find_paths paths and
+    # in eval-20261026T083111Z the model got two find_paths paths and
     # `implied_by` call sites for yaml.FullLoader and still answered "no reachable path detected",
     # because nothing told it what `implied_by` means.
     assert "'implied_by'" in REASONING_SYSTEM_PROMPT

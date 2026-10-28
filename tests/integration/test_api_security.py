@@ -1,4 +1,4 @@
-"""Security carry-over for the HTTP API (SECURITY_REVIEW findings 5 and 8; ARCHITECTURE 22).
+"""Security carry-over for the HTTP API (security review findings 5 and 8; ARCHITECTURE 22).
 
 The 4 KB body cap on chunked bodies, the security headers on every kind of response, and the
 client key behind a proxy, all through `httpx.ASGITransport`.

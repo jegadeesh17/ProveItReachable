@@ -418,7 +418,7 @@ def test_model_uncertain_stays_uncertain_with_a_reason():
     f = run(outcome("uncertain", "high", path=None))
     assert (f.verdict, f.confidence) == ("uncertain", "low")
     assert f.reason_code and f.reason
-    # M1-FIX-02: nothing was downgraded, so the explanation must not claim it was
+    # nothing was downgraded, so the explanation must not claim it was
     assert "Downgraded" not in f.explanation
     assert f.explanation.startswith("The model answered 'uncertain'")
 

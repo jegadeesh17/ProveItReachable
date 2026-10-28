@@ -1,4 +1,4 @@
-"""Browser flows against the real API (M2-TASK-07, slow).
+"""Browser flows against the real API (slow).
 
 AC-40 to AC-46, AC-49, AC-54 to AC-59, AC-61 to AC-64, NFR-10, plus the polish checks: widths of
 390 and 1280 px, long text, keyboard use, visible focus and reduced motion. Test names carry the

@@ -323,10 +323,10 @@ async def test_ac12_ungrounded_or_malformed_symbols_are_dropped(tmp_path, symbol
 @pytest.mark.parametrize(
     ("package", "named", "expected"),
     [
-        # M2-TASK-15 attempt 2: the model leaves out the module the code imports the package by
+        # the model leaves out the module the code imports the package by
         ("pyyaml", ["full_load"], ["yaml.full_load"]),
         ("PyYAML", ["full_load"], ["yaml.full_load"]),
-        # M2-TASK-15 attempt 4: a class-qualified draw also gives the module-level function the
+        # a class-qualified draw also gives the module-level function the
         # repository calls, first, once
         (
             "pyyaml",

@@ -1,6 +1,6 @@
 """Agent entry point: `python3.13 -I -S agent.pyz <command> --args-b64 <base64 JSON>`.
 
-`proof-install`, `proof-build` (M2-TASK-16, ADR-0041) and `proof-run` (M2-TASK-09) belong to the
+`proof-install`, `proof-build` (ADR-0041) and `proof-run` belong to the
 call-chain proof; `proof-run` leaves the process itself after printing its one result line (see
 `proof.py`).
 """

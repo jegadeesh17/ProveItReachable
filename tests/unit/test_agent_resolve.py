@@ -1,4 +1,4 @@
-"""Sandbox agent `resolve`: lockfiles, pinned requirements and the no-uv cases (M1-TASK-06)."""
+"""Sandbox agent `resolve`: lockfiles, pinned requirements and the no-uv cases ."""
 
 import base64
 import io

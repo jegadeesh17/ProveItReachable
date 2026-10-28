@@ -4,7 +4,7 @@
 
 Decides whether a known vulnerability in a Python repository's pinned dependencies is actually reachable from that repository's code.
 
-**Demo:** _link placeholder, to be added when the Space is made public (M2-TASK-11)_
+**Demo:** _link placeholder, to be added when the Space is made public _
 
 ## What it does
 
@@ -51,7 +51,7 @@ Run with `.venv` active.
 
 | Purpose | Command |
 |---|---|
-| Fast checks (also run by CI) | `python -m ruff check . && python -m ruff format --check . && python -m pytest -q -m "not slow"` |
+| Fast checks (also run by CI) | `python -m ruff check. && python -m ruff format --check. && python -m pytest -q -m "not slow"` |
 | Full test suite | `python -m pytest -q` |
 | One test file | `python -m pytest -q tests/unit/test_config.py` |
 | Check configuration | `python -m pir check-config --for scan` |

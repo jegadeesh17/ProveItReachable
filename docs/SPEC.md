@@ -1,6 +1,6 @@
 # ProveItReachable Specification
 
-This document defines what ProveItReachable must do, as journeys and testable acceptance criteria. Source: [project mental model](PROJECT_MENTAL_MODEL.md). Architecture decisions are in `ARCHITECTURE.md` (written by the architect). Dates are YYYY-MM-DD.
+This document defines what ProveItReachable must do, as journeys and testable acceptance criteria. Architecture decisions are in `ARCHITECTURE.md`. Dates are YYYY-MM-DD.
 
 ## 1. Summary
 
