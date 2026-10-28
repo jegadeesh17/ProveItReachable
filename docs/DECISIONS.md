@@ -1376,6 +1376,6 @@ Implement four coordinated architectural enhancements:
 
 - Reports provide actionable, deterministic upgrade guidance per finding.
 - Zero frontend dependencies added; SVG renders smoothly across devices and color themes.
-- Cryptographic proof nonce guarantees that untrusted repo code cannot fake exploitability.
+- The per-run proof nonce rejects pre-written or replayed `proven` results. It is not a full authentication boundary: the target runs in the same interpreter that holds the nonce, so a repository written against this harness could read it and forge a `proven` result for its own report only. Running the target in a child process that cannot see the nonce would close this gap.
 - Live judge scans are enabled within the hard ~$8 remaining credit ceiling.
 - Backward compatibility is preserved: schema changes are strictly additive and optional.
