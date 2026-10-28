@@ -40,7 +40,14 @@ from fakes.deps import (
 )
 from fakes.http import json_response
 from fakes.llm import FakeLLM, json_result, tool_result
-from playwright.sync_api import Browser, BrowserContext, Page
+from playwright.sync_api import (
+    Browser,
+    BrowserContext,
+    BrowserType,
+    Page,
+    Playwright,
+    sync_playwright,
+)
 
 from pir.api import routes
 from pir.api.app import create_app
@@ -99,7 +106,6 @@ INTAKE_ERRORS: dict[str, Callable[[], Exception]] = {
     "ghdown": GitHubUnavailable,
 }
 REPO_DIRS: dict[str, Path] = {}
-_PATCH_LOCK = threading.Lock()
 
 
 def _validated(coords: RepoCoordinates) -> ValidatedTarget:
@@ -234,22 +240,26 @@ def start_server(
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _fixture_repos(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
-    """Write the local repositories once and make live scans scan them instead of GitHub."""
+def _fixture_repos(tmp_path_factory: pytest.TempPathFactory) -> None:
+    """Write the local repositories once."""
     base = tmp_path_factory.mktemp("repos")
     for name, files in REPOS.items():
         REPO_DIRS[name] = write_repo(base / name, files)
+
+
+@pytest.fixture(autouse=True)
+def _scan_local_repos(_fixture_repos: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make live scans scan the local repositories instead of GitHub, for this test only.
+
+    The patch is per test so it is undone before the first test outside this folder runs.
+    """
     real_run_scan = routes.run_scan
 
     async def fixture_scan(deps, target, budget, **kwargs):
         repo = REPO_DIRS.get(target.coords.name, REPO_DIRS["demo"])
         return await real_run_scan(deps, Harness.target(repo), budget, **kwargs)
 
-    with _PATCH_LOCK:
-        routes.run_scan = fixture_scan
-    yield
-    with _PATCH_LOCK:
-        routes.run_scan = real_run_scan
+    monkeypatch.setattr(routes, "run_scan", fixture_scan)
 
 
 @pytest.fixture(scope="session")
@@ -297,6 +307,34 @@ def limited_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[LiveSer
 
 
 # ---- browser ------------------------------------------------------------------------------
+
+# pytest-playwright starts the sync Playwright driver once per session. While it is started, the
+# driver's event loop is marked as running in the main thread, so any later `asyncio.run()` there
+# (the unit and integration tests that run after this folder) fails with "cannot be called from a
+# running event loop". Scoping the driver and the browser to a module stops the driver when the
+# last browser module finishes, so no loop outlives this folder.
+
+
+@pytest.fixture(scope="module")
+def playwright(_pw_api_request_contexts: Any) -> Iterator[Playwright]:
+    pw = sync_playwright().start()
+    if _pw_api_request_contexts:
+        _pw_api_request_contexts.instrument(pw)
+    yield pw
+    pw.stop()
+
+
+@pytest.fixture(scope="module")
+def browser_type(playwright: Playwright, browser_name: str) -> BrowserType:
+    return getattr(playwright, browser_name)
+
+
+@pytest.fixture(scope="module")
+def browser(browser_type: BrowserType, browser_type_launch_args: dict) -> Iterator[Browser]:
+    browser = browser_type.launch(**browser_type_launch_args)
+    yield browser
+    browser.close()
+
 
 RECORDER = """
 window.__stages = [];

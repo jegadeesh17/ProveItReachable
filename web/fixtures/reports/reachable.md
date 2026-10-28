@@ -33,6 +33,8 @@
 
 **Confidence:** high
 
+**Remediation:** Upgrade pyyaml to version 5.4 or newer.
+
 **Limitations**
 
 - Static analysis of 14 of 15 Python files \(1 skipped: syntax error\). Dynamic imports, getattr and reflection were not examined.
@@ -60,6 +62,8 @@ The command-line entry point cli calls read\_config, which passes an open file t
 
 **Confidence:** medium
 
+**Remediation:** Upgrade jinja2 to version 2.11.3 or newer.
+
 **Limitations**
 
 - Static analysis of 14 of 15 Python files \(1 skipped: syntax error\). Dynamic imports, getattr and reflection were not examined.
@@ -84,6 +88,8 @@ The route show\_note renders each note through render\_note, which calls urlize 
 **Confidence:** low
 
 **Reason:** vulnerable function not identified: the advisory names no function or API to search for. (vulnerable\_function\_not\_identified)
+
+**Remediation:** Upgrade flask to version 2.2.5 or newer.
 
 **Limitations**
 

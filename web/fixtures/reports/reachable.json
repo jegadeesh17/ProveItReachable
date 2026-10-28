@@ -335,7 +335,12 @@
       ],
       "reason_code": null,
       "reason": null,
-      "proof": null
+      "proof": null,
+      "remediation": {
+        "package": "pyyaml",
+        "target_version": "5.4",
+        "guidance": "Upgrade pyyaml to version 5.4 or newer."
+      }
     },
     {
       "finding_id": "a0246c3e801fb5de",
@@ -421,7 +426,12 @@
       ],
       "reason_code": null,
       "reason": null,
-      "proof": null
+      "proof": null,
+      "remediation": {
+        "package": "jinja2",
+        "target_version": "2.11.3",
+        "guidance": "Upgrade jinja2 to version 2.11.3 or newer."
+      }
     },
     {
       "finding_id": "decfa40da06d6bb8",
@@ -478,7 +488,12 @@
       ],
       "reason_code": "vulnerable_function_not_identified",
       "reason": "vulnerable function not identified: the advisory names no function or API to search for.",
-      "proof": null
+      "proof": null,
+      "remediation": {
+        "package": "flask",
+        "target_version": "2.2.5",
+        "guidance": "Upgrade flask to version 2.2.5 or newer."
+      }
     },
     {
       "finding_id": "a1bf91f34f89c323",
