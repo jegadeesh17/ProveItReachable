@@ -1,29 +1,29 @@
 # Evaluation: PASS (LR precision 0.91, bar 0.80)
 
-- Run date: 2026-10-26
+- Run date: 2026-10-29
 - Model: nvidia/nemotron-3-super-120b-a12b
-- Experiment: eval-20261026T145343Z-nvidia-nemotron-3-super-120b-a12b
+- Experiment: eval-20261029T094709Z-nvidia-nemotron-3-super-120b-a12b
 - Scored run: yes
-- Advisory recordings: re-recorded live
+- Advisory recordings: replayed
 
 | Metric | Value |
 |---|---|
 | N (cases) | 30 |
 | LR precision | 0.91 |
 | LR recall | 0.67 |
-| Abstention rate | 0.30 |
-| Correct abstentions | 3 |
-| No-path precision | 0.60 |
-| Dangerous misses | 1 |
+| Abstention rate | 0.23 |
+| Correct abstentions | 2 |
+| No-path precision | 0.50 |
+| Dangerous misses | 2 |
 | Errored cases | 4 |
 
 Confusion matrix (rows: label, columns: predicted)
 
 | label \ predicted | likely reachable | no reachable path detected | uncertain |
 |---|---|---|---|
-| likely reachable | 10 | 1 | 4 |
+| likely reachable | 10 | 2 | 3 |
 | no reachable path detected | 1 | 6 | 2 |
-| uncertain | 0 | 3 | 3 |
+| uncertain | 0 | 4 | 2 |
 
 | Case | Label | Predicted | Status | Correct |
 |---|---|---|---|---|
@@ -34,9 +34,9 @@ Confusion matrix (rows: label, columns: predicted)
 | yaml-imported-never-called | no reachable path detected | no reachable path detected | scored | yes |
 | yaml-never-imported | no reachable path detected | no reachable path detected | scored | yes |
 | yaml-dynamic-getattr | uncertain | no reachable path detected | scored | no |
-| requests-session-verify-false | likely reachable | uncertain | scored | no |
+| requests-session-verify-false | likely reachable | no reachable path detected | scored | no |
 | requests-extract-zipped-paths-unused | no reachable path detected | no reachable path detected | scored | yes |
-| requests-netrc-no-function | uncertain | uncertain | scored | yes |
+| requests-netrc-no-function | uncertain | no reachable path detected | scored | no |
 | wheel-no-function | uncertain | uncertain | scored | yes |
 | co2tools-yaml-safeloader | no reachable path detected | no reachable path detected | scored | yes |
 | pyrl-yaml-load-default-loader-14343 | likely reachable | likely reachable | scored | yes |
@@ -47,7 +47,7 @@ Confusion matrix (rows: label, columns: predicted)
 | yaml-init-reexport | likely reachable | uncertain | scored | no |
 | yaml-conditional-import | likely reachable | likely reachable | scored | yes |
 | jinja2-env-from-string | likely reachable | uncertain | missing | no |
-| urllib3-pool-request | likely reachable | uncertain | scored | no |
+| urllib3-pool-request | likely reachable | no reachable path detected | scored | no |
 | yaml-test-only | no reachable path detected | no reachable path detected | scored | yes |
 | yaml-string-mention-only | no reachable path detected | no reachable path detected | scored | yes |
 | yaml-dead-code-if-false | no reachable path detected | likely reachable | scored | no |
@@ -55,7 +55,7 @@ Confusion matrix (rows: label, columns: predicted)
 | urllib3-unused-internals | no reachable path detected | uncertain | missing | no |
 | yaml-importlib-dynamic | uncertain | no reachable path detected | scored | no |
 | jinja2-custom-loader-dynamic | uncertain | uncertain | missing | yes |
-| planesweeppose-yaml-load | likely reachable | no reachable path detected | scored | no |
+| planesweeppose-yaml-load | likely reachable | uncertain | scored | no |
 | planesweeppose-torch-unpack | uncertain | no reachable path detected | scored | no |
 
 Errored or unmatched cases (scored as uncertain):

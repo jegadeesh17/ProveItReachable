@@ -1,13 +1,13 @@
 {
   "scored": true,
-  "run_date": "2026-10-26",
+  "run_date": "2026-10-29",
   "model": "nvidia/nemotron-3-super-120b-a12b",
-  "experiment": "eval-20261026T145343Z-nvidia-nemotron-3-super-120b-a12b",
+  "experiment": "eval-20261029T094709Z-nvidia-nemotron-3-super-120b-a12b",
   "n": 30,
   "errored": 4,
   "precision": 0.9090909090909091,
   "recall": 0.6666666666666666,
-  "abstention_rate": 0.3,
+  "abstention_rate": 0.23333333333333334,
   "bar": 0.8,
   "bar_met": true
 }
