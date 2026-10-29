@@ -62,6 +62,11 @@ _IMPORT_NAMES = {
     "beautifulsoup4": "bs4",
     "opencv-python": "cv2",
     "python-dateutil": "dateutil",
+    "pyjwt": "jwt",
+    "pycryptodome": "Crypto",
+    "pycryptodomex": "Cryptodome",
+    "python-jose": "jose",
+    "protobuf": "google",
 }
 
 Depth = Literal["basic", "advanced"]

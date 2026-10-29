@@ -411,6 +411,25 @@ async def test_ac12_a_package_that_provides_a_standard_library_name_keeps_its_sy
     assert result.identified and result.symbols == ["dataclasses.asdict"]
 
 
+@pytest.mark.parametrize(
+    ("package", "symbol"),
+    [
+        ("pyjwt", "jwt.decode"),
+        ("PyJWT", "jwt.decode"),
+        ("pycryptodome", "Crypto.Cipher.AES.new"),
+        ("pycryptodomex", "Cryptodome.Cipher.AES.new"),
+        ("python-jose", "jose.jws.verify"),
+        ("protobuf", "google.protobuf.json_format.Parse"),
+    ],
+)
+async def test_ac12_a_renamed_import_keeps_the_packages_symbols(tmp_path, package, symbol):
+    llm = FakeLLM([json_result({"identified": True, "symbols": [symbol]})])
+    results = [SearchResult(url=NVD_URL, title="NVD", content=f"{symbol} is unsafe")]
+    researcher, _, _ = _researcher(tmp_path, search=FakeSearch(results), llm=llm)
+    result = await researcher.research(_advisory(), package, list(OSV_LINKS), _budget())
+    assert result.identified and result.symbols == [symbol]
+
+
 async def test_ac12_the_fix_commit_fallback_still_runs_when_every_drawn_symbol_is_foreign(
     tmp_path,
 ):
