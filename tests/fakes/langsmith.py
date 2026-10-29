@@ -1,11 +1,12 @@
 """FakeLangSmithClient: a real `langsmith.Client` whose HTTP session records instead of sending.
 
-Because it is the real client, `hide_inputs` / `hide_outputs` and the run metadata behave as in
-production; only the network is replaced. Every run payload the client would have uploaded is
-available decoded in `payloads`.
+Because it is the real client, the `anonymizer` (inputs, outputs, errors and metadata) and the run
+metadata behave as in production; only the network is replaced. Every run payload the client
+would have uploaded is available decoded in `payloads`.
 """
 
 import json
+import threading
 import time
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
@@ -14,7 +15,7 @@ from typing import Any
 import requests
 from langsmith import Client
 
-from pir.tracing import redact_payload
+from pir.tracing import make_anonymizer
 
 
 def check_feedback_args(
@@ -105,17 +106,16 @@ class FakeRuns:
 
 
 class FakeLangSmithClient(Client):
-    def __init__(self, *, redact: bool = True) -> None:
+    def __init__(self, *, redact: bool = True, first_line_errors: bool = False) -> None:
         self._recording = _RecordingSession()
         self.query_calls: list[dict[str, Any]] = []
-        hide = redact_payload if redact else None
+        anonymizer = make_anonymizer(first_line_errors=first_line_errors) if redact else None
         super().__init__(
             api_url="https://langsmith.invalid",
             api_key="fake-langsmith-key",
             session=self._recording,
             auto_batch_tracing=False,
-            hide_inputs=hide,
-            hide_outputs=hide,
+            anonymizer=anonymizer,
         )
 
     @property
@@ -194,7 +194,11 @@ class FakeLangSmithClient(Client):
 
 
 class ShareableLangSmithClient(FakeLangSmithClient):
-    """A fake whose `share_run` answers `url` (or raises `error`, or sleeps `delay_s` first)."""
+    """A fake whose `share_run` answers `url` (or raises `error`, or sleeps `delay_s` first).
+
+    It stands for a client with public links on, so it cuts errors to their first line. When
+    `hold` is given, `share_run` waits for that event before it answers.
+    """
 
     def __init__(
         self,
@@ -202,17 +206,21 @@ class ShareableLangSmithClient(FakeLangSmithClient):
         *,
         error: Exception | None = None,
         delay_s: float = 0.0,
+        hold: threading.Event | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(first_line_errors=True)
         self.url = url
         self.error = error
         self.delay_s = delay_s
+        self.hold = hold
         self.shared: list[Any] = []
 
     def share_run(self, run_id: Any, *, share_id: Any = None) -> str:  # type: ignore[override]
         self.shared.append(run_id)
         if self.delay_s:
             time.sleep(self.delay_s)
+        if self.hold is not None:
+            self.hold.wait(10)
         if self.error is not None:
             raise self.error
         return self.url

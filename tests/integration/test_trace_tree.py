@@ -7,7 +7,9 @@ client with a recording session (`FakeLangSmithClient`) stands in for LangSmith;
 the network.
 """
 
+import concurrent.futures
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +25,7 @@ from fakes.deps import (
 )
 from fakes.http import RecordingTransport, json_response
 from fakes.langsmith import FakeLangSmithClient, RunNode, ShareableLangSmithClient
-from langsmith import tracing_context
+from langsmith import traceable, tracing_context
 from langsmith.run_trees import RunTree
 from test_eval_runner import CASES, EvalFakeLangSmith, as_sandbox, make_suite
 from test_eval_runner import harness as eval_harness
@@ -32,9 +34,10 @@ from pir import tracing
 from pir.agent_client import LocalFixtureTarget
 from pir.config import Settings
 from pir.llm import NebiusLLMClient
+from pir.logs import clear_secrets, register_secrets
 from pir.models.report import ScanReport
 from pir.pipeline import run_scan
-from pir.tracing import advisory_run, finding_run, step_run, tool_run, valid_share_url
+from pir.tracing import advisory_run, finding_run, run_traced, step_run, tool_run, valid_share_url
 
 CANARY = Path(__file__).resolve().parents[1] / "fixtures" / "repos" / "canary"
 CANARY_SHA = "c" * 40
@@ -478,6 +481,12 @@ async def test_adr45_a_slow_share_times_out_to_a_null_link(tmp_path, monkeypatch
         "https://smith.langchain.com/publicity/abc",
         "https://user:pw@smith.langchain.com/public/abc/r",
         "https://smith.langchain.com:8443/public/abc/r",
+        "https://evil.com\\.smith.langchain.com/public/x",  # backslash in the netloc
+        "https://smith.langchain.com%2eevil.com/public/x",  # percent in the netloc
+        "https://a.b.smith.langchain.com/public/x",  # more than one label in front
+        "https://smith.langchain.com /public/x",  # whitespace
+        "https://smith.langchain.com/public/x\n",  # control character
+        "https://smith.langchain.com/public/x?next=https://evil.example",  # query
         "javascript:alert(1)",
         "",
     ],
@@ -509,3 +518,103 @@ def test_adr45_the_client_omits_runtime_metadata_only_when_sharing_is_on():
     assert shared_client is not None and plain_client is not None
     assert shared_client._omit_traced_runtime_info is True
     assert plain_client._omit_traced_runtime_info is False
+    # one anonymizer covers inputs, outputs, errors and metadata; hide_* never reach errors
+    assert shared_client._anonymizer is not None and plain_client._anonymizer is not None
+    long_error = "ValueError('x')\n\nTraceback (most recent call last):\n  File x"
+    assert shared_client._anonymizer({"error": long_error}) == {"error": "ValueError('x')"}
+    assert plain_client._anonymizer({"error": long_error}) == {"error": long_error}
+
+
+@pytest.fixture(autouse=True)
+def _idle_share_worker():
+    """A share that outlived its test must not make the next test's share look pending."""
+    yield
+    pending = tracing._pending
+    if pending is not None:
+        concurrent.futures.wait([pending], timeout=5)
+
+
+async def test_adr45_a_timed_out_share_logs_the_run_id_so_it_can_be_unshared(
+    tmp_path, monkeypatch, caplog
+):
+    monkeypatch.setattr(tracing, "SHARE_TIMEOUT_S", 0.05)
+    fake = ShareableLangSmithClient(delay_s=0.3)
+    h = traced_harness(tmp_path, langsmith=fake, langsmith_share_traces=True)
+
+    await scan_canary(h)
+
+    (root,) = fake.run_tree()
+    messages = [r.getMessage() for r in caplog.records if r.name == "pir.tracing"]
+    assert any("timed out" in m and root.id in m for m in messages)
+
+
+async def test_adr45_a_share_is_skipped_while_the_previous_one_is_still_running(
+    tmp_path, monkeypatch, caplog
+):
+    monkeypatch.setattr(tracing, "SHARE_TIMEOUT_S", 0.05)
+    release = threading.Event()
+    fake = ShareableLangSmithClient(hold=release)
+    first = traced_harness(tmp_path / "one", langsmith=fake, langsmith_share_traces=True)
+    second = traced_harness(tmp_path / "two", langsmith=fake, langsmith_share_traces=True)
+    try:
+        report_one = await scan_canary(first)
+        report_two = await scan_canary(second, "b" * 32)
+    finally:
+        release.set()
+
+    assert report_one.usage is not None and report_one.usage.trace_url is None
+    assert report_two.usage is not None and report_two.usage.trace_url is None
+    assert len(fake.shared) == 1  # the second scan never reached the client
+    assert any("skipped" in r.getMessage() for r in caplog.records if r.name == "pir.tracing")
+
+
+async def test_adr45_flush_and_share_do_not_run_on_the_default_executor(tmp_path):
+    names: list[str] = []
+
+    class Spy(ShareableLangSmithClient):
+        def share_run(self, run_id, *, share_id=None):  # type: ignore[no-untyped-def,override]
+            names.append(threading.current_thread().name)
+            return super().share_run(run_id, share_id=share_id)
+
+    h = traced_harness(tmp_path, langsmith=Spy(), langsmith_share_traces=True)
+
+    report = await scan_canary(h)
+
+    assert report.usage is not None and report.usage.trace_url == SHARE_URL
+    assert names and all(name.startswith("pir-share") for name in names)
+
+
+async def test_adr45_a_failing_run_uploads_no_secret_and_no_traceback_when_sharing(tmp_path):
+    secret = "SENTINEL-share-error-5c1d"
+    register_secrets({secret})
+    try:
+        settings = Settings(_env_file=None, langsmith_share_traces=True)
+
+        @traceable(name="pir.tool.boom", run_type="tool")
+        def boom() -> None:
+            raise RuntimeError(f"Authorization: Bearer {secret}\nrequest failed with {secret}")
+
+        async def body() -> str:
+            try:
+                boom()
+            except RuntimeError:
+                pass
+            return "done"
+
+        shared = ShareableLangSmithClient()
+        plain = FakeLangSmithClient()
+        await run_traced(settings, "e" * 32, body, client=shared)
+        await run_traced(settings, "f" * 32, body, client=plain)
+    finally:
+        clear_secrets()
+
+    errors = [p["error"] for p in shared.payloads if p.get("error")]
+    assert errors, "the failing child run should have uploaded an error"
+    for error in errors:
+        assert secret not in error
+        assert "Traceback" not in error and "\n" not in error
+    # the same failure on a client that is not sharing keeps the traceback (redacted)
+    kept = [p["error"] for p in plain.payloads if p.get("error")]
+    assert any("Traceback" in error for error in kept)
+    assert all(secret not in error for error in kept)
+    assert secret not in shared.text() and secret not in plain.text()

@@ -7,8 +7,12 @@ value leaves the process in a trace. Tracing never decides the outcome of a scan
 """
 
 import asyncio
+import concurrent.futures
 import contextlib
 import logging
+import re
+import threading
+import time
 import uuid
 from collections.abc import Awaitable, Callable, Iterator
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
@@ -30,7 +34,19 @@ T = TypeVar("T")
 # Flush and share together may take this long, so the report stays inside the UI's
 # `report_not_ready` retry window (ADR-0045).
 SHARE_TIMEOUT_S = 3.0
-_SHARE_HOST = "smith.langchain.com"
+# A public run's `error` is cut to its first line, at most this long (ADR-0045).
+_MAX_ERROR_CHARS = 500
+# `smith.langchain.com` or one regional label in front of it, optionally with the default port.
+_SHARE_NETLOC = re.compile(r"(?:[a-z0-9-]+\.)?smith\.langchain\.com(?::443)?")
+_SHARE_PATH = re.compile(r"/public/[A-Za-z0-9._~/-]+")
+_UNUSUAL = re.compile(r"[\x5c\s\x00-\x1f\x7f]")  # backslash, whitespace, control
+
+# Flush and share run here, never on the default executor the spend ledger uses. One worker, and
+# a new share is skipped while the previous one has not returned, so a hung request cannot pile up
+# threads. A call that outlives its time limit keeps its worker until the SDK request returns.
+_SHARE_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="pir-share")
+_share_lock = threading.Lock()
+_pending: "concurrent.futures.Future[str] | None" = None
 
 
 def redact_payload(value: Any) -> Any:
@@ -45,8 +61,35 @@ def redact_payload(value: Any) -> Any:
     return value
 
 
+def make_anonymizer(*, first_line_errors: bool) -> Callable[[Any], Any]:
+    """The client's `anonymizer`: `redact_payload` over every input, output, error and metadata.
+
+    The SDK passes a run's `error` as `{"error": text}` (`text` is the exception and its
+    traceback). With `first_line_errors` that text is cut to its first line, after redaction, so a
+    public run carries no traceback.
+    """
+
+    def anonymize(payload: Any) -> Any:
+        scrubbed = redact_payload(payload)
+        if (
+            first_line_errors
+            and isinstance(scrubbed, dict)
+            and set(scrubbed) == {"error"}
+            and isinstance(scrubbed["error"], str)
+        ):
+            lines = scrubbed["error"].strip().splitlines()
+            return {"error": (lines[0] if lines else "")[:_MAX_ERROR_CHARS]}
+        return scrubbed
+
+    return anonymize
+
+
 def make_client(settings: "Settings") -> Client | None:
-    """A LangSmith client that redacts inputs and outputs, or None when tracing is off."""
+    """A LangSmith client that redacts what it uploads, or None when tracing is off.
+
+    One `anonymizer` covers inputs, outputs, errors and metadata; with it set the SDK ignores
+    `hide_inputs` / `hide_outputs`, which also never reach errors or metadata.
+    """
     if not settings.langsmith_tracing:
         return None
     key = settings.langsmith_api_key
@@ -56,46 +99,67 @@ def make_client(settings: "Settings") -> Client | None:
     return Client(
         api_key=key.get_secret_value(),
         api_url=settings.langsmith_endpoint,
-        hide_inputs=redact_payload,
-        hide_outputs=redact_payload,
+        anonymizer=make_anonymizer(first_line_errors=settings.langsmith_share_traces),
         # With public links on, keep SDK runtime and environment metadata out of shared runs.
         omit_traced_runtime_info=settings.langsmith_share_traces,
     )
 
 
 def valid_share_url(url: object) -> bool:
-    """True for an `https://` link on a `smith.langchain.com` host with a `/public/` path."""
-    if not isinstance(url, str):
+    """True for an `https://` link on `smith.langchain.com` with a `/public/` path.
+
+    The netloc must be exactly the host (with at most one regional label in front), or the host
+    plus `:443`: no user info, other port, backslash, `%`, whitespace or control character.
+    """
+    if not isinstance(url, str) or _UNUSUAL.search(url):
         return False
     try:
         parts = urlsplit(url)
-        host = parts.hostname
-        port = parts.port
     except ValueError:
         return False
-    if parts.scheme != "https" or not host or parts.username or parts.password:
+    if parts.scheme != "https" or parts.query or parts.fragment:
         return False
-    if port not in (None, 443):
+    if not _SHARE_NETLOC.fullmatch(parts.netloc):
         return False
-    if host != _SHARE_HOST and not host.endswith("." + _SHARE_HOST):
-        return False
-    return parts.path.startswith("/public/")
+    return _SHARE_PATH.fullmatch(parts.path) is not None
+
+
+def _flush_and_share(client: Client, run_id: uuid.UUID) -> str:
+    """Runs on the share worker: flush within the time limit, then share the run once."""
+    deadline = time.monotonic() + SHARE_TIMEOUT_S
+    client.flush(timeout=SHARE_TIMEOUT_S)
+    if time.monotonic() >= deadline:
+        raise TimeoutError("flush used the whole time limit")
+    # `share_run` makes one attempt (no retries); the SDK offers no per-call request timeout.
+    return client.share_run(run_id)
 
 
 async def _share_run(client: Client, run_id: uuid.UUID) -> str | None:
-    """Flush, then share the root run; the public link, or None on any failure (ADR-0045)."""
+    """Flush, then share the root run; the public link, or None on any failure (ADR-0045).
+
+    Flush and share run on the dedicated share worker, one at a time: while an earlier call has
+    not returned this one is skipped. After a timeout the worker may still finish the share, so
+    the run id is logged for the owner to unshare it.
+    """
+    global _pending
+    with _share_lock:
+        if _pending is not None and not _pending.done():
+            logger.warning("langsmith share skipped: an earlier flush or share is still running")
+            return None
+        future = _SHARE_POOL.submit(_flush_and_share, client, run_id)
+        # Read the outcome even when nobody waits for it any more.
+        future.add_done_callback(lambda f: f.cancelled() or f.exception())
+        _pending = future
     try:
-        async with asyncio.timeout(SHARE_TIMEOUT_S):
-            await flush(client)
-            url = await asyncio.to_thread(client.share_run, run_id)
+        url = await asyncio.wait_for(asyncio.wrap_future(future), SHARE_TIMEOUT_S)
     except TimeoutError:
-        logger.warning("langsmith share timed out")
+        logger.warning("langsmith share timed out; run_id=%s", run_id)
         return None
     except Exception as exc:  # best effort; the cause is logged without its message
         logger.warning("langsmith share failed: %s", type(exc).__name__)
         return None
     if not valid_share_url(url):
-        logger.warning("langsmith share returned an unexpected link")
+        logger.warning("langsmith share returned an unexpected link; run_id=%s", run_id)
         return None
     return url
 
