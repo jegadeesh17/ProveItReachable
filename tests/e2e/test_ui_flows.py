@@ -286,8 +286,50 @@ def test_ac43_rate_limited_locks_the_form_but_demos_still_run(limited_server, ui
     lead = ui.page.locator("#live-notice .notice__lead")
     lead.wait_for()
     assert re.fullmatch(
-        r"Rate limited: you can start another live scan in \d+ min\. Demo replays still work\.",
+        r"Rate limited: you can start another live scan in (?:1 h|\d+ min)\. Demo replays still work\.",
         lead.inner_text(),
+    )
+    assert ui.page.locator("#scan-submit").is_disabled()
+    ui.run_demo("co2tools")
+    ui.wait_report()
+    assert "co2tools" in ui.page.locator("#scan-head h1").inner_text()
+
+
+@pytest.mark.parametrize(
+    ("code", "retry_after_s", "message_minutes", "expected_duration"),
+    [
+        ("rate_limited", 40860, 681, "11 h 21 min"),
+        ("daily_limit", 2400, None, "40 min"),
+    ],
+)
+def test_ac43_daily_limit_explains_budget_used_up_with_duration(
+    server, ui_factory, code, retry_after_s, message_minutes, expected_duration
+):
+    ui = ui_factory(server.url).goto()
+    err_body = {
+        "code": code,
+        "message": (
+            f"Rate limited: you can start another live scan in {message_minutes} min. Demo replays still work."
+            if message_minutes
+            else "Daily limit reached"
+        ),
+        "details": {"minutes": message_minutes} if message_minutes else {},
+        "retry_after_s": retry_after_s,
+    }
+    ui.page.route(
+        re.compile(r"/api/scans$"),
+        lambda route: route.fulfill(
+            status=429,
+            headers={"Content-Type": "application/json", "Retry-After": str(retry_after_s)},
+            body=json.dumps({"error": err_body}),
+        ),
+    )
+    ui.scan(REPO_URL.format(name="demo"))
+    lead = ui.page.locator("#live-notice .notice__lead")
+    lead.wait_for()
+    assert lead.inner_text() == (
+        f"Today's live-scan budget is used up. It resets in {expected_duration} (00:00 UTC). "
+        "Demo replays still work."
     )
     assert ui.page.locator("#scan-submit").is_disabled()
     ui.run_demo("co2tools")

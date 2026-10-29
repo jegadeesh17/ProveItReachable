@@ -12,6 +12,7 @@ import {
   el,
   floorPercent,
   formatDate,
+  formatErrorMessage,
   plural,
   renderDemoError,
   renderDemoSkeleton,
@@ -186,11 +187,19 @@ function setBusy(busy) {
 }
 
 function handleStartError(error, kind) {
-  announce(error.message);
-  if (kind === "scan" && (INPUT_ERRORS.has(error.code) || error.code === "rate_limited" || error.code === "live_scans_paused")) {
+  const message = formatErrorMessage(error);
+  error.message = message;
+  announce(message);
+  if (
+    kind === "scan" &&
+    (INPUT_ERRORS.has(error.code) ||
+      error.code === "rate_limited" ||
+      error.code === "daily_limit" ||
+      error.code === "live_scans_paused")
+  ) {
     showLiveNotice(error);
     if (INPUT_ERRORS.has(error.code)) markUrlInvalid();
-    if (error.code === "rate_limited") lockForRate(error.retryAfterS || 60);
+    if (error.code === "rate_limited" || error.code === "daily_limit") lockForRate(error.retryAfterS || 60);
     if (error.code === "live_scans_paused") {
       state.liveLock = "paused";
       applyLiveLock();
@@ -352,8 +361,10 @@ function failRun(runId, error) {
   if (state.stop) state.stop();
   state.stop = null;
   stopClock();
+  const message = formatErrorMessage(error);
+  error.message = message;
   showSystemError(error);
-  announce(error.message);
+  announce(message);
   openOrder(false);
   setBusy(false);
 }

@@ -144,6 +144,7 @@ const ERROR_HINT = {
   repo_too_large: "Try a smaller repository, or run a demo.",
   not_python_project: "A live scan needs at least one .py file and a dependency manifest, such as pyproject.toml or requirements.txt, at the repository root.",
   rate_limited: "Demo replays are not rate limited, so you can keep exploring.",
+  daily_limit: "Demo replays are not rate limited, so you can keep exploring.",
   live_scans_paused: "Pick a demo to see a full report.",
   server_busy: "Demo replays are still available.",
   github_unavailable: "Nothing was scanned. Try again later, or run a demo.",
@@ -154,12 +155,102 @@ const ERROR_HINT = {
 };
 
 /**
+ * Format a duration in minutes into "X h Y min", "X h", or "Y min".
+ * Examples:
+ *   681 min -> "11 h 21 min"
+ *   60 min  -> "1 h"
+ *   40 min  -> "40 min"
+ * @param {number} totalMinutes
+ */
+export function formatDuration(totalMinutes) {
+  const m = Math.max(1, Math.round(totalMinutes));
+  const hours = Math.floor(m / 60);
+  const mins = m % 60;
+  if (hours > 0 && mins > 0) return `${hours} h ${mins} min`;
+  if (hours > 0) return `${hours} h`;
+  return `${mins} min`;
+}
+
+/**
+ * Extract or compute the retry duration for an error as a formatted string.
+ * Reads retryAfterS (in seconds), details.minutes, or parses the error message.
+ * @param {{ retryAfterS?: number|null, details?: object, message?: string }} error
+ */
+export function getDurationString(error) {
+  if (!error) return "1 min";
+  if (typeof error.retryAfterS === "number" && Number.isFinite(error.retryAfterS) && error.retryAfterS > 0) {
+    return formatDuration(Math.ceil(error.retryAfterS / 60));
+  }
+  if (error.details && typeof error.details.minutes === "number" && Number.isFinite(error.details.minutes) && error.details.minutes > 0) {
+    return formatDuration(error.details.minutes);
+  }
+  if (typeof error.message === "string") {
+    const hm = error.message.match(/\b(\d+)\s*h(?:\s*(\d+)\s*min)?\b/);
+    if (hm) {
+      const h = parseInt(hm[1], 10);
+      const m = hm[2] ? parseInt(hm[2], 10) : 0;
+      return formatDuration(h * 60 + m);
+    }
+    const minMatch = error.message.match(/\b(\d+)\s*min\b/);
+    if (minMatch) {
+      return formatDuration(parseInt(minMatch[1], 10));
+    }
+  }
+  return "1 min";
+}
+
+/**
+ * Returns true if the error represents the daily budget refusal:
+ * code === "daily_limit", or code === "rate_limited" with retryAfterS > 3600 (over 1 hour).
+ * @param {{ code?: string, retryAfterS?: number|null, details?: object, message?: string }} error
+ */
+export function isDailyLimit(error) {
+  if (!error) return false;
+  if (error.code === "daily_limit") return true;
+  if (error.code === "rate_limited") {
+    if (typeof error.retryAfterS === "number" && error.retryAfterS > 3600) return true;
+    if (error.details && typeof error.details.minutes === "number" && error.details.minutes > 60) return true;
+    if (typeof error.message === "string") {
+      const hm = error.message.match(/\b(\d+)\s*h(?:\s*(\d+)\s*min)?\b/);
+      if (hm) {
+        const totalMin = parseInt(hm[1], 10) * 60 + (hm[2] ? parseInt(hm[2], 10) : 0);
+        if (totalMin > 60) return true;
+      }
+      const minMatch = error.message.match(/\b(\d+)\s*min\b/);
+      if (minMatch && parseInt(minMatch[1], 10) > 60) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Format the user-facing error message.
+ * Daily budget refusal becomes: "Today's live-scan budget is used up. It resets in <duration> (00:00 UTC). Demo replays still work."
+ * Standard rate limiting becomes: "Rate limited: you can start another live scan in <duration>. Demo replays still work."
+ * Other errors retain their message verbatim.
+ * @param {{ code?: string, message?: string, retryAfterS?: number|null, details?: object }} error
+ */
+export function formatErrorMessage(error) {
+  if (!error) return "";
+  if (isDailyLimit(error)) {
+    const duration = getDurationString(error);
+    return `Today's live-scan budget is used up. It resets in ${duration} (00:00 UTC). Demo replays still work.`;
+  }
+  if (error.code === "rate_limited") {
+    const duration = getDurationString(error);
+    return `Rate limited: you can start another live scan in ${duration}. Demo replays still work.`;
+  }
+  return error.message || "";
+}
+
+/**
  * @param {{ code?: string, message: string, details?: object }} error  message is shown verbatim (AC-43)
  * @param {{ kind?: "error"|"info", title?: string, hint?: boolean }} [options] `hint: false` leaves out the generic hint
  */
 export function banner(error, options = {}) {
   const kind = options.kind || "error";
   const code = error.code || "";
+  const message = formatErrorMessage(error);
   const facts = [];
   if (code === "repo_too_large" && error.details) {
     const d = error.details;
@@ -176,7 +267,7 @@ export function banner(error, options = {}) {
       { class: "notice__body" },
       // The API message already names the problem, so it leads on its own; a title is only for client-side notices.
       options.title && el("p", { class: "notice__title", text: options.title }),
-      el("p", { class: options.title ? "notice__msg" : "notice__lead", text: error.message }),
+      el("p", { class: options.title ? "notice__msg" : "notice__lead", text: message }),
       facts.length > 0 &&
         el("dl", { class: "notice__facts" }, facts.map(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })])),
       hint && el("p", { class: "notice__hint", text: hint }),
