@@ -92,3 +92,12 @@ Attempt 1 (Hugging Face Space) stopped at the HTTP 402 above. ADR-0040 moved the
 | Billing-info read with a project-level `billing.projectManager` | PermissionDenied | The role does not include a billing-info read. The function's fallback ("assume enabled") runs in that case. |
 | Policy Troubleshooter REST (`iam:troubleshoot`) | Returned 404 for a known permission | `resourcemanager.projects.get` gave 404 "Requested entity was not found" with `principal` set to the service account. `updateBillingInfo` was refused as an invalid permission. The read-only check could not be used. |
 | gcloud ADC quota project | Needs `x-goog-user-project` | `gcloud policy-troubleshoot` has no billing-project flag and `CLOUDSDK_BILLING_PROJECT` did not change the quota project. The API had to be called with the header. |
+
+## LangSmith trace sharing & spend ledger facts (2026-10-29)
+
+| Check | Result | Facts for platform feedback |
+|---|---|---|
+| LangSmith `hide_inputs` / `hide_outputs` | Incomplete redaction | In `langsmith` 0.14.12, `hide_inputs` and `hide_outputs` do not sanitize run `error` strings or `metadata`. An unhandled exception or connection error with credentials in the error message leaks unless a custom `anonymizer` callable (`redact_payload`) is passed to `Client`. Suggestion: extend input/output masking to include run errors and metadata dictionaries natively. |
+| LangSmith `share_run()` deprecation | Deprecated | `client.share_run()` and `client.read_shared_run()` emit `DeprecationWarning` scheduled for removal after 2027-01-31 (`use client.runs.share.create()` and `client.public.runs.retrieve()` instead). A migration will be needed before SDK removal. |
+| LangSmith public trace sharing (win) | Works | Once configured with an anonymizer and `first_line_errors`, public share links allow anonymous viewers and judges to inspect the full reasoning tree with prompt messages, tool definitions, and model decisions while keeping API keys and internal environment variables redacted. |
+| Hugging Face dataset commit latency | Variable latency (up to 31s) | A commit on the private Hugging Face dataset ledger took up to 31 seconds to complete during peak periods. A standard 5-second polling retry window on the client caused premature "report not ready" timeouts. Suggestion: document expected commit latency SLAs for Hugging Face Hub git/API operations, and design web clients with longer (60-90s) status-backed wait loops. |
