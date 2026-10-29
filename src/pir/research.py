@@ -189,6 +189,22 @@ def _import_root(package: str) -> str:
     return _IMPORT_NAMES.get(normalized, normalized.replace("-", "_"))
 
 
+def _provided_by(symbol: str, root: str) -> bool:
+    """Whether the symbol's top-level module is the import name of the package.
+
+    `shutil.copy` is not a function of `virtualenv`, whatever the advisory page says next to it,
+    so a call to it in repository code says nothing about that package. Standard-library modules
+    fail this test like any other foreign module; a package that really provides one (its import
+    name is that module) passes.
+    """
+    return symbol.split(".", 1)[0] == root
+
+
+def _foreign_note(rejected: list[str], root: str) -> str:
+    names = ", ".join(f"`{name}`" for name in rejected[:3])
+    return f"{names} named in the research is not in the module `{root}` that the package provides"
+
+
 def _qualify(symbol: str, root: str) -> str:
     """`root.` in front of a name that leaves out the module (`full_load`, `FullLoader.full_load`).
 
@@ -274,12 +290,12 @@ class AdvisoryResearcher:
         osv = self._osv_links(advisory.id, osv_links)
         results: list[SearchResult] = []
         try:
-            cached = self._read_cache(advisory.id, osv)
+            cached = self._read_cache(advisory.id, osv, package)
             if cached is not None:
                 return cached
             results = await self._run_search(advisory, package, budget)
             stage = "nebius_failed"
-            symbols, evidence = await self._extract(advisory, package, results, budget)
+            symbols, evidence, rejected = await self._extract(advisory, package, results, budget)
             if not symbols:
                 symbols, commit_url = await self._fallback_fix_commit(package, osv)
                 if symbols and commit_url:
@@ -290,7 +306,14 @@ class AdvisoryResearcher:
         except Exception:
             logger.exception("research failed unexpectedly", extra={"service": "research"})
             return self._result(advisory.id, osv, results, [], [], failure=stage)
-        research = self._result(advisory.id, osv, results, symbols, evidence)
+        research = self._result(
+            advisory.id,
+            osv,
+            results,
+            symbols,
+            evidence,
+            foreign=_foreign_note(rejected, _import_root(package)) if rejected else None,
+        )
         self._write_cache(advisory.id, research, results)
         return research
 
@@ -338,7 +361,8 @@ class AdvisoryResearcher:
 
     async def _extract(
         self, advisory: Advisory, package: str, results: list[SearchResult], budget: ScanBudget
-    ) -> tuple[list[str], list[str]]:
+    ) -> tuple[list[str], list[str], list[str]]:
+        """Grounded symbols of the package, the evidence URLs, and the symbols of other modules."""
         messages = research_messages(package, advisory.id, advisory.summary, results)
         try:
             reply = await self._llm.chat(
@@ -359,11 +383,16 @@ class AdvisoryResearcher:
 
         corpus = research_text(advisory.summary, results)
         symbols: list[str] = []
+        rejected: list[str] = []
         root = _import_root(package)
         for named in _string_list(data.get("symbols")):
             for symbol in _candidates(named, root):
-                if symbol not in symbols and _grounded(symbol, corpus):
+                if symbol in symbols or symbol in rejected or not _grounded(symbol, corpus):
+                    continue
+                if _provided_by(symbol, root):
                     symbols.append(symbol)
+                else:
+                    rejected.append(symbol)
             if len(symbols) >= _MAX_SYMBOLS:
                 symbols = symbols[:_MAX_SYMBOLS]
                 break
@@ -373,7 +402,7 @@ class AdvisoryResearcher:
             for url in _string_list(data.get("evidence_urls")):
                 if url in returned and url not in evidence:
                     evidence.append(url)
-        return symbols, evidence
+        return symbols, evidence, rejected
 
     async def _fallback_fix_commit(
         self, package: str, osv: list[AdvisoryLink]
@@ -488,6 +517,7 @@ class AdvisoryResearcher:
         *,
         failure: ReasonCode | None = None,
         from_cache: bool = False,
+        foreign: str | None = None,
     ) -> AdvisoryResearch:
         links = list(osv) + self._tavily_links(results, {link.url for link in osv})
         known = {link.url for link in links}
@@ -498,6 +528,8 @@ class AdvisoryResearcher:
             reason = f"{NOT_IDENTIFIED_PREFIX}: the search failed"
         elif failure == "nebius_failed":
             reason = f"{NOT_IDENTIFIED_PREFIX}: the model call failed"
+        elif foreign:
+            reason = f"{NOT_IDENTIFIED_PREFIX}: {foreign}"
         else:
             reason = f"{NOT_IDENTIFIED_PREFIX} in the advisory text or search results"
         return AdvisoryResearch(
@@ -518,7 +550,9 @@ class AdvisoryResearcher:
             return None
         return self._cache_dir / f"{advisory_id}.json"
 
-    def _read_cache(self, advisory_id: str, osv: list[AdvisoryLink]) -> AdvisoryResearch | None:
+    def _read_cache(
+        self, advisory_id: str, osv: list[AdvisoryLink], package: str
+    ) -> AdvisoryResearch | None:
         path = self._cache_path(advisory_id)
         if path is None:
             return None
@@ -542,11 +576,16 @@ class AdvisoryResearcher:
             symbols = stored["symbols"]
             if not all(isinstance(s, str) and _SYMBOL_RE.fullmatch(s) for s in symbols):
                 return None
+            # An entry written before the package check may name another module's function.
+            root = _import_root(package)
+            kept = [s for s in symbols if _provided_by(s, root)]
+            if symbols and not kept:
+                return None
             return self._result(
                 advisory_id,
                 osv,
                 results,
-                symbols,
+                kept,
                 stored["evidence_urls"],
                 from_cache=True,
             )

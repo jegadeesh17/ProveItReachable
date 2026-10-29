@@ -348,10 +348,9 @@ async def test_ac12_ungrounded_or_malformed_symbols_are_dropped(tmp_path, symbol
             ["FullLoader.full_load", "full_load"],
             ["yaml.full_load", "yaml.FullLoader.full_load"],
         ),
-        ("pyyaml", ["os.Path.full_load"], ["os.Path.full_load"]),  # another module: left alone
         ("pyyaml", ["yaml.full_load", "full_load"], ["yaml.full_load"]),  # no duplicate
         ("pyyaml", ["yaml.full_load"], ["yaml.full_load"]),  # already qualified: unchanged
-        ("pyyaml", ["os.full_load"], ["os.full_load"]),  # a lower-case module path is left alone
+        ("pyyaml", ["yaml.loader.full_load"], ["yaml.loader.full_load"]),  # a module path stays
         ("requests", ["full_load"], ["requests.full_load"]),  # the import name is the package name
         ("some-pkg", ["full_load"], ["some_pkg.full_load"]),  # a dash becomes an underscore
     ],
@@ -364,6 +363,83 @@ async def test_ac12_unqualified_symbols_get_the_import_name_of_the_package(
     result = await researcher.research(_advisory(), package, list(OSV_LINKS), _budget())
     assert result.symbols == expected
     assert result.identified
+
+
+@pytest.mark.parametrize(
+    ("package", "named"),
+    [
+        ("virtualenv", ["shutil.copy"]),  # standard library
+        ("virtualenv", ["os.path.copy"]),  # standard library, deeper path
+        ("pyyaml", ["os.Path.full_load"]),  # another module, class-qualified
+        ("pyyaml", ["requests.full_load"]),  # another third-party package
+    ],
+)
+async def test_ac12_a_symbol_of_a_module_the_package_does_not_provide_is_not_identified(
+    tmp_path, package, named
+):
+    # GHSA research for `virtualenv` once drew `shutil.copy` from a third-party CVE page; calling
+    # the standard library says nothing about the installed package.
+    results = [
+        SearchResult(url=NVD_URL, title="NVD", content="The flaw is reachable via shutil.copy."),
+    ]
+    llm = FakeLLM([json_result({"identified": True, "symbols": named, "evidence_urls": [NVD_URL]})])
+    researcher, _, _ = _researcher(tmp_path, search=FakeSearch(results), llm=llm)
+    advisory = _advisory(summary="Flaw in os.path.copy, os.Path.full_load and requests.full_load.")
+    result = await researcher.research(advisory, package, list(OSV_LINKS), _budget())
+    assert not result.identified and result.symbols == []
+    assert result.evidence_urls == []
+    assert result.failure is None
+    reason = result.not_identified_reason or ""
+    assert reason.startswith("vulnerable function not identified")
+    assert f"`{named[0]}`" in reason and "is not in the module" in reason
+
+
+async def test_ac12_only_the_symbols_of_the_package_survive_a_mixed_draw(tmp_path):
+    llm = FakeLLM([json_result({"identified": True, "symbols": ["shutil.copy", "yaml.full_load"]})])
+    results = [SearchResult(url=NVD_URL, title="NVD", content="shutil.copy and yaml.full_load")]
+    researcher, _, _ = _researcher(tmp_path, search=FakeSearch(results), llm=llm)
+    result = await _research(researcher)
+    assert result.identified and result.symbols == ["yaml.full_load"]
+
+
+async def test_ac12_a_package_that_provides_a_standard_library_name_keeps_its_symbols(tmp_path):
+    # `dataclasses` on PyPI is a backport that installs the module of the same name.
+    llm = FakeLLM([json_result({"identified": True, "symbols": ["dataclasses.asdict"]})])
+    results = [SearchResult(url=NVD_URL, title="NVD", content="dataclasses.asdict is unsafe")]
+    researcher, _, _ = _researcher(tmp_path, search=FakeSearch(results), llm=llm)
+    result = await researcher.research(_advisory(), "dataclasses", list(OSV_LINKS), _budget())
+    assert result.identified and result.symbols == ["dataclasses.asdict"]
+
+
+async def test_ac12_the_fix_commit_fallback_still_runs_when_every_drawn_symbol_is_foreign(
+    tmp_path,
+):
+    llm = FakeLLM([json_result({"identified": True, "symbols": ["shutil.copy"]})])
+    results = [SearchResult(url=NVD_URL, title="NVD", content="shutil.copy")]
+    researcher, _, _ = _researcher(tmp_path, search=FakeSearch(results), llm=llm)
+
+    async def fallback(package, osv):
+        return [
+            "virtualenv.app_data.copy_tree"
+        ], "https://github.com/pypa/virtualenv/commit/abc1234"
+
+    researcher._fallback_fix_commit = fallback  # type: ignore[method-assign]
+    result = await researcher.research(_advisory(), "virtualenv", list(OSV_LINKS), _budget())
+    assert result.identified and result.symbols == ["virtualenv.app_data.copy_tree"]
+
+
+async def test_cache_entry_naming_only_another_modules_symbols_is_refetched(tmp_path):
+    # An entry written before the package check existed may still hold `shutil.copy`.
+    researcher, search, llm = _researcher(tmp_path)
+    await _research(researcher)
+    path = _cache_file(tmp_path)
+    entry = json.loads(path.read_text(encoding="utf-8"))
+    entry["symbols"] = ["shutil.copy"]
+    path.write_text(json.dumps(entry), encoding="utf-8")
+    llm.script.append(json_result({"identified": True, "symbols": ["yaml.full_load"]}))
+    again = await _research(researcher)
+    assert not again.from_cache and again.symbols == ["yaml.full_load"]
+    assert len(search.queries) == 2
 
 
 async def test_ac12_a_bare_name_that_is_not_in_the_text_is_still_dropped_after_qualifying(tmp_path):

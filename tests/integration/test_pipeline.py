@@ -29,6 +29,7 @@ from fakes.deps import (
     timed_out_result,
     write_repo,
 )
+from fakes.http import json_response
 from fakes.langsmith import FakeLangSmithClient
 from fakes.llm import Call, FakeLLM, json_result, tool_result
 
@@ -559,5 +560,59 @@ async def test_eval_regression_class_qualified_research_draw_still_reaches_the_m
     (finding,) = report.findings
     assert finding.vulnerable_symbol is not None
     assert finding.vulnerable_symbol.symbols == ["yaml.full_load", "yaml.FullLoader.full_load"]
+    assert finding.verdict == "likely reachable"
+    assert finding.call_path is not None and finding.call_path[-1].symbol == "yaml.full_load"
+
+
+SETUP_ANALYTICS = """import shutil
+
+shutil.copy("a.cfg", "b.cfg")
+"""
+STDLIB_CALL_REPO = {
+    "requirements.txt": "virtualenv==21.7.13\n",
+    "setup_analytics.py": SETUP_ANALYTICS,
+}
+
+
+async def test_ac20_a_stdlib_symbol_researched_for_another_package_is_not_likely_reachable(
+    tmp_path,
+):
+    # Found in a live scan: the advisory for `virtualenv` was researched with the symbol
+    # `shutil.copy` (named on a third-party CVE page), and the repository calls the standard
+    # library's `shutil.copy`. That call says nothing about the installed `virtualenv`.
+    tavily = {
+        SEARCH: json_response(
+            200,
+            {
+                "results": [
+                    {"url": NVD_URL, "title": "NVD", "content": "Exploitable through shutil.copy."}
+                ]
+            },
+        )
+    }
+    h = make_harness(
+        tmp_path,
+        llm=_model_following_the_listed_symbol(("shutil.copy",)),
+        osv=osv_routes({"virtualenv": [GHSA]}),
+        tavily=tavily,
+    )
+    report = await scan(h, tmp_path, STDLIB_CALL_REPO)
+
+    (finding,) = report.findings
+    assert finding.verdict == "uncertain"
+    assert finding.reason_code == "vulnerable_function_not_identified"
+    assert finding.call_path is None
+    assert finding.vulnerable_symbol is not None and not finding.vulnerable_symbol.identified
+    assert finding.vulnerable_symbol.symbols == []
+    reason = finding.vulnerable_symbol.not_identified_reason or ""
+    assert "`shutil.copy`" in reason and "`virtualenv`" in reason
+
+
+async def test_ac20_a_symbol_of_the_package_itself_still_reaches_likely_reachable(tmp_path):
+    # Positive control for the test above: same flow, symbol in a module the package provides.
+    h = make_harness(tmp_path, llm=_model_following_the_listed_symbol(("yaml.full_load",)))
+    report = await scan(h, tmp_path)
+
+    (finding,) = report.findings
     assert finding.verdict == "likely reachable"
     assert finding.call_path is not None and finding.call_path[-1].symbol == "yaml.full_load"
