@@ -35,8 +35,14 @@ import {
 const INVALID_URL_MESSAGE = "Enter a public GitHub repository URL like https://github.com/owner/repo.";
 const INPUT_ERRORS = new Set(["invalid_url", "repo_not_found", "repo_too_large", "not_python_project"]);
 const POLL_MS = 2000;
-const REPORT_RETRIES = 5;
-const REPORT_RETRY_MS = 1000;
+/**
+ * How long to wait for the report after the scan says it is done. The server stores the report only after
+ * it has committed the spend ledger and, when trace sharing is on, flushed and shared the trace, which can
+ * take tens of seconds. Waits grow along `gapsMs`, then repeat `repeatMs`, until `budgetMs` of waiting is
+ * used up (counted from the planned gaps, not the clock).
+ */
+const REPORT_WAIT = { gapsMs: [1000, 1000, 2000, 2000, 3000, 5000, 5000], repeatMs: 5000, budgetMs: 90_000 };
+const REPORT_WAIT_TEXT = "Finishing the report — recording spend and saving the trace…";
 
 const $ = (id) => document.getElementById(id);
 const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -78,6 +84,7 @@ const state = {
   instant: Boolean(api.mock && api.mock.jump),
   stageStart: {}, // step -> ISO time of its running event, for per-stage durations
   proofStops: new Set(), // cancel functions of the proof jobs being followed
+  reportWait: null, // { timer, wake } while a retry gap is pending
   run: null,
 };
 
@@ -260,6 +267,7 @@ async function begin(kind, payload) {
 
   if (state.stop) state.stop();
   cancelProofs();
+  cancelReportWait();
   state.runId += 1;
   const runId = state.runId;
   const name = kind === "replay" ? payload.title : repoNameFromUrl(payload.url);
@@ -350,14 +358,56 @@ function failRun(runId, error) {
   setBusy(false);
 }
 
-/** The report may land a moment after the `done` event; retry `report_not_ready` a few times. */
-async function fetchReport(scanId) {
+/** Stop a pending report retry: no timer is left running and the waiting loop ends. */
+function cancelReportWait() {
+  const wait = state.reportWait;
+  if (!wait) return;
+  state.reportWait = null;
+  window.clearTimeout(wait.timer);
+  wait.wake();
+}
+
+/** Resolves true after `ms`, or false at once if `cancelReportWait` runs first. */
+function sleepForReport(ms) {
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => {
+      state.reportWait = null;
+      resolve(true);
+    }, ms);
+    state.reportWait = { timer, wake: () => resolve(false) };
+  });
+}
+
+/** A calm status, not an error: the scan is done and the server is still saving the report. */
+function showReportWait() {
+  const status = el(
+    "div",
+    { class: "report-wait", "aria-live": "polite" },
+    banner({ message: REPORT_WAIT_TEXT }, { kind: "info", hint: false }),
+  );
+  dom.report.prepend(status);
+  announce(REPORT_WAIT_TEXT);
+}
+
+/**
+ * The report may land well after the `done` event: keep retrying `report_not_ready` on the REPORT_WAIT
+ * schedule. Any other error, or the budget running out, is thrown. Returns null when the run was replaced
+ * or the page is going away.
+ */
+async function fetchReport(scanId, runId) {
+  let waited = 0;
   for (let attempt = 0; ; attempt += 1) {
     try {
       return await api.getReport(scanId);
     } catch (error) {
-      if (error.code !== "report_not_ready" || attempt >= REPORT_RETRIES) throw error;
-      await new Promise((resolve) => window.setTimeout(resolve, state.instant ? 0 : REPORT_RETRY_MS));
+      if (error.code !== "report_not_ready") throw error;
+      const gap = attempt < REPORT_WAIT.gapsMs.length ? REPORT_WAIT.gapsMs[attempt] : REPORT_WAIT.repeatMs;
+      if (waited + gap > REPORT_WAIT.budgetMs) throw error;
+      if (runId !== state.runId) return null;
+      waited += gap;
+      if (attempt === 0) showReportWait();
+      const stillWaiting = await sleepForReport(state.instant ? 0 : gap);
+      if (!stillWaiting || runId !== state.runId) return null;
     }
   }
 }
@@ -374,7 +424,7 @@ async function finish(runId) {
 
   let report;
   try {
-    report = await fetchReport(scanId);
+    report = await fetchReport(scanId, runId);
   } catch (error) {
     clear(dom.report);
     dom.report.hidden = true;
@@ -382,7 +432,7 @@ async function finish(runId) {
     failRun(runId, error);
     return;
   }
-  if (runId !== state.runId) return;
+  if (report === null || runId !== state.runId) return;
   showReport(report);
 }
 
@@ -581,6 +631,8 @@ async function loadStartup() {
 }
 
 function init() {
+  window.addEventListener("pagehide", cancelReportWait);
+
   if (isMock) {
     const note = $("mock-notice-text");
     note.append(

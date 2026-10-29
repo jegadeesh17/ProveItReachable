@@ -914,3 +914,102 @@ def test_polish_tool_chips_arriving_do_not_shift_the_pipeline_rows(server, ui_fa
             }"""
         )
         assert abs(shift) < 0.5, f"a tool chip moved the row by {shift}px at {width}px"
+
+
+# ---- the report lands well after the scan's `done` event --------------------------------------
+
+NOT_READY = {
+    "error": {
+        "code": "report_not_ready",
+        "message": "The report is not ready yet; it appears when the scan finishes.",
+        "details": {},
+        "retry_after_s": None,
+    }
+}
+# The waits between retries are seconds long. Run every timer of 1 s or more 100 times faster, so the
+# whole schedule (about 90 s) takes about a second; the budget is counted from the planned gaps.
+FAST_TIMERS_JS = """
+(() => {
+  const real = window.setTimeout.bind(window);
+  window.setTimeout = (fn, ms, ...args) => real(fn, ms >= 1000 ? ms / 100 : ms, ...args);
+})();
+"""
+WATCH_JS = """
+(() => {
+  window.__seen = { waitText: null, live: null, error: false };
+  new MutationObserver(() => {
+    const wait = document.querySelector('.report-wait');
+    if (wait) {
+      window.__seen.waitText = wait.innerText;
+      window.__seen.live = wait.getAttribute('aria-live');
+    }
+    if (document.querySelector('.notice--error')) window.__seen.error = true;
+  }).observe(document, { subtree: true, childList: true, characterData: true });
+})();
+"""
+WAIT_TEXT = "Finishing the report \u2014 recording spend and saving the trace\u2026"
+
+
+def scan_with_late_report(server, ui_factory, answer):
+    """Start a live scan whose report requests are answered by `answer(call_number)`.
+
+    `answer` returns None to let the real report through, or (status, error body).
+    """
+    ui = ui_factory(server.url)
+    ui.page.add_init_script(FAST_TIMERS_JS)
+    ui.page.add_init_script(WATCH_JS)
+    calls: list[int] = []
+
+    def handle(route) -> None:
+        calls.append(1)
+        reply = answer(len(calls))
+        if reply is None:
+            route.continue_()
+        else:
+            status, body = reply
+            route.fulfill(status=status, content_type="application/json", body=json.dumps(body))
+
+    ui.page.route(re.compile(r"/api/scans/[^/]+/report$"), handle)
+    ui.goto()
+    ui.scan(REPO_URL.format(name="demo"))
+    return ui, calls
+
+
+def test_report_not_ready_eight_times_then_the_report_renders_with_a_calm_status(
+    server, ui_factory
+):
+    ui, calls = scan_with_late_report(
+        server, ui_factory, lambda n: (409, NOT_READY) if n <= 8 else None
+    )
+    ui.wait_report()
+    assert len(calls) == 9
+    assert ui.page.locator("#report [data-verdict='likely reachable']").count() == 1
+    seen = ui.page.evaluate("window.__seen")
+    assert seen["waitText"] is not None and WAIT_TEXT in seen["waitText"]
+    assert seen["live"] == "polite"
+    assert seen["error"] is False
+    assert ui.page.locator(".report-wait").count() == 0  # the status goes when the report arrives
+    assert ui.page.locator("#banner .notice").count() == 0
+    assert ui.problems(allow_resource_errors=True) == []
+
+
+def test_report_not_ready_for_the_whole_budget_ends_in_the_error(server, ui_factory):
+    ui, calls = scan_with_late_report(server, ui_factory, lambda n: (409, NOT_READY))
+    ui.page.locator("#banner .notice--error").wait_for(timeout=30_000)
+    assert NOT_READY["error"]["message"] in ui.page.locator("#banner").inner_text()
+    assert ui.page.locator(".report-wait").count() == 0
+    assert ui.page.locator("#report").is_hidden()
+    assert ui.page.locator("#repo-url").is_enabled()  # the user can go on
+    assert 15 <= len(calls) <= 30  # it kept trying for the whole budget, and then stopped
+    settled = len(calls)
+    ui.page.wait_for_timeout(500)
+    assert len(calls) == settled  # no timer is left retrying
+
+
+def test_any_other_report_error_fails_fast_without_the_waiting_status(server, ui_factory):
+    gone = {"error": {"code": "internal_error", "message": "Something broke.", "details": {}}}
+    ui, calls = scan_with_late_report(server, ui_factory, lambda n: (500, gone))
+    ui.page.locator("#banner .notice--error").wait_for()
+    assert "Something broke." in ui.page.locator("#banner").inner_text()
+    assert len(calls) == 1
+    assert ui.page.evaluate("window.__seen.waitText") is None

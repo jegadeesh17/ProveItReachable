@@ -397,6 +397,9 @@ button {
   border: 1px solid var(--ink-2);
   border-radius: var(--r-lg);
 }
+.report-wait {
+  margin-bottom: var(--sp-4);
+}
 .notice--info {
   border-style: dashed;
   border-color: var(--control-edge);
