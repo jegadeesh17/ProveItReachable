@@ -48,6 +48,7 @@ Each significant technical decision for ProveItReachable, with its reasons, the 
 | [ADR-0042](#adr-0042-call-path-edge-verification-anti-tuning-eval-protocol-recorded-proof-in-replays-deep-links-and-warm-ping) | Call-path edge verification, anti-tuning eval protocol, recorded proof in replays, deep links and warm ping | Accepted | 2026-10-26 |
 | [ADR-0043](#adr-0043-fix-commit-fallback-for-advisory-research) | Fix-commit fallback for advisory research | Accepted | 2026-10-27 |
 | [ADR-0044](#adr-0044-finding-remediation-native-svg-call-path-view-proof-result-authenticity-nonce-and-judging-window-budget-profile) | Finding remediation, native SVG call-path view, proof-result authenticity nonce, and judging-window budget profile | Accepted | 2026-10-27 |
+| [ADR-0045](#adr-0045-per-scan-platform-usage-in-the-report-with-an-optional-public-trace-link) | Per-scan platform usage in the report, with an optional public trace link | Accepted | 2026-10-29 |
 
 ## ADR-0001: Python and FastAPI service with typed schemas
 
@@ -1379,3 +1380,67 @@ Implement four coordinated architectural enhancements:
 - The per-run proof nonce rejects pre-written or replayed `proven` results. It is not a full authentication boundary: the target runs in the same interpreter that holds the nonce, so a repository written against this harness could read it and forge a `proven` result for its own report only. Running the target in a child process that cannot see the nonce would close this gap.
 - Live judge scans are enabled within the hard ~$8 remaining credit ceiling.
 - Backward compatibility is preserved: schema changes are strictly additive and optional.
+
+## ADR-0045: Per-scan platform usage in the report, with an optional public trace link
+
+Date: 2026-10-29
+Status: Accepted
+
+### Context
+
+A report says what a scan found but not what it took to produce: how many Nemotron calls and tokens, Tavily searches, Sandbox operations and OSV queries one scan used, and what the paid ones cost. The figures already exist inside the scan. Its `ScanBudget` meters every paid call, and the LLM client, the researcher and the executor see each call they make. The scan's LangSmith trace shows the work step by step, but only to people with access to our LangSmith project. The project owner decided on 2026-10-28 to publish these per-scan figures in the report.
+
+### Decision
+
+1. **Report field.** `ScanReport` gains `usage: ScanUsage | None = None`. The field is optional and additive, and `schema_version` stays `"1.0"`, as it did for `remediation` (ADR-0044). The shapes in `pir/models/report.py` are mirrored in `schemas/report.schema.json`, with no extra keys allowed, like every other report object:
+
+   ```python
+   class NemotronUsage(Strict):
+       calls: int = Field(ge=0); input_tokens: int = Field(ge=0); output_tokens: int = Field(ge=0); usd: float = Field(ge=0)
+   class TavilyUsage(Strict):  searches: int = Field(ge=0); usd: float = Field(ge=0)
+   class SandboxUsage(Strict): operations: int = Field(ge=0)
+   class OsvUsage(Strict):     queries: int = Field(ge=0)
+   class ScanUsage(Strict):
+       nemotron: NemotronUsage; tavily: TavilyUsage; sandbox: SandboxUsage; osv: OsvUsage
+       trace_url: str | None = None   # always serialized; null when not shared
+   ```
+
+   When `usage` is present, all four services are present, and a service the scan did not use has zeros. Every `usd` value is finite, non-negative, and rounded to 4 decimal places (`round(x, 4)`), the precision the spend summary already prints. The spend code keeps unrounded values internally; the rounding happens only when the report is assembled.
+2. **Source of truth.** The figures come only from the scan's own `ScanBudget` (one per scan, created by `reserve(scan_id)`) and from counters at the existing client seams. We never call vendor billing APIs and never read account balances. The counters mean:
+   - `nemotron.calls`: the chat-completion requests `pir/llm.py` sent for this scan, retries and failed calls included. `input_tokens` and `output_tokens`: the sum of the `usage` each response returned; a call without a returned `usage` (a timeout or error) adds no tokens. `usd`: the amounts `ScanBudget.record()` booked for those calls.
+   - `tavily.searches`: the Tavily requests `pir/research.py` sent; cached answers are not counted. `usd`: the booked amounts.
+   - `sandbox.operations`: the Sandbox commands the live executor ran for this scan, timeouts included. The fake executor counts 0 (the same rule as `StepStatus.tools`). The report gives no dollar figure for Sandboxes.
+   - `osv.queries`: the package-version queries the scan passed to the OSV client, whether answered from its 24-hour cache or from the network.
+
+   To split dollars by service, `record()` takes a service label (`nemotron`, `tavily`, `sandbox`) and the budget keeps per-service totals beside its pool totals. Pools, holds, caps and settlement are unchanged. The report step makes no paid call, so the figures are final when the report is built.
+3. **Trace link.** A new setting, `LANGSMITH_SHARE_TRACES` (default `false`, documented in `.env.example`), controls sharing. When it and tracing are both on, and the scan's run is the trace root (live and CLI scans, never a scan nested under the evaluation runner's case run), `run_traced()` calls `flush()` after the root run ends, then calls LangSmith `share_run` on that run. `run_scan` copies the returned link onto `usage.trace_url`. The flush and share together are limited to 3 seconds, which keeps the report inside the UI's existing `report_not_ready` retry window. On any error, on a timeout, or when the link is not `https://` on a `smith.langchain.com` host with a `/public/` path, `trace_url` is null. A warning is then logged with the exception type only. Sharing never changes another report field and never fails a scan. Recording a demo (`record`) always sets `trace_url` to null, so no expiring link is stored in a fixture.
+
+   **Hosted service:** the project owner enabled `LANGSMITH_SHARE_TRACES=true` there. Two conditions must hold before go-live: a security review approves the share path, and one shared trace, inspected by hand, shows no runtime or environment metadata. The reasoning is that once the repository is public, the prompts are already in public source, so sharing adds little exposure, and a judge gets a working trace link from their own scan.
+4. **What a shared trace exposes.** A shared trace exposes the whole run tree of [ARCHITECTURE.md](ARCHITECTURE.md) section 19.2:
+   - the `scan_id` and the state of each step;
+   - Tavily queries and result URLs;
+   - each finding's package, version and advisory ID;
+   - every model call's full messages: our system prompts and tool definitions, advisory text, code snippets from the public repository, and the model's answers with token counts;
+   - tool-call arguments and answer sizes, run timings, and the metadata the LangSmith SDK attaches.
+
+   The guard is `redact_payload` in `pir/tracing.py`, applied to every run's inputs and outputs before upload. It replaces each configured secret value and any `Authorization` or `Bearer` value with `[REDACTED]`. It does not remove prompts or repository text, and run metadata does not pass through it.
+5. **Display.**
+   - **Web UI:** when `usage` is present, the UI adds one footer line, with the trace link when it is not null, to the existing "How this report was made" section (`pipelineStrip()` in `web/js/render.js`). When `usage` is absent, the line is hidden. The same section gains a static evaluation line, and "Powered by" adds Sandboxes and LangSmith.
+   - **Markdown export:** the export (`pir/markdown.py`) adds one usage line when `usage` is present.
+   - **Dollar label:** both the UI and the export label the dollar figure as metered model and search spend, not a total. Sandboxes are shown as an operation count only.
+   - **Recorded demo replays:** they predate this field, hold no `usage`, and are not re-recorded.
+
+### Alternatives considered
+
+- **A new usage panel in the UI:** rejected because it duplicates "How this report was made".
+- **Vendor billing APIs or account balances:** rejected. They are unverified, they report the whole account rather than one scan, and showing them would publish our balances.
+- **Re-recording the demo replays so they carry `usage`:** rejected. It spends credits and risks changing recorded results for one footer line.
+- **Defaulting the share setting to on in code:** rejected. Sharing stays a deliberate switch for each deployment.
+- **A Sandbox dollar figure:** rejected by the project owner. Sandboxes are free in the beta, so the report shows their operation count only, while their metering continues in the spend ledger.
+
+### Consequences
+
+- Old reports, fixtures and replays stay valid unchanged. Consumers must treat `usage` as optional.
+- The `usd` figures are metered amounts, not invoices. A timed-out model call is booked at its full hold, so they lean high. `nemotron.usd` plus `tavily.usd` can be below the scan's pool spend, because Sandbox cost is metered in the `nebius` pool ([ARCHITECTURE.md](ARCHITECTURE.md) section 11) but not broken out. A call-chain proof has its own reservation, so its usage is not in the scan's report.
+- With sharing on, a live scan's report can arrive up to 3 seconds later. Each shared trace stays public until it is unshared in LangSmith or deleted by LangSmith's trace retention. After that, the link in a downloaded report stops working.
+- **Expensive to change:** the field name `usage`, its keys, their types and the meaning of each counter ship in public JSON, in the published JSON Schema and in every report users download. Renaming or retyping them later breaks those consumers and needs a new `schema_version`. A shared link cannot be recalled from reports already downloaded; it can only be unshared, one run at a time, in LangSmith.
