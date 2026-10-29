@@ -740,3 +740,49 @@ def test_eval_repo_source_accepted(source):
 def test_eval_repo_source_rejected(source):
     with pytest.raises(ValidationError):
         load(EvalRepo, {"id": "r", "source": source})
+
+
+# ---- ADR-0045: per-scan usage -------------------------------------------------------------
+
+USAGE = {
+    "nemotron": {"calls": 3, "input_tokens": 300, "output_tokens": 60, "usd": 0.0123},
+    "tavily": {"searches": 1, "usd": 0.008},
+    "sandbox": {"operations": 0},
+    "osv": {"queries": 2},
+    "trace_url": None,
+}
+
+
+def test_adr45_a_report_without_usage_still_validates():
+    parsed = load(ScanReport, report())
+    assert parsed.usage is None
+    assert parsed.schema_version == "1.0"
+
+
+def test_adr45_usage_round_trips_and_always_serializes_trace_url():
+    parsed = load(ScanReport, report(usage=USAGE))
+    assert parsed.usage is not None
+    assert parsed.usage.nemotron.calls == 3
+    dumped = json.loads(parsed.model_dump_json())
+    assert dumped["usage"] == USAGE
+    assert "trace_url" in dumped["usage"]
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda u: u["nemotron"].update(calls=-1),
+        lambda u: u["nemotron"].update(input_tokens=-1),
+        lambda u: u["tavily"].update(usd=-0.001),
+        lambda u: u["nemotron"].update(usd=float("nan")),
+        lambda u: u["osv"].update(queries=1.5),
+        lambda u: u.pop("sandbox"),  # all four services are required when usage is present
+        lambda u: u["osv"].update(extra=1),  # no extra keys
+        lambda u: u.update(cost_total=1.0),
+    ],
+)
+def test_adr45_invalid_usage_is_rejected(mutate):
+    usage = json.loads(json.dumps(USAGE))
+    mutate(usage)
+    with pytest.raises(ValidationError):
+        load(ScanReport, report(usage=usage))

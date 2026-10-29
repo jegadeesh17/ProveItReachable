@@ -22,17 +22,19 @@ from fakes.deps import (
     osv_routes,
 )
 from fakes.http import RecordingTransport, json_response
-from fakes.langsmith import FakeLangSmithClient, RunNode
+from fakes.langsmith import FakeLangSmithClient, RunNode, ShareableLangSmithClient
 from langsmith import tracing_context
+from langsmith.run_trees import RunTree
 from test_eval_runner import CASES, EvalFakeLangSmith, as_sandbox, make_suite
 from test_eval_runner import harness as eval_harness
 
+from pir import tracing
 from pir.agent_client import LocalFixtureTarget
 from pir.config import Settings
 from pir.llm import NebiusLLMClient
 from pir.models.report import ScanReport
 from pir.pipeline import run_scan
-from pir.tracing import advisory_run, finding_run, step_run, tool_run
+from pir.tracing import advisory_run, finding_run, step_run, tool_run, valid_share_url
 
 CANARY = Path(__file__).resolve().parents[1] / "fixtures" / "repos" / "canary"
 CANARY_SHA = "c" * 40
@@ -344,3 +346,166 @@ async def test_ac37_the_eval_scan_is_a_child_of_the_case_and_has_the_six_step_ru
     assert [r["name"] for r in runs if r["parent_run_id"] == finding[0]["id"]] == [
         "pir.tool.find_call_sites"
     ]
+
+
+# ---- ADR-0045: usage in the report and the optional public trace link -----------------------
+
+SHARE_URL = "https://smith.langchain.com/public/0d6f5c1e-0000-4000-8000-000000000001/r"
+
+
+async def test_adr45_usage_counters_add_up_on_a_fake_scan(tmp_path):
+    transport = token_factory()
+    h = traced_harness(tmp_path, tracing=False, transport=transport)
+    budget = await h.reserve()
+
+    report = await run_scan(
+        h.deps, LocalFixtureTarget(path=str(CANARY), commit_sha=CANARY_SHA), budget
+    )
+    await h.deps.llm.aclose()  # type: ignore[attr-defined]
+
+    usage = report.usage
+    assert usage is not None
+    llm_requests = len(transport.requests)
+    assert usage.nemotron.calls == llm_requests > 0
+    assert usage.nemotron.input_tokens == 100 * llm_requests  # the fake returns 100 and 20
+    assert usage.nemotron.output_tokens == 20 * llm_requests
+    assert usage.nemotron.usd == round(budget.service_usd()["nemotron"], 4) > 0
+    assert usage.tavily.searches == len(h.tavily_transport.requests) == 1
+    assert usage.tavily.usd == round(budget.service_usd()["tavily"], 4)
+    assert usage.sandbox.operations == 0  # the fake executor counts none
+    assert usage.osv.queries == report.summary.dependencies_checked > 0
+    assert usage.trace_url is None
+
+
+async def test_adr45_a_cached_advisory_is_not_a_tavily_search(tmp_path):
+    h = traced_harness(tmp_path, tracing=False)
+    await scan_canary(h)
+
+    h2 = traced_harness(tmp_path, tracing=False)  # same data_dir: the research cache is warm
+    report = await scan_canary(h2, "b" * 32)
+
+    assert report.usage is not None
+    assert report.usage.tavily.searches == 0
+    assert report.usage.osv.queries > 0  # OSV queries count whether cached or not
+
+
+async def test_adr45_sharing_is_off_by_default_so_trace_url_is_null(tmp_path):
+    fake = ShareableLangSmithClient()
+    h = traced_harness(tmp_path, langsmith=fake)
+
+    report = await scan_canary(h)
+
+    assert report.usage is not None and report.usage.trace_url is None
+    assert fake.shared == []
+
+
+async def test_adr45_sharing_on_puts_the_root_runs_public_link_on_the_report(tmp_path):
+    fake = ShareableLangSmithClient()
+    h = traced_harness(tmp_path, langsmith=fake, langsmith_share_traces=True)
+
+    report = await scan_canary(h)
+
+    assert report.usage is not None and report.usage.trace_url == SHARE_URL
+    (root,) = fake.run_tree()
+    assert [str(run_id) for run_id in fake.shared] == [root.id]  # the root run, once
+
+
+async def test_adr45_sharing_needs_tracing_to_be_on(tmp_path):
+    h = traced_harness(tmp_path, tracing=False, langsmith_share_traces=True)
+
+    report = await scan_canary(h)
+
+    assert report.usage is not None and report.usage.trace_url is None
+
+
+async def test_adr45_a_scan_nested_under_an_eval_case_run_is_never_shared(tmp_path):
+    fake = ShareableLangSmithClient()
+    h = traced_harness(tmp_path, langsmith=fake, langsmith_share_traces=True)
+    case = RunTree(name="pir.eval_case", run_type="chain", client=fake, project_name="p")
+    budget = await h.reserve()
+
+    report = await run_scan(
+        h.deps,
+        LocalFixtureTarget(path=str(CANARY), commit_sha=CANARY_SHA),
+        budget,
+        trace_parent=case,
+    )
+    await h.deps.llm.aclose()  # type: ignore[attr-defined]
+
+    assert fake.shared == []
+    assert report.usage is not None and report.usage.trace_url is None
+
+
+@pytest.mark.parametrize(
+    "error",
+    [RuntimeError("share refused"), ConnectionError("down")],
+    ids=["RuntimeError", "ConnectionError"],
+)
+async def test_adr45_a_share_error_gives_a_null_link_and_the_scan_still_succeeds(
+    tmp_path, caplog, error
+):
+    fake = ShareableLangSmithClient(error=error)
+    h = traced_harness(tmp_path, langsmith=fake, langsmith_share_traces=True)
+
+    report = await scan_canary(h)
+
+    assert report.outcome in ("findings", "clean", "incomplete")
+    assert report.usage is not None and report.usage.trace_url is None
+    warnings = [r.getMessage() for r in caplog.records if r.name == "pir.tracing"]
+    assert any(type(error).__name__ in message for message in warnings)
+    assert "share refused" not in "".join(warnings)  # the type only, not the message
+
+
+async def test_adr45_a_slow_share_times_out_to_a_null_link(tmp_path, monkeypatch):
+    monkeypatch.setattr(tracing, "SHARE_TIMEOUT_S", 0.05)
+    fake = ShareableLangSmithClient(delay_s=0.4)
+    h = traced_harness(tmp_path, langsmith=fake, langsmith_share_traces=True)
+
+    report = await scan_canary(h)
+
+    assert fake.shared  # it was tried
+    assert report.usage is not None and report.usage.trace_url is None
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://smith.langchain.com/public/abc/r",  # not https
+        "https://smith.langchain.com.evil.example/public/abc/r",  # look-alike host
+        "https://evil.example/public/abc/r",
+        "https://notsmith.langchain.com/public/abc/r",
+        "https://smith.langchain.com/o/abc/projects",  # not a public path
+        "https://smith.langchain.com/publicity/abc",
+        "https://user:pw@smith.langchain.com/public/abc/r",
+        "https://smith.langchain.com:8443/public/abc/r",
+        "javascript:alert(1)",
+        "",
+    ],
+)
+async def test_adr45_an_invalid_share_link_gives_a_null_link(tmp_path, url):
+    fake = ShareableLangSmithClient(url=url)
+    h = traced_harness(tmp_path, langsmith=fake, langsmith_share_traces=True)
+
+    report = await scan_canary(h)
+
+    assert fake.shared  # it was tried
+    assert report.usage is not None and report.usage.trace_url is None
+
+
+def test_adr45_valid_share_url_accepts_the_public_hosts():
+    assert valid_share_url(SHARE_URL)
+    assert valid_share_url("https://eu.smith.langchain.com/public/abc/r")
+    assert not valid_share_url(None)
+
+
+def test_adr45_the_client_omits_runtime_metadata_only_when_sharing_is_on():
+    key = "ls-test-key"
+    on = Settings(
+        _env_file=None, langsmith_tracing=True, langsmith_api_key=key, langsmith_share_traces=True
+    )
+    off = Settings(_env_file=None, langsmith_tracing=True, langsmith_api_key=key)
+    shared_client = tracing.make_client(on)
+    plain_client = tracing.make_client(off)
+    assert shared_client is not None and plain_client is not None
+    assert shared_client._omit_traced_runtime_info is True
+    assert plain_client._omit_traced_runtime_info is False

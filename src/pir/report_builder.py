@@ -29,6 +29,7 @@ from pir.models.report import (
     ReportSummary,
     Resolution,
     ScanReport,
+    ScanUsage,
     SourceLocation,
     StepStatus,
     VulnerableSymbol,
@@ -69,6 +70,7 @@ class ScanContext:
     steps: list[StepStatus]
     dependencies: list[Dependency]
     limitations: list[str]
+    usage: ScanUsage | None = None
 
 
 def step_tools(step: str, used: Iterable[str]) -> list[str]:
@@ -505,4 +507,5 @@ def build_report(ctx: ScanContext, findings: list[Finding]) -> ScanReport:
         findings=ranked,
         summary=summary,
         limitations=ctx.limitations,
+        usage=ctx.usage,
     )

@@ -8,7 +8,17 @@ from pathlib import Path
 import pytest
 
 from pir.markdown import code, esc, esc_block, render_markdown, safe_url
-from pir.models.report import AdvisoryLink, Remediation, ScanReport, SourceLocation
+from pir.models.report import (
+    AdvisoryLink,
+    NemotronUsage,
+    OsvUsage,
+    Remediation,
+    SandboxUsage,
+    ScanReport,
+    ScanUsage,
+    SourceLocation,
+    TavilyUsage,
+)
 
 REPORTS = Path(__file__).resolve().parents[2] / "web" / "fixtures" / "reports"
 
@@ -281,3 +291,34 @@ def test_ac85_markdown_escapes_remediation_guidance_safely():
     md = render_markdown(rep_with_rem)
     assert "<script>" not in md
     assert "&lt;script&gt;alert\\(1\\)&lt;/script&gt;" in md
+
+
+# ---- ADR-0045: the usage line --------------------------------------------------------------
+
+
+def _usage(trace_url: str | None = None) -> ScanUsage:
+    return ScanUsage(
+        nemotron=NemotronUsage(calls=7, input_tokens=1234, output_tokens=567, usd=0.0123),
+        tavily=TavilyUsage(searches=2, usd=0.016),
+        sandbox=SandboxUsage(operations=5),
+        osv=OsvUsage(queries=9),
+        trace_url=trace_url,
+    )
+
+
+def test_adr45_markdown_has_one_usage_line_labelled_as_metered_spend_not_a_total():
+    report = load("reachable").model_copy(update={"usage": _usage()})
+
+    lines = [x for x in render_markdown(report).splitlines() if x.startswith("- Usage:")]
+
+    assert lines == [
+        "- Usage: 7 Nemotron calls (1234 input and 567 output tokens), 2 Tavily searches, "
+        "5 Sandbox operations, 9 OSV queries. "
+        "Metered model and search spend: $0.0283, not a total cost."
+    ]
+
+
+def test_adr45_markdown_has_no_usage_line_for_a_report_without_usage():
+    report = load("reachable")
+    assert report.usage is None
+    assert "Usage:" not in render_markdown(report)

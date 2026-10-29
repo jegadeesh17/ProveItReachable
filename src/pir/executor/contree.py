@@ -328,13 +328,16 @@ class ContreeExecutor:
         except BaseException:
             if budget is not None and hold is not None:
                 # Unknown cost once the platform accepted the operation: keep the whole hold.
-                budget.record(hold, hold.amount_usd if state.started else 0.0)
+                budget.record(hold, hold.amount_usd if state.started else 0.0, service="sandbox")
+                if state.started:
+                    budget.count("sandbox_operations")  # timeouts included (ADR-0045)
             raise
         cost = outcome.reported_cost
         if cost is None:
             cost = outcome.result.duration_s * rate
         if budget is not None and hold is not None:
-            budget.record(hold, cost)
+            budget.record(hold, cost, service="sandbox")
+            budget.count("sandbox_operations")
         return outcome.result.model_copy(update={"cost_usd": cost})
 
     async def _execute(

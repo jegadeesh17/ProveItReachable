@@ -219,6 +219,8 @@ async def _record_async(
     settings: Settings, coords: RepoCoordinates, args: argparse.Namespace
 ) -> int:
     deps = build_deps(settings)
+    # A recording never holds a public trace link: it would expire inside a committed fixture.
+    deps.settings = deps.settings.model_copy(update={"langsmith_share_traces": False})
     try:
         try:
             target = await deps.validate(coords, args.ref)

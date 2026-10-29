@@ -478,3 +478,45 @@ async def test_call_end_log_line_has_outcome_and_no_text(caplog):
     assert record.cost_usd == pytest.approx(100 * IN_PRICE + 20 * OUT_PRICE)
     assert record.duration_ms >= 0
     assert "SECRET-MODEL-TEXT" not in record.getMessage()
+
+
+# ---- ADR-0045: the scan's usage counters -------------------------------------------------
+
+
+async def test_adr45_counts_every_request_sent_and_the_tokens_the_response_returned():
+    budget = _budget()
+    client, transport, _ = _client({URL: [httpx.ReadTimeout("slow"), json_response(200, _body())]})
+    await _chat(client, budget)
+    counts = budget.counts()
+    assert counts["nemotron_calls"] == len(transport.requests) == 2  # the retry counts
+    assert (counts["nemotron_input_tokens"], counts["nemotron_output_tokens"]) == (100, 20)
+    assert budget.service_usd()["nemotron"] == pytest.approx(100 * IN_PRICE + 20 * OUT_PRICE)
+
+
+async def test_adr45_a_failed_call_counts_its_requests_and_adds_no_tokens():
+    budget = _budget()
+    client, transport, _ = _client({URL: httpx.ReadTimeout("slow")})
+    with pytest.raises(LLMError):
+        await _chat(client, budget, max_tokens=1500)
+    counts = budget.counts()
+    assert counts["nemotron_calls"] == len(transport.requests) == 2
+    assert (counts["nemotron_input_tokens"], counts["nemotron_output_tokens"]) == (0, 0)
+    assert budget.service_usd()["nemotron"] == pytest.approx(_expected_hold(100, 1500))
+
+
+async def test_adr45_a_response_without_usage_adds_no_tokens_but_counts_the_call():
+    budget = _budget()
+    client, _, _ = _client({URL: json_response(200, _body(usage=None))})
+    await _chat(client, budget)
+    counts = budget.counts()
+    assert counts["nemotron_calls"] == 1
+    assert (counts["nemotron_input_tokens"], counts["nemotron_output_tokens"]) == (0, 0)
+
+
+async def test_adr45_a_denied_call_sends_nothing_and_counts_nothing():
+    budget = _budget(nebius=0.0)
+    client, transport, _ = _client({URL: json_response(200, _body())})
+    with pytest.raises(LLMError):
+        await _chat(client, budget)
+    assert not transport.requests
+    assert budget.counts()["nemotron_calls"] == 0

@@ -6,6 +6,7 @@ available decoded in `payloads`.
 """
 
 import json
+import time
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -190,3 +191,28 @@ class FakeLangSmithClient(Client):
             for p in self.payloads
             if p.get("extra", {}).get("metadata", {}).get("scan_id")
         }
+
+
+class ShareableLangSmithClient(FakeLangSmithClient):
+    """A fake whose `share_run` answers `url` (or raises `error`, or sleeps `delay_s` first)."""
+
+    def __init__(
+        self,
+        url: str = "https://smith.langchain.com/public/0d6f5c1e-0000-4000-8000-000000000001/r",
+        *,
+        error: Exception | None = None,
+        delay_s: float = 0.0,
+    ) -> None:
+        super().__init__()
+        self.url = url
+        self.error = error
+        self.delay_s = delay_s
+        self.shared: list[Any] = []
+
+    def share_run(self, run_id: Any, *, share_id: Any = None) -> str:  # type: ignore[override]
+        self.shared.append(run_id)
+        if self.delay_s:
+            time.sleep(self.delay_s)
+        if self.error is not None:
+            raise self.error
+        return self.url

@@ -169,6 +169,20 @@ def _not_examined(dependencies: list[Dependency]) -> list[str]:
     return ["## Dependencies not examined", "", *rows, ""]
 
 
+def _usage_line(report: ScanReport) -> str | None:
+    """One line of what the scan used (ADR-0045), or None for a report that predates `usage`."""
+    u = report.usage
+    if u is None:
+        return None
+    spend = u.nemotron.usd + u.tavily.usd
+    return (
+        f"- Usage: {u.nemotron.calls} Nemotron calls ({u.nemotron.input_tokens} input and "
+        f"{u.nemotron.output_tokens} output tokens), {u.tavily.searches} Tavily searches, "
+        f"{u.sandbox.operations} Sandbox operations, {u.osv.queries} OSV queries. "
+        f"Metered model and search spend: ${spend:.4f}, not a total cost."
+    )
+
+
 def render_markdown(report: ScanReport) -> str:
     """The report as Markdown, in the same order as the UI. Ends with one newline."""
     s = report.summary
@@ -212,4 +226,7 @@ def render_markdown(report: ScanReport) -> str:
     lines += _not_examined(report.dependencies)
     lines += ["## Method and limitations", ""]
     lines += [f"- {esc(x, start=True)}" for x in [*report.resolution.notes, *report.limitations]]
+    usage_line = _usage_line(report)
+    if usage_line is not None:
+        lines.append(usage_line)
     return "\n".join(lines) + "\n"

@@ -822,3 +822,32 @@ async def test_fixture_search_round_trip_through_client_and_researcher(tmp_path)
     assert result.identified and result.evidence_urls == [NVD_URL]
     assert fixture_json("tavily", "search_pyyaml.json")["results"][0]["url"] == EXACT_URL
     assert [link.url for link in result.links if link.source == "tavily"] == [EXACT_URL, NVD_URL]
+
+
+# ---- ADR-0045: the scan's usage counters ----------------------------------------------------
+
+
+async def test_adr45_a_search_sent_is_counted_and_a_denied_one_is_not(tmp_path):
+    researcher, search, _ = _researcher(tmp_path)
+    budget = _budget()
+    await _research(researcher, budget=budget)
+    assert len(search.queries) == 1
+    assert budget.counts()["tavily_searches"] == 1
+    assert budget.service_usd()["tavily"] >= 0
+
+    denied_researcher, denied_search, _ = _researcher(tmp_path / "other")
+    denied = _budget(tavily=0.0)
+    await _research(denied_researcher, budget=denied)
+    assert denied_search.queries == []
+    assert denied.counts()["tavily_searches"] == 0
+
+
+async def test_adr45_a_cached_answer_is_not_a_search(tmp_path):
+    researcher, search, _ = _researcher(tmp_path)
+    first = _budget()
+    await _research(researcher, budget=first)
+    second = _budget()
+    await _research(researcher, budget=second)  # served from the research cache
+    assert first.counts()["tavily_searches"] == 1
+    assert second.counts()["tavily_searches"] == 0
+    assert len(search.queries) == 1

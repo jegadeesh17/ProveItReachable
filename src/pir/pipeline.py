@@ -47,10 +47,15 @@ from pir.models.report import (
     Advisory,
     Dependency,
     Finding,
+    NemotronUsage,
+    OsvUsage,
     RepoRef,
     Resolution,
+    SandboxUsage,
     ScanReport,
+    ScanUsage,
     StepStatus,
+    TavilyUsage,
 )
 from pir.models.research import AdvisoryResearch
 from pir.osv import OsvFailure
@@ -385,6 +390,10 @@ class _Scan:
             self._skip(rec, "no resolved dependencies to check")
             return
         osv = self.deps.osv
+        # Each distinct package-version passed to the OSV client counts (ADR-0045).
+        self.budget.count(
+            "osv_queries", len({f"{d.name}=={d.version}" for d in queryable if d.version})
+        )
         results = await osv.query(self._provisional())
         rec.tools = ["osv"]
         by_key = {f"{d.name}=={d.version}": d for d in queryable}
@@ -665,6 +674,7 @@ class _Scan:
             steps=[self.steps[name].status() for name in STEP_ORDER],
             dependencies=dependencies,
             limitations=limitations,
+            usage=scan_usage(self.budget),
         )
 
     async def _emit_done(self, outcome: Outcome) -> None:
@@ -682,6 +692,33 @@ class _Scan:
                 tools=[],
             )
         )
+
+
+def scan_usage(budget: ScanBudget) -> ScanUsage:
+    """The report's `usage` from the scan's own budget and counters (ADR-0045).
+
+    Dollars are rounded here to 4 places; the budget keeps them unrounded.
+    """
+    counts = budget.counts()
+    dollars = budget.service_usd()
+    return ScanUsage(
+        nemotron=NemotronUsage(
+            calls=counts["nemotron_calls"],
+            input_tokens=counts["nemotron_input_tokens"],
+            output_tokens=counts["nemotron_output_tokens"],
+            usd=round(dollars["nemotron"], 4),
+        ),
+        tavily=TavilyUsage(searches=counts["tavily_searches"], usd=round(dollars["tavily"], 4)),
+        sandbox=SandboxUsage(operations=counts["sandbox_operations"]),
+        osv=OsvUsage(queries=counts["osv_queries"]),
+    )
+
+
+def _with_trace_url(report: ScanReport, url: str) -> ScanReport:
+    """`report` with the public trace link on its usage."""
+    if report.usage is None:
+        return report
+    return report.model_copy(update={"usage": report.usage.model_copy(update={"trace_url": url})})
 
 
 def _resolution(result: ResolveResult) -> Resolution:
@@ -746,7 +783,12 @@ async def run_scan(
     try:
         scan = _Scan(deps, target, repo, budget, scan_id, sink)
         return await run_traced(
-            deps.settings, scan_id, scan.run, client=deps.langsmith, parent=trace_parent
+            deps.settings,
+            scan_id,
+            scan.run,
+            client=deps.langsmith,
+            parent=trace_parent,
+            with_trace_url=_with_trace_url,
         )
     finally:
         scan_id_var.reset(token)

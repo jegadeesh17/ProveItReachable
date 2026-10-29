@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     # LangSmith
     langsmith_api_key: SecretStr | None = None
     langsmith_tracing: bool = False
+    langsmith_share_traces: bool = False
     langsmith_project: str = "ProveItReachable"
     langsmith_endpoint: str = "https://api.smith.langchain.com"
     langsmith_dataset: str = "proveitreachable-eval-v1"

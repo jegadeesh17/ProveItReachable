@@ -159,6 +159,19 @@ def _count(value: object) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
 
 
+def _count_returned_tokens(budget: ScanBudget, response: Any) -> None:
+    """Add the token counts a response returned to the scan's usage (ADR-0045).
+
+    A response without usable counts adds none; the estimate used for its cost is not counted.
+    """
+    raw_usage = getattr(response, "usage", None)
+    prompt = getattr(raw_usage, "prompt_tokens", None)
+    completion = getattr(raw_usage, "completion_tokens", None)
+    if isinstance(prompt, int) and isinstance(completion, int):
+        budget.count("nemotron_input_tokens", _count(prompt))
+        budget.count("nemotron_output_tokens", _count(completion))
+
+
 def _reasoning_tokens(usage: Any) -> int:
     details = getattr(usage, "completion_tokens_details", None)
     value = getattr(details, "reasoning_tokens", None)
@@ -285,32 +298,36 @@ class NebiusLLMClient:
 
         started = time.monotonic()
         try:
-            response = await self._send(body, timeout_s)
+            response = await self._send(body, timeout_s, budget)
         except LLMError as exc:
             # A timeout may still have been billed: keep the hold. Other failures cost nothing.
-            budget.record(hold, hold.amount_usd if exc.kind == "timeout" else 0.0)
+            budget.record(
+                hold, hold.amount_usd if exc.kind == "timeout" else 0.0, service="nemotron"
+            )
             self._log_end(exc.kind, hold.amount_usd if exc.kind == "timeout" else 0.0, started)
             raise
         except BaseException:
-            budget.record(hold, hold.amount_usd)
+            budget.record(hold, hold.amount_usd, service="nemotron")
             raise
 
+        _count_returned_tokens(budget, response)
         try:
             result = self._parse(response, chars, hold)
         except LLMError as exc:
-            budget.record(hold, hold.amount_usd)
+            budget.record(hold, hold.amount_usd, service="nemotron")
             self._log_end(exc.kind, hold.amount_usd, started)
             raise
         cost = hold.amount_usd if result.usage.estimated else self._actual_usd(result.usage)
-        budget.record(hold, cost)
+        budget.record(hold, cost, service="nemotron")
         self._log_end("ok", cost, started)
         return result
 
-    async def _send(self, body: dict[str, Any], timeout_s: float) -> Any:
+    async def _send(self, body: dict[str, Any], timeout_s: float, budget: ScanBudget) -> Any:
         last: LLMError | None = None
         for attempt in range(RETRIES + 1):
             if attempt:
                 await self._sleep(_BACKOFF_S)
+            budget.count("nemotron_calls")  # every request sent, retries included (ADR-0045)
             try:
                 async with asyncio.timeout(timeout_s):
                     return await self._openai.chat.completions.create(**body, timeout=timeout_s)

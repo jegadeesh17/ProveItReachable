@@ -382,6 +382,36 @@ def expected_outcome(
     return "clean"
 
 
+class NemotronUsage(Strict):  # ADR-0045: metered, not invoiced
+    calls: int = Field(ge=0)
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    usd: float = Field(ge=0, allow_inf_nan=False)
+
+
+class TavilyUsage(Strict):
+    searches: int = Field(ge=0)
+    usd: float = Field(ge=0, allow_inf_nan=False)
+
+
+class SandboxUsage(Strict):
+    operations: int = Field(ge=0)
+
+
+class OsvUsage(Strict):
+    queries: int = Field(ge=0)
+
+
+class ScanUsage(Strict):
+    """What one scan used (ADR-0045). All four services are present; an unused one has zeros."""
+
+    nemotron: NemotronUsage
+    tavily: TavilyUsage
+    sandbox: SandboxUsage
+    osv: OsvUsage
+    trace_url: str | None = None  # always serialized; null when not shared
+
+
 class ScanReport(Strict):
     schema_version: Literal["1.0"]
     scan_id: str
@@ -396,6 +426,7 @@ class ScanReport(Strict):
     findings: list[Finding]
     summary: ReportSummary
     limitations: list[str]
+    usage: ScanUsage | None = None
 
     @field_validator("scan_id")
     @classmethod

@@ -47,6 +47,20 @@ _EPS = 1e-9
 
 RefusalReason = Literal["paused", "daily_limit", "ledger_unavailable"]
 DenialReason = Literal["spend_cap_reached", "scan_budget_reached"]
+# The service a recorded amount is booked to, for the report's `usage` (ADR-0045). Sandbox cost is
+# metered in the "nebius" pool but is not shown as dollars in the report.
+Service = Literal["nemotron", "tavily", "sandbox"]
+SERVICES: tuple[Service, ...] = get_args(Service)
+# Per-scan counters kept beside the pool totals (ADR-0045).
+Counter = Literal[
+    "nemotron_calls",
+    "nemotron_input_tokens",
+    "nemotron_output_tokens",
+    "tavily_searches",
+    "sandbox_operations",
+    "osv_queries",
+]
+COUNTERS: tuple[Counter, ...] = get_args(Counter)
 
 
 class LedgerConflict(Exception):
@@ -647,6 +661,8 @@ class ScanBudget:
         self._reserved = {p: float(reserved_usd.get(p, 0.0)) for p in POOLS}
         self._denial = {p: denial_reason.get(p, "scan_budget_reached") for p in POOLS}
         self._spent: dict[Pool, float] = dict.fromkeys(POOLS, 0.0)
+        self._service_usd: dict[Service, float] = dict.fromkeys(SERVICES, 0.0)
+        self._counts: dict[Counter, int] = dict.fromkeys(COUNTERS, 0)
         self._held: dict[Pool, float] = dict.fromkeys(POOLS, 0.0)
         self._open: dict[int, SpendHold] = {}
         self._next_id = 1
@@ -665,6 +681,22 @@ class ScanBudget:
         """Recorded actuals plus holds still open (an unrecorded call may have been paid)."""
         return {p: self._spent[p] + self._held[p] for p in POOLS}
 
+    def service_usd(self) -> dict[Service, float]:
+        """Unrounded dollars `record` booked per service (ADR-0045)."""
+        return dict(self._service_usd)
+
+    def counts(self) -> dict[Counter, int]:
+        """The scan's call counters (ADR-0045)."""
+        return dict(self._counts)
+
+    def count(self, counter: Counter, amount: int = 1) -> None:
+        """Add `amount` to a usage counter. It never affects holds, caps or settlement."""
+        if counter not in self._counts:
+            raise ValueError(f"unknown counter: {counter!r}")
+        if amount < 0:
+            raise ValueError("amount must be 0 or more")
+        self._counts[counter] += amount
+
     def try_spend(self, pool: Pool, estimate_usd: float) -> SpendHold | SpendDenied:
         if pool not in POOLS:
             raise ValueError(f"unknown pool: {pool!r}")
@@ -680,13 +712,18 @@ class ScanBudget:
         self._held[pool] += hold.amount_usd
         return hold
 
-    def record(self, hold: SpendHold, actual_usd: float) -> None:
+    def record(self, hold: SpendHold, actual_usd: float, service: Service | None = None) -> None:
+        """Swap `hold` for the actual cost, booked to `service` for the report's usage."""
+        if service is not None and service not in SERVICES:
+            raise ValueError(f"unknown service: {service!r}")
         if not math.isfinite(actual_usd) or actual_usd < 0:
             raise ValueError("actual_usd must be a finite number, 0 or more")
         if self._open.pop(hold.hold_id, None) is None:
             raise ValueError("hold is unknown or already recorded")
         self._held[hold.pool] = max(0.0, self._held[hold.pool] - hold.amount_usd)
         self._spent[hold.pool] += float(actual_usd)
+        if service is not None:
+            self._service_usd[service] += float(actual_usd)
         if actual_usd > hold.amount_usd + _EPS:
             self._overrun = True
 

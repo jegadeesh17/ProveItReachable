@@ -344,6 +344,7 @@ class AdvisoryResearcher:
                 "tavily_search",
                 {"query": query, "max_results": self._settings.tavily_max_results, "depth": depth},
             ) as span:
+                budget.count("tavily_searches")  # a request sent; cached answers never reach here
                 results = await self._search.search(
                     query,
                     max_results=self._settings.tavily_max_results,
@@ -356,12 +357,14 @@ class AdvisoryResearcher:
         except SearchFailed as exc:
             # A timeout may still have been billed: keep the hold. Other failures cost nothing.
             billed = self._bill_search and exc.kind == "timeout"
-            budget.record(decision, decision.amount_usd if billed else 0.0)
+            budget.record(decision, decision.amount_usd if billed else 0.0, service="tavily")
             raise _StageFailed("tavily_failed") from exc
         except BaseException:
-            budget.record(decision, decision.amount_usd if self._bill_search else 0.0)
+            budget.record(
+                decision, decision.amount_usd if self._bill_search else 0.0, service="tavily"
+            )
             raise
-        budget.record(decision, decision.amount_usd if self._bill_search else 0.0)
+        budget.record(decision, decision.amount_usd if self._bill_search else 0.0, service="tavily")
         return results
 
     async def _extract(

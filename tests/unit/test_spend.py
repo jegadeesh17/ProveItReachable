@@ -809,3 +809,51 @@ async def test_ac88_invalid_budget_input_refused(frozen_clock, invalid_pool_amou
     budget = await _reserve(meter, "scan-valid")
     with pytest.raises(ValueError):
         budget.try_spend("nebius", invalid_pool_amount)
+
+
+# --- per-service usage (ADR-0045) ---------------------------------------------------------
+
+
+async def test_adr45_record_books_dollars_per_service_and_leaves_the_pools_alone(frozen_clock):
+    budget = await _reserve(_meter(_local_ledger(frozen_clock), "local", frozen_clock))
+    first = budget.try_spend("nebius", 0.05)
+    second = budget.try_spend("tavily", 0.02)
+    third = budget.try_spend("nebius", 0.03)
+    assert isinstance(first, SpendHold)
+    assert isinstance(second, SpendHold)
+    assert isinstance(third, SpendHold)
+
+    budget.record(first, 0.04, service="nemotron")
+    budget.record(second, 0.016, service="tavily")
+    budget.record(third, 0.01, service="sandbox")
+    assert budget.service_usd() == {"nemotron": 0.04, "tavily": 0.016, "sandbox": 0.01}
+    assert budget.usage_usd() == {"nebius": pytest.approx(0.05), "tavily": 0.016}  # unchanged
+
+    probe = budget.try_spend("nebius", 0.01)
+    assert isinstance(probe, SpendHold)
+    budget.record(probe, 0.0)  # no label: books to the pool only
+    assert budget.service_usd() == {"nemotron": 0.04, "tavily": 0.016, "sandbox": 0.01}
+
+
+async def test_adr45_record_rejects_an_unknown_service_and_keeps_the_hold_open(frozen_clock):
+    budget = await _reserve(_meter(_local_ledger(frozen_clock), "local", frozen_clock))
+    hold = budget.try_spend("nebius", 0.1)
+    assert isinstance(hold, SpendHold)
+    with pytest.raises(ValueError):
+        budget.record(hold, 0.1, service="bogus")  # type: ignore[arg-type]
+    budget.record(hold, 0.1, service="nemotron")  # the hold was not consumed by the bad call
+
+
+async def test_adr45_counters_start_at_zero_add_up_and_reject_bad_input(frozen_clock):
+    budget = await _reserve(_meter(_local_ledger(frozen_clock), "local", frozen_clock))
+    assert set(budget.counts().values()) == {0}
+    budget.count("nemotron_calls")
+    budget.count("nemotron_calls")
+    budget.count("nemotron_input_tokens", 120)
+    assert budget.counts()["nemotron_calls"] == 2
+    assert budget.counts()["nemotron_input_tokens"] == 120
+    assert budget.counts()["osv_queries"] == 0
+    with pytest.raises(ValueError):
+        budget.count("bogus")  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        budget.count("osv_queries", -1)

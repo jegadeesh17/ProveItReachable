@@ -580,3 +580,35 @@ def test_the_live_tests_use_contree_executor_directly_not_a_tag_workaround():  #
     assert "TagBaseExecutor" not in text and "ContreeExecutor(settings)" in text
     assert "test_base_image_fingerprint_matches" in text
     assert "test_images_oci_accepts_digest" not in text
+
+
+# ---- ADR-0045: the scan's usage counters ----------------------------------------------------
+
+
+async def test_adr45_a_returned_operation_counts_once_and_books_its_cost_to_the_sandbox():
+    bud = budget()
+    executor, _, _ = make(RecordingTransport(routes("op_saved.json")))
+    result = await executor.run(IMAGE, ARGV, network=False, timeout_s=10, save=True, budget=bud)
+    assert bud.counts()["sandbox_operations"] == 1
+    assert bud.service_usd()["sandbox"] == pytest.approx(result.cost_usd)
+
+
+async def test_adr45_an_operation_that_failed_after_it_started_still_counts():
+    transport = RecordingTransport(routes(extra={op_url(): httpx.Response(500)}))
+    bud = budget()
+    executor, _, _ = make(transport)
+    with pytest.raises(ExecutorUnavailable):
+        await executor.run(IMAGE, ARGV, network=False, timeout_s=10, budget=bud)
+    assert bud.counts()["sandbox_operations"] == 1
+
+
+async def test_adr45_nothing_counts_when_the_operation_never_started_or_spend_was_denied():
+    bud = budget()
+    executor, _, _ = make(RecordingTransport({POST: httpx.Response(401, json={})}))
+    with pytest.raises(ExecutorUnavailable):
+        await executor.run(IMAGE, ARGV, network=False, timeout_s=10, budget=bud)
+    denied = budget(nebius=0.0)
+    executor, _, _ = make()
+    with pytest.raises(ExecutorSpendDenied):
+        await executor.run(IMAGE, ARGV, network=False, timeout_s=10, budget=denied)
+    assert bud.counts()["sandbox_operations"] == denied.counts()["sandbox_operations"] == 0

@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 from fakes.deps import SHA, make_harness, write_repo
+from fakes.langsmith import ShareableLangSmithClient
 
 from pir.cli import main
 from pir.github import RepoCoordinates, ValidatedTarget
@@ -439,6 +440,24 @@ def test_record_writes_a_valid_recording_and_the_index(record_env, capsys):
     assert rec.report.repo.commit_sha == SHA
     assert json.loads((out / "index.json").read_text("utf-8")) == ["octo-demo"]
     assert "spend nebius: used $" in capsys.readouterr().err  # spend is printed
+
+
+def test_adr45_record_never_stores_a_public_trace_link(record_env):
+    h, out = record_env
+    fake = ShareableLangSmithClient()
+    h.deps.langsmith = fake
+    h.deps.settings = h.deps.settings.model_copy(
+        update={"langsmith_tracing": True, "langsmith_share_traces": True}
+    )
+
+    code = main(["record", "https://github.com/octo/demo", "--ref", SHA, *RECORD_ARGS])
+
+    assert code == 0
+    assert fake.shared == []  # the run was never published
+    rec = ScanRecording.model_validate_json((out / "octo-demo.json").read_text("utf-8"))
+    assert rec.report.usage is not None
+    assert rec.report.usage.trace_url is None
+    assert '"trace_url":null' in (out / "octo-demo.json").read_text("utf-8").replace(" ", "")
 
 
 def test_record_with_proof_sets_proof_on_findings(record_env, monkeypatch, capsys):

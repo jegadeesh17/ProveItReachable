@@ -12,6 +12,7 @@ import logging
 import uuid
 from collections.abc import Awaitable, Callable, Iterator
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
+from urllib.parse import urlsplit
 
 from langsmith import Client, trace, traceable, tracing_context
 from langsmith.run_helpers import get_current_run_tree
@@ -25,6 +26,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger("pir.tracing")
 
 T = TypeVar("T")
+
+# Flush and share together may take this long, so the report stays inside the UI's
+# `report_not_ready` retry window (ADR-0045).
+SHARE_TIMEOUT_S = 3.0
+_SHARE_HOST = "smith.langchain.com"
 
 
 def redact_payload(value: Any) -> Any:
@@ -52,7 +58,46 @@ def make_client(settings: "Settings") -> Client | None:
         api_url=settings.langsmith_endpoint,
         hide_inputs=redact_payload,
         hide_outputs=redact_payload,
+        # With public links on, keep SDK runtime and environment metadata out of shared runs.
+        omit_traced_runtime_info=settings.langsmith_share_traces,
     )
+
+
+def valid_share_url(url: object) -> bool:
+    """True for an `https://` link on a `smith.langchain.com` host with a `/public/` path."""
+    if not isinstance(url, str):
+        return False
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+        port = parts.port
+    except ValueError:
+        return False
+    if parts.scheme != "https" or not host or parts.username or parts.password:
+        return False
+    if port not in (None, 443):
+        return False
+    if host != _SHARE_HOST and not host.endswith("." + _SHARE_HOST):
+        return False
+    return parts.path.startswith("/public/")
+
+
+async def _share_run(client: Client, run_id: uuid.UUID) -> str | None:
+    """Flush, then share the root run; the public link, or None on any failure (ADR-0045)."""
+    try:
+        async with asyncio.timeout(SHARE_TIMEOUT_S):
+            await flush(client)
+            url = await asyncio.to_thread(client.share_run, run_id)
+    except TimeoutError:
+        logger.warning("langsmith share timed out")
+        return None
+    except Exception as exc:  # best effort; the cause is logged without its message
+        logger.warning("langsmith share failed: %s", type(exc).__name__)
+        return None
+    if not valid_share_url(url):
+        logger.warning("langsmith share returned an unexpected link")
+        return None
+    return url
 
 
 def _summarize_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
@@ -83,12 +128,16 @@ async def run_traced(
     *,
     client: Client | None = None,
     parent: RunTree | None = None,
+    with_trace_url: Callable[[T, str], T] | None = None,
 ) -> T:
     """Run `body` as the root run of a trace and log `scan_started` with the root run id.
 
     `client` is given by tests (a fake); otherwise one is made from `settings` when tracing is on.
     `parent` (the evaluation runner's case trace) makes the scan a child run of that run, so the
     scan's step, LLM and tool runs sit beneath it; it is ignored when tracing is off.
+    `with_trace_url` receives the result and the public link, and returns the result to hand
+    back. It is called only when `langsmith_share_traces` is on, the run is the trace root (no
+    `parent`) and a valid link was obtained; a failed share leaves the result as it is.
     """
     client = client if client is not None else make_client(settings)
     run_id = uuid.uuid4() if client is not None else None
@@ -114,7 +163,13 @@ async def run_traced(
     if parent is not None:
         extra["parent"] = parent
     with tracing_context(enabled=True, client=client, project_name=settings.langsmith_project):
-        return await _root(scan_id, body, langsmith_extra=extra)
+        result = await _root(scan_id, body, langsmith_extra=extra)
+    if with_trace_url is not None and parent is None and settings.langsmith_share_traces:
+        assert run_id is not None
+        url = await _share_run(client, run_id)
+        if url is not None:
+            result = with_trace_url(result, url)
+    return result
 
 
 class RunHandle:
