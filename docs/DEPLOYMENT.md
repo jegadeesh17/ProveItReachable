@@ -359,29 +359,57 @@ Caveat: budget data can lag a few hours behind actual spend, and spend keeps acc
 - Budget messages come from the budget service, not from the function. A cost reading that lags spend can still let spend pass INR 100 (see 13.6).
 - To disarm: `gcloud functions deploy ... --set-env-vars=KILL_AT_COST=80,DRY_RUN=true` (same flags as above) or remove the project binding with `gcloud projects remove-iam-policy-binding proveitreachable --member=serviceAccount:billing-kill@proveitreachable.iam.gserviceaccount.com --role=roles/billing.projectManager`.
 
-## 14. Active judging-window budget profile (ADR-0044, Option A)
+## 14. Active judging-window budget profile (ADR-0044, ADR-0045)
 
-To support evaluation during the active hackathon judging window (~Oct 28 to Nov 8, 2026) within the remaining ~$8 Nebius promo credits (Tavily has ample credits), the budget profile is configured under Option A:
+To support evaluation across the full hackathon judging window (December 1–15, 2026) within the remaining ~$8 Nebius promo credits (Tavily has ample credit surplus), the production budget profile is configured as follows:
 
 | Dimension | Specification | Notes / Rationale |
 |---|---|---|
 | **Remaining credit pool** | ~$8.00 (Nebius) | Promo credits expiring 2026-12-15; Tavily has ample credit surplus |
-| **Hosted judge allowance** | **$6.50** | Retains **$1.50 safety headroom** against the ~$8 credit pool |
+| **Target end date** | **2026-12-15** (`SPEND_END_DATE=2026-12-15`) | Covers the complete active judging window (Dec 1–15, 2026) through credit expiration |
+| **Minimum scan start threshold** | **$0.05** (`SCAN_MIN_START_USD=0.05`) | Admission threshold required before reservation to avoid premature lockout |
+| **Daily ceiling with carry-forward** | `(allowance - start_spent) / days_left` | Calculated daily; unspent budget rolls forward daily into subsequent days |
 | **Per-scan reservation** | **$0.75** (Nebius) / **$0.40** (Tavily) | Preserved unchanged; provides full scanning & proof-building capacity |
-| **Global daily scan limit** | **2 live scans / day** (`RATE_LIMIT_GLOBAL_DAY=2`) | Enforces a maximum spend of ~$1.50/day ($0.75 × 2) |
-| **Window scan capacity** | **~8–10 live judge scans** | Sustained across the 12-day active judging evaluation window |
+| **Global daily scan limit** | **10 live scans / day** (`RATE_LIMIT_GLOBAL_DAY=10`) | Enforces global daily quota; client limits 3/hr and 10/day |
+| **Replay rate limit** | **300 replays / hr** (`RATE_LIMIT_REPLAYS_PER_CLIENT_HOUR=300`) | $0 cost; shared bucket under `TRUSTED_PROXY_HOPS=0` prevents judge lockout |
+| **Trace sharing** | `LANGSMITH_SHARE_TRACES=true` (ADR-0045) | Public links via `usage.trace_url`; secrets redacted, 1-line errors, runtime info omitted |
 | **Fail-safe fallback** | Graceful pause (`HTTP 429` / `daily_limit` / `paused`) | Zero-cost demo replays with real Sandbox proofs remain 100% accessible |
 
-### 14.1 Pacing rationale & design
+### 14.1 Dynamic daily ceiling & carry-forward pacing
 
-Spreading the remaining ~$8 evenly over 50 days to 2026-12-15 would have yielded ~$0.16/day, falling below the $0.75 reservation needed to admit a single scan and permanently locking out judge evaluations. Option A concentrates the available credits over the active judging period (~Oct 28 to Nov 8):
-1. **$0.75 reservation preserved**: Live scans run at full fidelity (AST indexing, deep model reasoning with Nemotron, and Sandbox proof verification) without cutting corners or compromising scan accuracy.
-2. **2 scans/day ceiling**: Paced via `RATE_LIMIT_GLOBAL_DAY=2` in application configuration, capping daily draw at $1.50/day and ensuring credits last across the judging window.
-3. **Safety buffer**: $1.50 headroom ensures token overrun or concurrency jitter cannot cause an unplanned billing overrun.
+Rather than a static daily ceiling that locks out scans on low-budget days or forfeits unspent funds on quiet days, the production profile uses a dynamic daily ceiling with automatic carry-forward:
+1. **Dynamic ceiling formula**: At the first reservation of each UTC day, the meter computes:
+   `ceiling = (allowance - start_spent) / days_left`
+   where `days_left = max(1, (SPEND_END_DATE - today).days + 1)`, inclusive of 2026-12-15.
+2. **Carry-forward mechanics**: On days with minimal judge traffic, unspent budget is not lost. It remains in `allowance - start_spent`, automatically expanding the daily ceiling for subsequent days as judging activity intensifies.
+3. **Scan admission check**: A live scan is admitted only when:
+   - In both pools, `spent + reserved + SCAN_MIN_START_USD <= allowance`; and
+   - For `hosted`, today's `spent + reserved - start_spent + SCAN_MIN_START_USD <= ceiling`.
+   Setting `SCAN_MIN_START_USD=0.05` ensures scans are not blocked unnecessarily when remaining budget is close to nominal per-scan reservations.
+4. **Full fidelity scans preserved**: The per-scan reservation remains $0.75 (Nebius) and $0.40 (Tavily), ensuring that every admitted live scan runs AST indexing, deep model reasoning with Nemotron, and Sandbox verification at full fidelity.
 
-### 14.2 Fail-safe behavior for judges
+### 14.2 Concurrency, rate limits, and reverse proxy interaction
 
-When the daily scan ceiling (`RATE_LIMIT_GLOBAL_DAY=2`) or the hosted Nebius allowance ($6.50) is reached:
-- **Live scans pause gracefully**: New live scan admission requests return `HTTP 429 Too Many Requests` (with `retry-after` header and `daily_limit` or `paused` state). The user is clearly informed that the daily evaluation quota has been reached.
-- **Demo replays remain unaffected**: Pre-computed demo replays (`planesweeppose`, `pyrl`, `co2tools`) with authentic Token Factory Sandbox proof badges bypass the spend meter entirely ($0 cost, 0 credit reservation, 0 wait time). Judges can test and inspect complete reachability analysis and exploit verification workflows at any time regardless of live budget limits.
+1. **Global and per-client scan limits**:
+   - `RATE_LIMIT_GLOBAL_DAY=10`: Caps global live scans at 10 per UTC day, acting alongside the dynamic spend ceiling to protect promo credits.
+   - Per-client limits: 3 live scans per client per hour (`RATE_LIMIT_PER_CLIENT_HOUR=3`) and 10 per day (`RATE_LIMIT_PER_CLIENT_DAY=10`), with up to 2 concurrent scans (`MAX_CONCURRENT_SCANS=2`).
+2. **Replay limit under `TRUSTED_PROXY_HOPS=0`**:
+   - Google Cloud Run deployment retains `TRUSTED_PROXY_HOPS=0` as the fail-safe setting (section 5), meaning all incoming visitor requests share a single client rate-limit bucket.
+   - To prevent multiple concurrent judges from encountering rate limiting while exploring demo replays, `RATE_LIMIT_REPLAYS_PER_CLIENT_HOUR=300` raises the client replay bucket to 300 starts per hour (up from 30).
+   - Replays are 100% zero-cost: they read pre-recorded executions, execute no live LLM or Sandbox calls, require no spend reservations, and bypass the spend ledger entirely.
+
+### 14.3 Public trace sharing & auditability (ADR-0045)
+
+With `LANGSMITH_SHARE_TRACES=true` enabled on hosted Cloud Run:
+1. **Public trace link**: Every live scan generates a public LangSmith share link attached to `report.usage.trace_url`, allowing judges to inspect the complete reasoning and tool-calling execution tree directly.
+2. **Strict redaction via anonymizer**: The LangSmith client's `anonymizer` masks configured secrets (`NEBIUS_API_KEY`, `TAVILY_API_KEY`, `HF_TOKEN`, `LANGSMITH_API_KEY`, `GITHUB_TOKEN`) and any `Authorization` or `Bearer` headers across all run inputs, outputs, errors, and metadata.
+3. **Single-line error formatting**: With trace sharing enabled, any public run error is truncated to its first line (maximum 500 characters, stack traces stripped), ensuring internal execution paths are not leaked.
+4. **Runtime metadata omitted**: Host environment variables, internal server paths, and non-whitelisted runtime metadata are completely excluded from shared traces.
+5. **Fail-soft timeout**: Flush and share operations run on a dedicated worker bounded by a 3-second timeout. If sharing times out or fails, `trace_url` falls back to `null` with a logged warning, without delaying or failing the scan report.
+
+### 14.4 Fail-safe behavior for judges
+
+When the daily scan ceiling (`daily_limit`) or hosted allowance (`paused`) is reached:
+- **Live scans pause gracefully**: New live scan admission requests return `HTTP 429 Too Many Requests` (or `503 live_scans_paused` / `429 rate_limited`) with a `Retry-After` header indicating seconds until the next UTC midnight reset. Clear error messaging informs the judge that the daily quota has been reached.
+- **Demo replays remain 100% available**: Pre-computed demo replays (`planesweeppose`, `pyrl`, `co2tools`) with authentic Token Factory Sandbox proof badges bypass the spend meter completely ($0 cost, 0 reservation, 0 wait time). Judges can test and inspect complete reachability analysis, interactive SVG call-path graphs, and verified exploit proofs at any time regardless of live budget limits.
 
