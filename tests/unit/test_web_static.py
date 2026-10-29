@@ -134,7 +134,9 @@ def test_stage_tools_come_from_the_api_not_a_client_table():
     assert rows and all(row.count('"') == 6 for row in rows), (
         "each stage is [key, label, short label]"
     )
-    assert "Sandbox" not in (WEB / "index.html").read_text(encoding="utf-8")
+    # The "Powered by" credit lines name the Sandboxes platform (ADR-0045); no stage may claim it.
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    assert "Sandbox" not in re.sub(r'<p class="powered[^"]*">.*?</p>', "", html)
 
 
 def test_ac86_native_svg_callgraph_in_render_js():

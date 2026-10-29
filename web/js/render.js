@@ -7,6 +7,12 @@
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
+/**
+ * The latest evaluation run, shown as one static line in "How this report was made". Update these two
+ * numbers after an evaluation run; the line says what they were measured on.
+ */
+const EVAL_SUMMARY = { cases: 30, precision: 0.91 };
+
 /* ------------------------------------------------------------------ helpers */
 
 /**
@@ -431,6 +437,68 @@ function advisoryStrip(report) {
 /** Glue the middle dot to the word before it (no-break space), so a wrapped line never starts with the dot. */
 const keepDot = (text) => text.replaceAll(" · ", " · ");
 
+/** Whole numbers below 1,000 as they are; above, compact: 41k, 1.2M. */
+export function compactCount(n) {
+  if (n < 1000) return String(n);
+  const trim = (x) => x.toFixed(x < 10 ? 1 : 0).replace(/\.0$/, "");
+  if (n < 999_500) return `${trim(n / 1000)}k`;
+  return `${trim(n / 1_000_000)}M`;
+}
+
+/**
+ * The scan's public LangSmith trace, only when the address passes the same test the server applies
+ * (ADR-0045): https, a smith.langchain.com host or subdomain, no credentials, and a /public/ path.
+ * Returns the normalised address, or null.
+ */
+export function traceHref(value) {
+  if (typeof value !== "string") return null;
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return null;
+  }
+  const host = parsed.hostname.toLowerCase();
+  const hostOk = host === "smith.langchain.com" || host.endsWith(".smith.langchain.com");
+  const plain = !parsed.username && !parsed.password;
+  return parsed.protocol === "https:" && hostOk && plain && parsed.pathname.includes("/public/") ? parsed.href : null;
+}
+
+/** A count from the report, or 0 when it is not a finite non-negative number. */
+const countOf = (value) => (Number.isFinite(value) && value > 0 ? value : 0);
+const NBSP = "\u00a0";
+
+/**
+ * One line of what the scan used (ADR-0045). A service the scan did not use is left out. The dollar
+ * figure is metered model and search spend, never a total. The trace link is shown only when it is valid.
+ */
+function usageLine(usage) {
+  if (!usage || typeof usage !== "object") return null;
+  const nemotron = usage.nemotron || {};
+  const calls = countOf(nemotron.calls);
+  const tokens = countOf(nemotron.input_tokens) + countOf(nemotron.output_tokens);
+  const searches = countOf((usage.tavily || {}).searches);
+  const runs = countOf((usage.sandbox || {}).operations);
+  const queries = countOf((usage.osv || {}).queries);
+  const spend = countOf(nemotron.usd) + countOf((usage.tavily || {}).usd);
+  const unit = (n, one, many) => `${n}${NBSP}${plural(n, one, many)}`;
+
+  const parts = [];
+  if (calls) parts.push(`Nemotron${NBSP}${unit(calls, "call", "calls")}`);
+  if (tokens) parts.push(`${compactCount(tokens)}${NBSP}tokens`);
+  if (searches) parts.push(`Tavily${NBSP}${unit(searches, "search", "searches")}`);
+  if (runs) parts.push(`Sandbox${NBSP}${unit(runs, "run", "runs")}`);
+  if (queries) parts.push(`OSV${NBSP}${unit(queries, "query", "queries")}`);
+  if (spend > 0) {
+    const amount = spend < 0.005 ? "under $0.01" : `$${spend.toFixed(2)}`;
+    parts.push(`${amount.replace(" ", NBSP)}${NBSP}metered model + search spend`);
+  }
+  const line = el("p", { class: "pipeline__usage" }, parts.length ? keepDot(parts.join(" · ")) : "No metered calls were recorded for this scan");
+  const href = traceHref(usage.trace_url);
+  if (href) line.append(keepDot(" · "), safeLink(href, "View trace in LangSmith"));
+  return line;
+}
+
 function pipelineStrip(report) {
   const steps = report.steps || [];
   const first = steps.find((s) => s.started_at);
@@ -461,6 +529,15 @@ function pipelineStrip(report) {
           el("p", { class: "pipe__tool", text: keepDot(toolText(step.tools)) }),
           seconds !== null && el("p", { class: "pipe__time", text: formatSeconds(seconds) }),
         );
+      }),
+    ),
+    el(
+      "div",
+      { class: "pipeline__foot" },
+      usageLine(report.usage),
+      el("p", {
+        class: "pipeline__eval",
+        text: keepDot(`Evaluated on ${EVAL_SUMMARY.cases} labelled cases · likely-reachable precision${NBSP}${EVAL_SUMMARY.precision.toFixed(2)} · tracked in LangSmith`),
       }),
     ),
   );

@@ -433,5 +433,24 @@
     "Only public Python repositories are examined. Code is read and indexed, never run.",
     "Advisories come from OSV for the exact resolved versions; a vulnerability OSV does not list cannot be found.",
     "Reachability is judged by static analysis of the repository’s own code. Dynamic imports, reflection and runtime configuration are not examined."
-  ]
+  ],
+  "usage": {
+    "nemotron": {
+      "calls": 14,
+      "input_tokens": 38420,
+      "output_tokens": 2610,
+      "usd": 0.0734
+    },
+    "tavily": {
+      "searches": 9,
+      "usd": 0.027
+    },
+    "sandbox": {
+      "operations": 4
+    },
+    "osv": {
+      "queries": 12
+    },
+    "trace_url": "https://smith.langchain.com/public/6f1c2a9e-4b7d-4e0a-9c35-8d2b1f7a3e64/r"
+  }
 }

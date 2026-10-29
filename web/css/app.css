@@ -239,6 +239,7 @@ button {
 .powered {
   font-size: var(--fs-xs);
   color: var(--ink-3);
+  text-wrap: balance;
 }
 .powered--head {
   display: none;
@@ -1314,6 +1315,18 @@ body[data-phase="report"] .track-panel {
 .pipe__item[data-state="skipped"] .stage__node {
   border-style: dashed;
   border-color: var(--control-edge);
+}
+.pipeline__foot {
+  display: grid;
+  gap: var(--sp-1);
+  margin-top: var(--sp-4);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.pipeline__foot p {
+  max-width: 62ch;
 }
 @media (min-width: 62rem) {
   .funnel__body {

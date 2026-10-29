@@ -7,6 +7,7 @@ criterion they cover.
 
 # ruff: noqa: E501 (the embedded browser scripts read better on one line)
 
+import json
 import re
 import time
 from pathlib import Path
@@ -496,6 +497,130 @@ def test_the_eval_figure_says_what_the_precision_is_over(server, ui_factory):
     assert EVAL_MODEL in text
     assert "not overall accuracy" in text
     assert "measured on" not in text
+
+
+# ---- the usage line and the evaluation line in "How this report was made" (ADR-0045) ---------
+
+TRACE = "https://smith.langchain.com/public/6f1c2a9e-4b7d-4e0a-9c35-8d2b1f7a3e64/r"
+
+
+def plain(text: str) -> str:
+    """Collapse the no-break spaces the page uses, so wording can be compared."""
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def usage_report(server, ui_factory, mutate=None, *, width: int = 1280):
+    """The partial-failure mock report, which carries `usage`, optionally changed on the way in."""
+    ui = ui_factory(server.url, width=width)
+
+    def handle(route) -> None:
+        response = route.fetch()
+        data = response.json()
+        if mutate:
+            mutate(data)
+        headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
+        route.fulfill(response=response, headers=headers, body=json.dumps(data))
+
+    ui.page.route(re.compile(r"/fixtures/reports/partial-failure\.json$"), handle)
+    ui.page.goto(f"{server.url}/?api=mock&scenario=partial-failure&jump=report")
+    ui.wait_report()
+    return ui
+
+
+def test_adr0045_the_usage_line_shows_what_the_scan_used_and_links_the_trace(server, ui_factory):
+    ui = usage_report(server, ui_factory)
+    line = ui.page.locator(".pipeline__usage")
+    assert plain(line.inner_text()) == (
+        "Nemotron 14 calls · 41k tokens · Tavily 9 searches · Sandbox 4 runs"
+        " · OSV 12 queries · $0.10 metered model + search spend"
+        " · View trace in LangSmith (opens in a new tab)"
+    )
+    link = line.get_by_role("link", name=re.compile("View trace in LangSmith"))
+    assert link.get_attribute("href") == TRACE
+    assert link.get_attribute("target") == "_blank"
+    assert link.get_attribute("rel") == "noopener noreferrer"
+    assert ui.problems() == []
+
+
+def test_adr0045_a_zero_count_is_left_out_of_the_usage_line(server, ui_factory):
+    def mutate(data):
+        data["usage"]["sandbox"]["operations"] = 0
+        data["usage"]["tavily"] = {"searches": 1, "usd": 0}
+        data["usage"]["trace_url"] = None
+
+    ui = usage_report(server, ui_factory, mutate)
+    text = plain(ui.page.locator(".pipeline__usage").inner_text())
+    assert "Sandbox" not in text and "Tavily 1 search " in text
+    assert "$0.07 metered model + search spend" in text
+    assert ui.page.locator(".pipeline__usage a").count() == 0
+
+
+@pytest.mark.parametrize("scenario", ["reachable", "clean"])
+def test_adr0045_a_report_without_usage_shows_no_usage_line(server, ui_factory, scenario):
+    ui = ui_factory(server.url)
+    ui.page.goto(f"{server.url}/?api=mock&scenario={scenario}&jump=report")
+    ui.wait_report()
+    assert ui.page.locator(".pipeline__usage").count() == 0
+    assert ui.page.locator(".pipeline__eval").count() == 1  # the evaluation line is not conditional
+
+
+def test_adr0045_a_recorded_replay_shows_no_usage_line(server, ui_factory):
+    ui = ui_factory(server.url).goto()
+    ui.run_demo("pyrl")
+    ui.wait_report()
+    assert ui.page.locator(".pipeline__usage").count() == 0
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "javascript:window.__pwned=1",
+        "http://smith.langchain.com/public/abc/r",
+        "https://evil.example/public/abc/r",
+        "https://smith.langchain.com.evil.example/public/abc/r",
+        "https://evilsmith.langchain.com/public/abc/r",
+        "https://user:pw@smith.langchain.com/public/abc/r",
+        "https://smith.langchain.com/o/abc/projects",
+        "not a url",
+        "",
+    ],
+)
+def test_adr0045_an_unsafe_trace_url_renders_no_link(server, ui_factory, bad):
+    ui = usage_report(server, ui_factory, lambda d: d["usage"].update(trace_url=bad))
+    assert plain(ui.page.locator(".pipeline__usage").inner_text()).startswith("Nemotron 14 calls")
+    assert ui.page.locator(".pipeline__usage a").count() == 0
+    assert "View trace" not in ui.page.locator("#report").inner_text()
+
+
+def test_adr0045_a_subdomain_of_the_trace_host_is_accepted(server, ui_factory):
+    url = "https://eu.smith.langchain.com/public/abc/r"
+    ui = usage_report(server, ui_factory, lambda d: d["usage"].update(trace_url=url))
+    assert ui.page.locator(".pipeline__usage a").get_attribute("href") == url
+
+
+def test_adr0045_the_evaluation_line_says_what_it_was_measured_on(server, ui_factory):
+    ui = usage_report(server, ui_factory)
+    text = plain(ui.page.locator(".pipeline__eval").inner_text())
+    assert (
+        text
+        == "Evaluated on 30 labelled cases · likely-reachable precision 0.91 · tracked in LangSmith"
+    )
+
+
+def test_adr0045_both_powered_by_lines_name_sandboxes_and_langsmith(server, ui_factory):
+    ui = ui_factory(server.url).goto()
+    for selector in (".powered--head", ".powered--foot"):
+        text = plain(ui.page.locator(selector).text_content())
+        assert text == "Powered by Nebius Token Factory · Nemotron · Sandboxes · Tavily · LangSmith"
+
+
+@pytest.mark.parametrize("width", [375, 1280])
+def test_adr0045_the_usage_and_evaluation_lines_fit_without_sideways_scroll(
+    server, ui_factory, width
+):
+    ui = usage_report(server, ui_factory, width=width)
+    assert ui.page.locator(".pipeline__usage").is_visible()
+    assert overflow(ui.page) == []
 
 
 # ---- proof (optional feature) renders read-only ----------------------------------------------

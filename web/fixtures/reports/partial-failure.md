@@ -130,3 +130,4 @@ This package was not checked against OSV, so it cannot be reported as clean.
 - Only public Python repositories are examined. Code is read and indexed, never run.
 - Advisories come from OSV for the exact resolved versions; a vulnerability OSV does not list cannot be found.
 - Reachability is judged by static analysis of the repository’s own code. Dynamic imports, reflection and runtime configuration are not examined.
+- Usage: 14 Nemotron calls (38420 input and 2610 output tokens), 9 Tavily searches, 4 Sandbox operations, 12 OSV queries. Metered model and search spend: $0.1004, not a total cost.
