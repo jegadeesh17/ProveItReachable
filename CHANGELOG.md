@@ -26,14 +26,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interactive native SVG call-path diagram with mobile responsiveness and text step fallback (ADR-0044).
 - Cryptographic proof-result authenticity nonce verification preventing repository-forged verdicts (ADR-0044).
 - Active judging-window budget profile with $0.75 reservation and daily scan pacing (ADR-0044).
+- Per-scan platform usage telemetry in the report summary footer (ADR-0045).
+- Public LangSmith trace sharing with client-side credential redaction and single-line error formatting (ADR-0045).
 
 ### Changed
 - Verdict reachability gate updated with deterministic pairwise call edge continuity verification (ADR-0042).
 - Offline sdist dependency builds integrated into proof execution pipeline (ADR-0041).
 - Cloud Run deployment configuration and keepalive monitoring (ADR-0040).
+- Dynamic daily spend pacer with unspent credit carry-forward across the hackathon judging window through 2026-12-15.
+- Judging budget profile updated to $0.05 minimum start threshold, global daily limit of 10 scans, and 300 replays/hr.
 
 ### Fixed
 - Fixed call-path reachability evidence loophole by rejecting stitched or discontinuous AST paths.
 - Fixed proof runner result line authenticity by rejecting unauthenticated stdout outputs.
 - Fixed alert noise in demo repositories, reducing 66 scanner alerts down to 4 likely reachable findings (`scripts/noise_summary.py`).
+- Extended scan report polling timeout handling Hugging Face spend ledger commit latencies up to 90 seconds.
+- Clarified daily live-scan budget exhaustion messages in the web UI, distinguishing daily budget ceilings from client rate limits.
+- Fixed advisory false positives by requiring vulnerable symbol verification to originate from the targeted advisory package.
 
