@@ -2,7 +2,7 @@
 
 Hosting per ARCHITECTURE section 18 (ADR-0040, which supersedes ADR-0013; ADR-0030, ADR-0033 and ADR-0036 for the image; ADR-0020 for secrets). Part A (offline build) was done on 2026-10-26 (commit 9a013b7). Part B attempt 1 (Hugging Face Space) was blocked by HTTP 402 (a Docker Space needs a PRO subscription). Part B attempt 2 (Google Cloud Run) was run on 2026-10-26.
 
-**Status (2026-10-26, attempt 2): DEPLOYED, PRIVATE, live scans enabled.** Nothing is public. The service has no `allUsers` or `allAuthenticatedUsers` binding. Going public is not done.
+**Status (2026-10-29, revision proveitreachable-00005-fwx): DEPLOYED, PRIVATE, live scans enabled.** Nothing is public. The service has no `allUsers` or `allAuthenticatedUsers` binding. Going public is not done.
 
 | Item | Value |
 |---|---|
@@ -10,8 +10,8 @@ Hosting per ARCHITECTURE section 18 (ADR-0040, which supersedes ADR-0013; ADR-00
 | Region | `us-central1` |
 | Service | `proveitreachable` |
 | Service URL | `https://proveitreachable-ynjbf5demq-uc.a.run.app` (the project-number form `https://proveitreachable-760189264289.us-central1.run.app` is the same service) |
-| Live revision | `proveitreachable-00004-5nx` (100% of traffic) |
-| Image | `us-central1-docker.pkg.dev/proveitreachable/cloud-run-source-deploy/proveitreachable@sha256:c6204caedb238a7d4d312194129253911453d7ad5dfbb0918c7e246917001b3f` (built by Cloud Build from `git archive HEAD`; commit `95a058b72459`, stored as the `commit` label) |
+| Live revision | `proveitreachable-00005-fwx` (100% of traffic) |
+| Image | `us-central1-docker.pkg.dev/proveitreachable/cloud-run-source-deploy/proveitreachable@sha256:77726535f0f69ce38617356fb4e3a70cc62a022b704cb0b0186ec74b2f2c10de` (built by Cloud Build from `git archive HEAD`; commit `5f0c3d7`, stored as the `commit` label) |
 | Runtime service account | `pir-run@proveitreachable.iam.gserviceaccount.com` |
 | Spend ledger | Hugging Face dataset `jegadeesh17/pir-spend-ledger` (private), unchanged |
 
@@ -117,6 +117,7 @@ Live scans were enabled after this, and `/api/health` reports `budget_remaining`
 
 - Revision `00002`: `TRUSTED_PROXY_HOPS=1` (XFF measurement). Revision `00003`: back to `0`.
 - Revision `00004-5nx`: `LIVE_SCANS_ENABLED=true` and `SANDBOX_BASE_IMAGE` added. **`SANDBOX_BASE_IMAGE` is not in the approved command list.** The sandbox executor raises `SANDBOX_BASE_IMAGE is not set` when it is missing (`src/pir/executor/contree.py`), so enabling live scans without it would break every scan. Its value is the public `base_image` from `src/pir/executor/base_image_fingerprint.json` (the same value `.env` must hold, per `.env.example`). It is not a secret. To undo it, remove it with `gcloud run services update ... --remove-env-vars=SANDBOX_BASE_IMAGE` (with `LIVE_SCANS_ENABLED=false` first).
+- Revision `00005-fwx` (2026-10-29): Redeployed current main (commit `5f0c3d7`) from clean `git archive HEAD` build context. Configured active judging-window profile env vars per ADR-0044 and ADR-0045: `LANGSMITH_SHARE_TRACES=true` (public LangSmith share trace links with secret redaction and 1-line errors) and `RATE_LIMIT_REPLAYS_PER_CLIENT_HOUR=300` (expanded replay rate limit for shared bucket under `TRUSTED_PROXY_HOPS=0`). Retained existing service configuration: runtime service account `pir-run@proveitreachable.iam.gserviceaccount.com`, max instances 1, min instances 0, concurrency 80, CPU throttling on, request timeout 1200 s, `TRUSTED_PROXY_HOPS=0`, `LIVE_SCANS_ENABLED=true`, `SANDBOX_BASE_IMAGE`, and all secrets from Secret Manager. Image integrity verified via Cloud Build (`IMAGE_CHECK_OK`, build ID `d0533914-1bef-4c43-bc36-93b5fbcb22a5`). Authenticated `/api/health` and `/?demo=pyrl` verified HTTP 200. Private IAM policy enforced (`--no-allow-unauthenticated`, no public bindings).
 
 ## 10. Rollback
 
