@@ -1325,6 +1325,9 @@ body[data-phase="report"] .track-panel {
   color: var(--ink-3);
   overflow-wrap: anywhere;
 }
+.pipeline__eval-figure {
+  white-space: nowrap;
+}
 .pipeline__foot p {
   max-width: 62ch;
 }

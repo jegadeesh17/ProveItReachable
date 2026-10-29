@@ -10,6 +10,7 @@ import {
   buildTrack,
   clear,
   el,
+  floorPercent,
   formatDate,
   plural,
   renderDemoError,
@@ -484,7 +485,7 @@ function showReport(report) {
   // The URLs use the job id from ScanAccepted; for a replay it differs from the recording's report.scan_id.
   renderExports(dom.exportSlot, api, run.scanId, report, state.config);
 
-  const summary = renderSummary(report, { isMock });
+  const summary = renderSummary(report, { isMock, evalRun: state.config.eval });
   clear(dom.report);
   dom.report.append(summary.node);
   if (report.findings.length > 0) dom.report.append(renderResults(report, proofControl()));
@@ -524,7 +525,7 @@ function renderLimits(config) {
   // "likely reachable" calls, so the wording says so; the contract carries no count of those calls, so none is shown.
   if (config.eval) {
     const e = config.eval;
-    const percent = Math.floor(e.precision * 100 + 1e-9); // rounded down: a figure is never rounded up to 100
+    const percent = floorPercent(e.precision); // rounded down: a figure is never rounded up to 100
     dom.limits.append(
       el("p", {
         class: "eval-figure",

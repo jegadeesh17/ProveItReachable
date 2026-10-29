@@ -509,9 +509,22 @@ def plain(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def usage_report(server, ui_factory, mutate=None, *, width: int = 1280):
-    """The partial-failure mock report, which carries `usage`, optionally changed on the way in."""
+def usage_report(server, ui_factory, mutate=None, *, width: int = 1280, eval_run=None):
+    """The partial-failure mock report, which carries `usage`, optionally changed on the way in.
+
+    `eval_run` is served as the API config's scored evaluation run (`config.eval`).
+    """
     ui = ui_factory(server.url, width=width)
+
+    def config(route) -> None:
+        response = route.fetch()
+        data = response.json()
+        data["eval"] = eval_run
+        headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
+        route.fulfill(response=response, headers=headers, body=json.dumps(data))
+
+    if eval_run is not None:
+        ui.page.route(re.compile(r"/fixtures/config\.json$"), config)
 
     def handle(route) -> None:
         response = route.fetch()
@@ -561,7 +574,7 @@ def test_adr0045_a_report_without_usage_shows_no_usage_line(server, ui_factory, 
     ui.page.goto(f"{server.url}/?api=mock&scenario={scenario}&jump=report")
     ui.wait_report()
     assert ui.page.locator(".pipeline__usage").count() == 0
-    assert ui.page.locator(".pipeline__eval").count() == 1  # the evaluation line is not conditional
+    assert ui.page.locator(".pipeline__eval").count() == 0  # no eval run loaded, no eval line
 
 
 def test_adr0045_a_recorded_replay_shows_no_usage_line(server, ui_factory):
@@ -581,6 +594,11 @@ def test_adr0045_a_recorded_replay_shows_no_usage_line(server, ui_factory):
         "https://evilsmith.langchain.com/public/abc/r",
         "https://user:pw@smith.langchain.com/public/abc/r",
         "https://smith.langchain.com/o/abc/projects",
+        "https://smith.langchain.com:8443/public/abc/r",
+        "https://smith.langchain.com/x/public/abc/r",
+        "https://a.b.smith.langchain.com/public/abc/r",
+        "https://smith.langchain.com/public/abc/r?token=1",
+        "https://smith.langchain.com/public/abc/r#frag",
         "not a url",
         "",
     ],
@@ -598,13 +616,52 @@ def test_adr0045_a_subdomain_of_the_trace_host_is_accepted(server, ui_factory):
     assert ui.page.locator(".pipeline__usage a").get_attribute("href") == url
 
 
+EVAL_RUN = {
+    "scored": True,
+    "run_date": "2026-10-29",
+    "model": "nvidia/nemotron-3-super-120b-a12b",
+    "n": 30,
+    "precision": 0.9091,
+}
+
+
 def test_adr0045_the_evaluation_line_says_what_it_was_measured_on(server, ui_factory):
-    ui = usage_report(server, ui_factory)
+    ui = usage_report(server, ui_factory, eval_run=EVAL_RUN)
     text = plain(ui.page.locator(".pipeline__eval").inner_text())
-    assert (
-        text
-        == "Evaluated on 30 labelled cases · likely-reachable precision 0.91 · tracked in LangSmith"
-    )
+    # Rounded down, like the front door: 0.9091 is 90%, never 91%.
+    assert text == "Evaluated on 30 labelled cases · likely-reachable precision 90%"
+    assert "LangSmith" not in text
+    front_door = plain(ui.page.locator(".eval-figure").inner_text())
+    assert "precision 90%" in front_door
+
+
+def test_adr0045_no_eval_run_means_no_evaluation_line(server, ui_factory):
+    ui = usage_report(server, ui_factory)
+    assert ui.page.locator(".pipeline__usage").count() == 1
+    assert ui.page.locator(".pipeline__eval").count() == 0
+    assert "Evaluated on" not in ui.page.locator("#report").inner_text()
+
+
+@pytest.mark.parametrize("bad", [{"n": "30", "precision": 0.9}, {"n": 30, "precision": 1.5}])
+def test_adr0045_an_unusable_eval_run_renders_no_evaluation_line(server, ui_factory, bad):
+    ui = usage_report(server, ui_factory, eval_run={**EVAL_RUN, **bad})
+    assert ui.page.locator(".pipeline__eval").count() == 0
+
+
+def test_adr0045_the_evaluation_line_agrees_with_the_front_door(server, ui_factory):
+    ui = ui_factory(server.url).goto()
+    ui.run_demo("co2tools")
+    ui.wait_report()
+    line = plain(ui.page.locator(".pipeline__eval").inner_text())
+    assert line == "Evaluated on 14 labelled cases · likely-reachable precision 100%"
+    assert "precision 100%" in plain(ui.page.locator(".eval-figure").inner_text())
+
+
+@pytest.mark.parametrize("width", [375, 390])
+def test_adr0045_likely_reachable_precision_never_breaks_across_lines(server, ui_factory, width):
+    ui = usage_report(server, ui_factory, width=width, eval_run=EVAL_RUN)
+    figure = ui.page.locator(".pipeline__eval-figure")
+    assert figure.evaluate("e => e.getClientRects().length") == 1
 
 
 def test_adr0045_both_powered_by_lines_name_sandboxes_and_langsmith(server, ui_factory):

@@ -7,12 +7,6 @@
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-/**
- * The latest evaluation run, shown as one static line in "How this report was made". Update these two
- * numbers after an evaluation run; the line says what they were measured on.
- */
-const EVAL_SUMMARY = { cases: 30, precision: 0.91 };
-
 /* ------------------------------------------------------------------ helpers */
 
 /**
@@ -446,22 +440,55 @@ export function compactCount(n) {
 }
 
 /**
- * The scan's public LangSmith trace, only when the address passes the same test the server applies
- * (ADR-0045): https, a smith.langchain.com host or subdomain, no credentials, and a /public/ path.
- * Returns the normalised address, or null.
+ * The scan's public LangSmith trace, only when the address passes the test the server applies
+ * (`valid_share_url`, ADR-0045): https; the host exactly smith.langchain.com or one label in front of
+ * it (the default port may be written); no user info, query or fragment; a path that starts with
+ * /public/; and no backslash, whitespace or control character. Returns the address, or null.
  */
+const TRACE_UNUSUAL = /[\x5c\s\x00-\x1f\x7f]/;
+const TRACE_NETLOC = /^(?:[a-z0-9-]+\.)?smith\.langchain\.com(?::443)?$/;
+const TRACE_PATH = /^\/public\/[A-Za-z0-9._~/-]+$/;
+
 export function traceHref(value) {
-  if (typeof value !== "string") return null;
+  if (typeof value !== "string" || TRACE_UNUSUAL.test(value) || !value.startsWith("https://")) return null;
   let parsed;
   try {
     parsed = new URL(value);
   } catch {
     return null;
   }
-  const host = parsed.hostname.toLowerCase();
-  const hostOk = host === "smith.langchain.com" || host.endsWith(".smith.langchain.com");
-  const plain = !parsed.username && !parsed.password;
-  return parsed.protocol === "https:" && hostOk && plain && parsed.pathname.includes("/public/") ? parsed.href : null;
+  const netloc = value.slice("https://".length).split(/[/?#]/, 1)[0];
+  const ok =
+    parsed.protocol === "https:" &&
+    TRACE_NETLOC.test(netloc) &&
+    parsed.port === "" &&
+    !parsed.username &&
+    !parsed.password &&
+    !parsed.search &&
+    !parsed.hash &&
+    !value.includes("?") &&
+    !value.includes("#") &&
+    parsed.pathname.startsWith("/public/") &&
+    TRACE_PATH.test(parsed.pathname);
+  return ok ? parsed.href : null;
+}
+
+/** The front door and the evaluation line share this, so a figure is never rounded up (95.99 reads 95%). */
+export const floorPercent = (precision) => Math.floor(precision * 100 + 1e-9);
+
+/**
+ * "Evaluated on 30 labelled cases · likely-reachable precision 90%" from the API's scored eval run
+ * (`config.eval`), or null when there is none or it is not a usable figure. The line says what the
+ * figure was measured on; it is never a constant in this file.
+ */
+function evalLine(run) {
+  if (!run || !Number.isFinite(run.n) || run.n < 0 || !Number.isFinite(run.precision) || run.precision < 0 || run.precision > 1) return null;
+  return el(
+    "p",
+    { class: "pipeline__eval" },
+    keepDot(`Evaluated on ${run.n} labelled cases · `),
+    el("span", { class: "pipeline__eval-figure", text: `likely-reachable precision${NBSP}${floorPercent(run.precision)}%` }),
+  );
 }
 
 /** A count from the report, or 0 when it is not a finite non-negative number. */
@@ -499,11 +526,12 @@ function usageLine(usage) {
   return line;
 }
 
-function pipelineStrip(report) {
+function pipelineStrip(report, evalRun) {
   const steps = report.steps || [];
   const first = steps.find((s) => s.started_at);
   const last = [...steps].reverse().find((s) => s.finished_at);
   const total = first && last ? secondsBetween(first.started_at, last.finished_at) : null;
+  const foot = [usageLine(report.usage), evalLine(evalRun)].filter(Boolean);
   return el(
     "div",
     { class: "funnel__pipeline" },
@@ -531,15 +559,7 @@ function pipelineStrip(report) {
         );
       }),
     ),
-    el(
-      "div",
-      { class: "pipeline__foot" },
-      usageLine(report.usage),
-      el("p", {
-        class: "pipeline__eval",
-        text: keepDot(`Evaluated on ${EVAL_SUMMARY.cases} labelled cases · likely-reachable precision${NBSP}${EVAL_SUMMARY.precision.toFixed(2)} · tracked in LangSmith`),
-      }),
-    ),
+    foot.length > 0 && el("div", { class: "pipeline__foot" }, foot),
   );
 }
 
@@ -547,7 +567,7 @@ function pipelineStrip(report) {
  * The summary: "N advisories -> M likely reachable" as the headline, a reading, the three counts,
  * one mark per finding, and the pipeline that produced it. Returns { node, animate(reduceMotion) }.
  */
-export function renderSummary(report, { isMock }) {
+export function renderSummary(report, { isMock, evalRun = null }) {
   const s = report.summary;
   const by = s.by_verdict;
   const lr = by["likely reachable"];
@@ -656,7 +676,7 @@ export function renderSummary(report, { isMock }) {
       el("div", {}, figure, report.outcome === "findings" && report.findings.length > 0 && advisoryStrip(report), reading),
       tally,
     ),
-    pipelineStrip(report),
+    pipelineStrip(report, evalRun),
   );
   return { node, animate };
 }
