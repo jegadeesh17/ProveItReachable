@@ -38,7 +38,7 @@ Given a public GitHub repository URL, ProveItReachable:
 
 ## Evaluation
 
-Figures from [`eval/results/latest.json`](eval/results/latest.json) (run date 2026-10-29, model `nvidia/nemotron-3-super-120b-a12b`):
+Figures from [`eval/results/latest.json`](eval/results/latest.json): run 2026-10-29, model `nvidia/nemotron-3-super-120b-a12b`, 30 cases, 4 errored; precision 0.91, recall 0.67.
 
 - **Benchmark Size**: 30 labelled test cases across 26 open-source Python repositories
 - **Likely-Reachable Precision**: **0.91** (10 of 11 positive claims verified correct against ground truth)
